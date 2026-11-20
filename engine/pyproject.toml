@@ -1,0 +1,50 @@
+[project]
+name = "byggmote"
+version = "2026.1118.1"
+description = "Local meeting transcription engine: ASR, diarization, speaker-labelled transcripts"
+authors = [
+    { name = "Tim Kilåker", email = "hej@tomrad.se" }
+]
+requires-python = ">=3.12"
+# MLX and PyTorch on the Mac, ONNX on the CPU on Windows and Linux (docs/WINDOWS.md, docs/LINUX.md)
+dependencies = [
+    "sentencepiece>=0.2",
+    "numpy",
+    "soundfile",
+    "huggingface-hub",
+    "truststore>=0.10",  # the OS certificate store for model downloads, so TLS inspection on a company network passes (FEATURES.md, First run)
+    "parakeet-mlx==0.5.2; sys_platform == 'darwin'",
+    "pyannote-audio>=4.0.7; sys_platform == 'darwin'",
+    "torch>=2.14.0; sys_platform == 'darwin'",
+    "onnx-asr[cpu]==0.12.0; sys_platform != 'darwin'",
+    "sherpa-onnx==1.13.8; sys_platform != 'darwin'",
+    "sherpa-onnx-core==1.13.8; sys_platform != 'darwin'",  # its onnxruntime library, uv misses the dynamic requirement: bump both together
+]
+
+[project.optional-dependencies]
+# The local model (docs/EDITIONS.md, `localModel`): only an edition that has it installs this.
+local-model = ["mlx-lm>=0.32.0; sys_platform == 'darwin'"]
+
+[project.scripts]
+byggmote = "byggmote.cli:entry"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-xdist>=3",
+    "mlx-lm>=0.32.0; sys_platform == 'darwin'",  # the local model in a development checkout and tests/test_slow.py
+    "piper-tts; sys_platform != 'darwin'",  # the test clips' Swedish voice (tests/conftest.py)
+]
+
+[tool.uv]
+# Linux: x64 with glibc (manylinux wheels); musl has no wheels for onnxruntime and sherpa-onnx (docs/LINUX.md)
+environments = ["sys_platform == 'darwin'", "sys_platform == 'win32'", "sys_platform == 'linux' and platform_machine == 'x86_64'"]
+
+[tool.pytest.ini_options]
+markers = ["slow: runs the real models"]
+# -n auto: the fast tests on every core (pytest-xdist); the slow ones one at a time (tests/conftest.py)
+addopts = "-m 'not slow' -n auto"
+
+[build-system]
+requires = ["uv_build>=0.12.1,<0.13.0"]
+build-backend = "uv_build"
