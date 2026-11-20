@@ -769,6 +769,10 @@ class LlamaServer:
     def _ctx(self, tokens: int) -> int:
         return math.ceil((min(tokens, self.MAX_IN) + self.MAX_OUT + self.SPARE) / self.STEP) * self.STEP
 
+    def _command(self, port: int, ctx: int) -> list[str]:
+        return [str(self.server), "-m", str(self.model), "--host", "127.0.0.1", "--port", str(port), "-c", str(ctx), "-np", "1",
+                "--reasoning", "off", "--no-webui", "--offline", "--no-warmup"]
+
     @contextmanager
     def _serve(self, ctx: int):
         """The server with a context of `ctx` tokens; yields `ask(path, body)`, which posts JSON (gets without a body)."""
@@ -781,10 +785,13 @@ class LlamaServer:
             s.bind(("127.0.0.1", 0))
             port = s.getsockname()[1]
         key = secrets.token_hex(16)
-        log = sys.stderr if sys.stderr else subprocess.DEVNULL  # the server prints; stdout is the engine's answer
+        try:  # the server prints: to stderr when the engine has one, since stdout is the engine's answer
+            sys.stderr.fileno()
+            log = sys.stderr
+        except (AttributeError, OSError, ValueError):  # a windowless parent, or a stream that is no file
+            log = subprocess.DEVNULL
         proc = subprocess.Popen(
-            [str(self.server), "-m", str(self.model), "--host", "127.0.0.1", "--port", str(port), "-c", str(ctx), "-np", "1",
-             "--reasoning", "off", "--no-webui", "--offline", "--no-warmup"],
+            self._command(port, ctx),
             env=os.environ | {"LLAMA_API_KEY": key},  # not an argument: other processes can read those
             stdin=subprocess.DEVNULL, stdout=log, stderr=log, creationflags=subprocess.CREATE_NO_WINDOW if WINDOWS else 0)
         direct = urllib.request.build_opener(urllib.request.ProxyHandler({}))

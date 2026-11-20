@@ -1,0 +1,86 @@
+name: Test
+
+# The engine on Windows and Linux. The Mac is the development computer: its tests run there (README.md), and a Mac
+# runner costs ten times the minutes.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV: 0.11.3
+  # llama.cpp's release, the same one for every platform; each build's checksum is in the matrix.
+  LLAMA: b12590
+  # A small model of the family the protocol is written with, from llama.cpp's own organisation: enough to see that the
+  # real server starts, holds an answer to a schema and stops. It says nothing about how good a protocol is.
+  MODEL_REPO: ggml-org/Qwen3.5-0.8B-GGUF
+  MODEL_REV: 004fd086eccea9f7cf867aa07ba328773beef81d
+  MODEL_FILE: Qwen3.5-0.8B-Q4_0.gguf
+  MODEL_SHA256: 57d1997790d1744fba5b40a7317df71ea5e2acee28c47e78f0cce39c0703f8cf
+
+jobs:
+  engine:
+    name: Engine on ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-latest
+            build: llama-b12590-bin-ubuntu-x64.tar.gz
+            sha256: 1d3496a307edd845e206e7265c132f4229a9fdcd2113da677819b18bebf5abbd
+          - name: Windows
+            os: windows-latest
+            build: llama-b12590-bin-win-cpu-x64.zip
+            sha256: e895687489ceed01770fd5101ac377ad77ed41b5b2b7dafc8e1e1bfca613ba62
+    defaults:
+      run:
+        shell: bash
+        working-directory: engine
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        run: pipx install "uv==$UV"
+
+      - name: Install the engine
+        run: uv sync --locked
+
+      - name: Fast tests
+        run: uv run pytest
+
+      - name: Keep the small model between runs
+        uses: actions/cache@v6
+        with:
+          path: engine/bin/model
+          key: model-${{ env.MODEL_SHA256 }}-${{ runner.os }}
+
+      # Relative paths only: a Windows path in a checksum line reads as an escape.
+      - name: Fetch llama.cpp and the small model
+        run: |
+          mkdir -p "bin/llama-$LLAMA" bin/model
+          cd bin
+          curl -sSfL -o "${{ matrix.build }}" "https://github.com/ggml-org/llama.cpp/releases/download/$LLAMA/${{ matrix.build }}"
+          echo "${{ matrix.sha256 }}  ${{ matrix.build }}" | sha256sum -c -
+          case "${{ matrix.build }}" in
+            *.zip) unzip -q "${{ matrix.build }}" -d "llama-$LLAMA" ;;
+            *) tar -xzf "${{ matrix.build }}" -C "llama-$LLAMA" ;;
+          esac
+          cd model
+          [ -f "$MODEL_FILE" ] || curl -sSfL -o "$MODEL_FILE" "https://huggingface.co/$MODEL_REPO/resolve/$MODEL_REV/$MODEL_FILE"
+          echo "$MODEL_SHA256  $MODEL_FILE" | sha256sum -c -
+
+      - name: The real llama-server
+        run: uv run pytest -m slow -n 0 -s
+        env:
+          BYGGMOTE_TEST_GGUF: bin/model/${{ env.MODEL_FILE }}

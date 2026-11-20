@@ -1,17 +1,14 @@
-"""The llama.cpp adapter against a stand-in for llama-server: how it is started, asked and stopped. The real server and
-model run in the whole chain by hand (README.md)."""
+"""The llama.cpp adapter against a stand-in for llama-server: how it is started, asked and stopped, on every platform.
+The real server with a real model is in test_llama_real.py."""
 import json
-import os
 import sys
+from pathlib import Path
 
 import pytest
 
-from byggmote import WINDOWS, models
+from byggmote import _alive, models
 
-pytestmark = pytest.mark.skipif(WINDOWS, reason="the stand-in server is a script with a shebang")
-
-SERVER = '''#!%s
-import json, os, sys
+SERVER = '''import json, os, sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 args = sys.argv[1:]
@@ -58,13 +55,16 @@ HTTPServer(("127.0.0.1", port), Handler).serve_forever()
 @pytest.fixture
 def llama(tmp_path, monkeypatch):
     """The adapter with the stand-in as its server, and `said()`: what the stand-in was started with and asked."""
-    script = tmp_path / "llama-server"
-    script.write_text(SERVER % sys.executable, encoding="utf-8")
-    script.chmod(0o755)
+    script = tmp_path / "server.py"
+    script.write_text(SERVER, encoding="utf-8")
     monkeypatch.setenv("FAKE_LOG", str(tmp_path / "log"))
-    monkeypatch.setenv("BYGGMOTE_LLAMA_SERVER", str(script))
-    x = models.LlamaServer({"id": "test"})
-    x.server, x.model = models.llama_server(), tmp_path / "model.gguf"
+
+    class Standin(models.LlamaServer):
+        def _command(self, port: int, ctx: int) -> list[str]:  # the same arguments, to a script this Python runs
+            return [sys.executable, str(script), *super()._command(port, ctx)[1:]]
+
+    x = Standin({"id": "test"})
+    x.server, x.model = Path("llama-server"), tmp_path / "model.gguf"
     return x, lambda: [json.loads(line) for line in (tmp_path / "log").read_text(encoding="utf-8").splitlines()]
 
 
@@ -72,8 +72,7 @@ def test_the_server_answers_one_prompt_and_is_gone(llama):
     x, said = llama
     assert x.summarize("Hej", {"type": "object"}) == '{"points": []}\n'
     start, asked = said()
-    with pytest.raises(ProcessLookupError):
-        os.kill(start["pid"], 0)
+    assert not _alive(start["pid"])
     assert asked["body"]["messages"] == [{"role": "user", "content": "Hej"}]
     assert (asked["body"]["temperature"], asked["body"]["chat_template_kwargs"]) == (0, {"enable_thinking": False})
     assert asked["body"]["response_format"]["json_schema"]["schema"] == {"type": "object"}
@@ -95,7 +94,7 @@ def test_a_prompt_that_needs_more_context_gets_a_server_with_it(llama, monkeypat
     x.summarize("Hej")
     first, second, asked = said()
     assert [a["args"][a["args"].index("-c") + 1] for a in (first, second)] == ["12288", "32768"]
-    assert asked["ctx"] == 32768
+    assert not _alive(first["pid"]) and asked["ctx"] == 32768
 
 
 def test_a_prompt_over_the_limit_is_too_long(llama, monkeypatch):
@@ -117,3 +116,17 @@ def test_an_answer_cut_short_is_no_answer(llama, monkeypatch):
     monkeypatch.setenv("FAKE_FINISH", "length")
     with pytest.raises(RuntimeError, match="did not finish"):
         x.summarize("Hej")
+
+
+def test_a_server_that_does_not_start_is_an_error_not_a_wait(tmp_path):
+    class Broken(models.LlamaServer):
+        def _command(self, port: int, ctx: int) -> list[str]:
+            return [sys.executable, "-c", "raise SystemExit(3)"]
+
+    with pytest.raises(RuntimeError, match="llama-server stopped"):
+        Broken({"id": "test"}).summarize("Hej")
+
+
+def test_the_apps_own_server_comes_first(monkeypatch, tmp_path):
+    monkeypatch.setenv("BYGGMOTE_LLAMA_SERVER", str(tmp_path / "llama-server"))
+    assert models.llama_server() == tmp_path / "llama-server"

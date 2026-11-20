@@ -67,6 +67,9 @@ the checks above apply whichever model wrote it.
     uv run pytest
 
 The fast tests cover the series, the numbering, the checks and how `llama-server` is started, asked and stopped
-(against a stand-in), without any model. `tests/make_clip.sh` speaks
+(against a stand-in), without any model. `BYGGMOTE_TEST_GGUF=model.gguf uv run pytest -m slow -n 0` runs the real
+`llama-server` with that model. On GitHub both run on Windows and Linux for every push (`.github/workflows/test.yml`),
+the real server with a small model: that shows the server works there, not how good a protocol is or how long the
+large model takes. `tests/make_clip.sh` speaks
 `tests/data/byggmote5.txt` into a two-minute recording with macOS's Swedish voice, for a run of the whole chain. The
 engine that came from Tonband arrived without its tests.
