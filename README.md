@@ -4,8 +4,9 @@ Records a construction meeting, transcribes it and writes the byggmötesprotokol
 separation and the language model all run on the computer, so sound and text never leave it. What a person approves
 goes on to Stommen as proposals.
 
-**Status:** the engine runs as a CLI on the Mac, from a recording to a numbered protocol. Still to build: the Electron
-app, the connection to Stommen, a local language model for Windows and Linux, and the phone recorder.
+**Status:** the engine runs as a CLI on the Mac, from a recording to a numbered protocol, with either of two local
+language models. The one meant for Windows and Linux (llama.cpp) has only run on the Mac so far. Still to build: the
+Electron app, the connection to Stommen and the phone recorder.
 
 Where the engine comes from and what the models' licences ask: `NOTICE.md`.
 
@@ -44,15 +45,28 @@ touching `~/Documents/Byggmöte`.
 - **Amounts.** Every amount in a point carries a check with the words the recording has, for a person to confirm.
 - **Roles.** Responsibility goes to a Roll the project has. A role it lacks becomes a check, never a guess.
 
-### Another language model
+### The language model
 
-On Windows and Linux there is no local language model yet. `protocol --prompt` prints the prompt and
-`protocol --answer` takes any model's answer on stdin, so the checks above apply whichever model wrote it.
+Two run the same model, Qwen3.5 9B, locally:
+
+- `qwen3.5-9b`: MLX, the Mac only, the default there.
+- `qwen3.5-9b-gguf`: GGUF on llama.cpp's `llama-server`, the default on Windows and Linux and a choice on the Mac
+  (`protocol --model qwen3.5-9b-gguf`). The engine starts the server for one answer and stops it: on 127.0.0.1 only,
+  behind a key made for the run, never downloading. The server holds the answer to a JSON schema, so a heading, a
+  kind, a Roll and an open point's number can only be ones there are.
+
+`llama-server` comes from [llama.cpp's releases](https://github.com/ggml-org/llama.cpp/releases), one build per
+platform. An app sets `BYGGMOTE_LLAMA_SERVER` to its own. A development checkout looks in `engine/bin/llama-*/`, then
+on the path. Fetch the model with `byggmote models download qwen3.5-9b-gguf` (5.7 GB).
+
+`protocol --prompt` prints the prompt and the schema, and `protocol --answer` takes any model's answer on stdin, so
+the checks above apply whichever model wrote it.
 
 ### Tests
 
     uv run pytest
 
-The fast tests cover the series, the numbering and the checks, without any model. `tests/make_clip.sh` speaks
+The fast tests cover the series, the numbering, the checks and how `llama-server` is started, asked and stopped
+(against a stand-in), without any model. `tests/make_clip.sh` speaks
 `tests/data/byggmote5.txt` into a two-minute recording with macOS's Swedish voice, for a run of the whole chain. The
 engine that came from Tonband arrived without its tests.

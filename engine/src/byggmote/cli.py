@@ -66,12 +66,12 @@ def protocol(a) -> int:
         raise ArgError("no local language model here: --prompt gives the prompt, --answer takes another model's answer")
     if not downloaded(e):
         raise ValueError(f"model not downloaded: {e['id']}")
-    prompt = pr.request(d, a.series, a.no)["prompt"]
+    req = pr.request(d, a.series, a.no)
     try:
         with on_stop(), contextlib.redirect_stdout(sys.stderr):  # model libraries print
             m = adapter(e)
             m.load()
-            text = m.summarize(prompt)
+            text = m.summarize(req["prompt"], req["schema"])
     except Stopped:
         return 1
     _print(pr.answer(d, a.series, text, a.no, e["id"]))
@@ -222,7 +222,7 @@ def main(argv=None) -> int:
     s.add_argument("--series", required=True, metavar="ID")
     s.add_argument("--no", type=int, metavar="N", help="the meeting's number in the series (default: its own, else the next)")
     s.add_argument("--model", metavar="ID")
-    s.add_argument("--prompt", action="store_true", help="only the prompt, for another model to answer")
+    s.add_argument("--prompt", action="store_true", help="only the prompt and the answer's JSON schema, for another model to answer")
     s.add_argument("--answer", action="store_true", help="another model's answer on stdin becomes the protocol")
     sub.add_parser("version", help="engine and protocol version (JSON)")
     s = sub.add_parser("models", help="list models, download them ahead of first use (JSON lines), or discard a stopped download")

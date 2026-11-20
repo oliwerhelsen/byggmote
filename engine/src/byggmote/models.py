@@ -6,20 +6,23 @@ LLM adapter:     load(); summarize(prompt) -> text
 """
 import errno
 import hashlib
+import json
 import math
 import os
 import re
 import shutil
 import sys
 import threading
+import time
 import traceback
+from contextlib import contextmanager
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import NamedTuple
 
 import numpy as np
 
-from . import BACKEND, LOCAL_MODEL, replace, short_error
+from . import BACKEND, LOCAL_MODEL, WINDOWS, replace, short_error
 from .media import SR
 
 ASR_DEVICE = "mlx" if BACKEND == "mlx" else "cpu"
@@ -65,13 +68,19 @@ ONNX = [
      "adapter": "sherpa", "extra": ("csukuangfj/sherpa-onnx-pyannote-segmentation-3-0", "model.int8.onnx", "9403a6902bb58e3d5ae8c7e77c3422de279db2e0"),
      "prints": CAMPPLUS},
 ]
-REGISTRY = MLX if BACKEND == "mlx" else ONNX
+# The protocol on Windows and Linux, and on a Mac that asks for it (`--model`): the same model as the Mac's, as GGUF on
+# llama.cpp's own server, which has ready builds for all three. Never fetched unasked, as the Mac's.
+GGUF = [{"id": "qwen3.5-9b-gguf", "type": "llm", "name": "Qwen3.5 9B (GGUF)", "langs": ["sv", "en"], "model": "unsloth/Qwen3.5-9B-GGUF",
+         "revision": "3885219b6810b007914f3a7950a8d1b469d598a5",
+         "size": 5_680_522_464, "license": "Apache 2.0", "default": [], "min_ram_gb": 16, "adapter": "llama"}] if LOCAL_MODEL else []
+REGISTRY = (MLX if BACKEND == "mlx" else ONNX) + GGUF
 INTERNAL = ("adapter", "chunk", "extra", "prints", "revision")  # not in `byggmote models --json`
 # What a model needs from its repo (glob patterns); the rest (README, .gitattributes) isn't fetched.
 FILES = {"mlx": ["config.json", "model.safetensors", "tokenizer.model"], "mlx-lm": ["*.json", "*.safetensors", "*.jinja"],
-         "onnx": ["config.json", "*.int8.onnx", "vocab.txt", "tokenizer.model"], "sherpa": [CAMPPLUS.replace("/", "_") + ".onnx"]}
+         "onnx": ["config.json", "*.int8.onnx", "vocab.txt", "tokenizer.model"], "sherpa": [CAMPPLUS.replace("/", "_") + ".onnx"],
+         "llama": ["*-Q4_K_M.gguf"]}
 DONE = {"mlx": "*.safetensors", "mlx-lm": "*.safetensors", "onnx": "encoder-model.int8.onnx",
-        "sherpa": FILES["sherpa"][0]}  # there once fetched
+        "sherpa": FILES["sherpa"][0], "llama": FILES["llama"][0]}  # there once fetched
 
 
 def local(entry: dict) -> Path | None:
@@ -682,7 +691,8 @@ class MlxLm:
             raise RuntimeError("the answer did not finish")
         return unfence("".join(out))
 
-    def summarize(self, prompt: str) -> str:
+    def summarize(self, prompt: str, schema: dict | None = None) -> str:
+        """`schema` is not used: mlx-lm cannot hold an answer to one, so the prompt asks for the form and the caller checks it."""
         ids = self._ids(prompt)
         if len(ids) <= self.MAX_IN:
             return self._generate(ids)
@@ -725,7 +735,118 @@ def unfence(text: str) -> str:
     return t + "\n"
 
 
-ADAPTERS = {"mlx": Mlx, "onnx": Onnx, "pyannote": Pyannote, "sherpa": Sherpa, "mlx-lm": MlxLm}
+def llama_server() -> Path:
+    """llama.cpp's server: the app's own (BYGGMOTE_LLAMA_SERVER), a development checkout's in engine/bin, else one on the path."""
+    name = "llama-server.exe" if WINDOWS else "llama-server"
+    if p := os.environ.get("BYGGMOTE_LLAMA_SERVER"):
+        return Path(p).expanduser()
+    if found := sorted(Path(__file__).parents[2].glob(f"bin/llama-*/**/{name}")):
+        return found[-1]
+    if p := shutil.which(name):
+        return Path(p)
+    raise RuntimeError("llama-server is not installed")
+
+
+class LlamaServer:
+    """A chat model as GGUF on llama.cpp's server. Started for one answer and stopped after it: on 127.0.0.1 only, behind a
+    key made for the run, never downloading, and asked past any proxy the computer has, so the transcript stays here.
+    The prompt as one user message, thinking off, greedy, as MlxLm. With a `schema` the server holds the answer to it."""
+    MAX_IN, MAX_OUT = MlxLm.MAX_IN, MlxLm.MAX_OUT
+    STEP = 4096  # the context is made as large as the prompt needs, in steps: each token of it costs memory
+    SPARE = 512  # tokens for the chat template around the prompt
+    READY = 600  # seconds for the model to load, from a slow disk too
+
+    def __init__(self, entry: dict):
+        self.entry = entry
+
+    def load(self):
+        from huggingface_hub import snapshot_download
+        self.server = llama_server()
+        d = Path(snapshot_download(self.entry["model"], revision=self.entry["revision"], allow_patterns=FILES["llama"],
+                                   local_files_only=True))
+        self.model = next(d.glob(DONE["llama"]))
+
+    def _ctx(self, tokens: int) -> int:
+        return math.ceil((min(tokens, self.MAX_IN) + self.MAX_OUT + self.SPARE) / self.STEP) * self.STEP
+
+    @contextmanager
+    def _serve(self, ctx: int):
+        """The server with a context of `ctx` tokens; yields `ask(path, body)`, which posts JSON (gets without a body)."""
+        import secrets
+        import socket
+        import subprocess
+        import urllib.error
+        import urllib.request
+        with socket.socket() as s:  # a free port: the server takes it a moment later
+            s.bind(("127.0.0.1", 0))
+            port = s.getsockname()[1]
+        key = secrets.token_hex(16)
+        log = sys.stderr if sys.stderr else subprocess.DEVNULL  # the server prints; stdout is the engine's answer
+        proc = subprocess.Popen(
+            [str(self.server), "-m", str(self.model), "--host", "127.0.0.1", "--port", str(port), "-c", str(ctx), "-np", "1",
+             "--reasoning", "off", "--no-webui", "--offline", "--no-warmup"],
+            env=os.environ | {"LLAMA_API_KEY": key},  # not an argument: other processes can read those
+            stdin=subprocess.DEVNULL, stdout=log, stderr=log, creationflags=subprocess.CREATE_NO_WINDOW if WINDOWS else 0)
+        direct = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+        def ask(path: str, body: dict | None = None, timeout: float | None = 30):
+            req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", None if body is None else json.dumps(body).encode(),
+                                         {"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
+            try:
+                with direct.open(req, timeout=timeout) as r:
+                    return json.loads(r.read())
+            except urllib.error.HTTPError as e:
+                if e.code == 503:  # still loading
+                    raise
+                try:
+                    said = json.loads(e.read())["error"]["message"]
+                except (ValueError, KeyError, TypeError):
+                    said = f"HTTP {e.code}"
+                raise RuntimeError(f"llama-server: {said}") from None
+
+        try:
+            end = time.monotonic() + self.READY
+            while True:
+                if proc.poll() is not None:
+                    raise RuntimeError(f"llama-server stopped ({proc.returncode})")
+                try:
+                    ask("/health", timeout=2)
+                    break
+                except OSError:  # not listening yet, or loading (503)
+                    if time.monotonic() > end:
+                        raise RuntimeError("the model did not load") from None
+                    time.sleep(0.2)
+            yield ask
+        finally:
+            proc.terminate()
+            try:
+                proc.wait(10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+
+    def summarize(self, prompt: str, schema: dict | None = None) -> str:
+        ctx = self._ctx(len(prompt.encode()) // 2)  # a first guess: two bytes a token is more than Swedish needs
+        while True:
+            with self._serve(ctx) as ask:
+                n = len(ask("/tokenize", {"content": prompt})["tokens"])
+                if n > self.MAX_IN:
+                    raise ValueError(TOO_LONG)
+                if self._ctx(n) <= ctx:
+                    return self._answer(ask, prompt, schema)
+            ctx = self._ctx(n)  # the guess was too small: once more with what the prompt needs
+
+    def _answer(self, ask, prompt: str, schema: dict | None) -> str:
+        body = {"messages": [{"role": "user", "content": prompt}], "temperature": 0, "max_tokens": self.MAX_OUT, "stream": False,
+                "chat_template_kwargs": {"enable_thinking": False}}
+        if schema:
+            body["response_format"] = {"type": "json_schema", "json_schema": {"name": "answer", "strict": True, "schema": schema}}
+        choice = ask("/v1/chat/completions", body, timeout=None)["choices"][0]
+        if choice.get("finish_reason") != "stop":
+            raise RuntimeError("the answer did not finish")
+        return unfence(choice["message"].get("content") or "")
+
+
+ADAPTERS = {"mlx": Mlx, "onnx": Onnx, "pyannote": Pyannote, "sherpa": Sherpa, "mlx-lm": MlxLm, "llama": LlamaServer}
 
 
 def adapter(entry: dict):

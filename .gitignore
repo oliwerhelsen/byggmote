@@ -5,3 +5,5 @@ __pycache__/
 .DS_Store
 # The speaker model is gated where it is published, so it is fetched once by hand (README.md), never committed.
 engine/models/
+# llama.cpp's build for this computer (README.md): a release per platform, never committed.
+engine/bin/

@@ -126,10 +126,11 @@ def test_a_follow_up_the_transcript_does_not_have_leaves_the_point_open(project,
     assert [x["reason"] for x in p["dropped"]] == ["no-source", "unknown-point"]
 
 
-def test_an_open_point_listed_without_a_source_was_not_taken_up(project, held):
+@pytest.mark.parametrize("source", [{"time": None, "quote": None}, {"time": "00:00", "quote": "Underlag skickas till beställaren."}])
+def test_an_open_point_only_listed_again_was_not_taken_up(project, held, source):
     sid = project[1]
     write(held("Byggmöte 3", SAID), sid, [point(kind="todo", text="Underlag skickas.")], no=3)
-    p = write(held("Byggmöte 4", SAID), sid, carried=[{"no": "3.4.1", "text": "Underlag skickas.", "open": True, "time": None, "quote": None}])
+    p = write(held("Byggmöte 4", SAID), sid, carried=[{"no": "3.4.1", "text": "Underlag skickas.", "open": True} | source])
     assert [(x["no"], x["raised"]) for x in p["points"]] == [("3.4.1", False)]
     assert p["dropped"] == []
 
@@ -178,6 +179,20 @@ def test_the_prompt_has_the_agenda_the_open_points_and_the_transcript(project, h
     assert "- 3.4.1 (rubrik 4, Att göra, ansvarig Platschef): Underlag skickas." in r["prompt"]
     assert "(Här trycktes rubrik 4. Ekonomi)\n[14:20] Maria Lindqvist: Då går vi till ekonomin" in r["prompt"]
     assert "(Här sattes märket Beslut)\n[17:42] Anders Holm: Beställaren godkänner" in r["prompt"]
+
+
+def test_a_model_held_to_the_schema_can_only_name_what_there_is(project, held):
+    sid = project[1]
+    d = held("Byggmöte 3", SAID)
+    first = protocol.request(d, sid, 3)["schema"]
+    assert first["properties"]["carried"] == {"type": "array", "maxItems": 0}
+    fields = first["properties"]["points"]["items"]["properties"]
+    assert fields["heading"]["enum"] == list(range(2, 12))  # not 1, the attendees
+    assert fields["kind"]["enum"] == list(protocol.KINDS)
+    assert fields["role"]["anyOf"][0]["enum"] == ["Projektledare", "Beställarens ombud", "Platschef"]
+    write(d, sid, [point(kind="todo", text="Underlag skickas.")], no=3)
+    later = protocol.request(held("Byggmöte 4", SAID), sid)["schema"]
+    assert later["properties"]["carried"]["items"]["properties"]["no"]["enum"] == ["3.4.1"]
 
 
 def test_an_answer_is_read_with_or_without_text_around_it():

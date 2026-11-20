@@ -200,11 +200,12 @@ def build(m: dict, area: dict, s: dict, no: int, answer: dict, prior: list[dict]
         if x.get("no") not in by:
             dropped.append(_dropped("unknown-point", text, x) | {"no": x.get("no")})
             continue
-        if not _text(x.get("quote")) and not _text(x.get("time")):
-            continue  # the model's way of saying the point was not taken up
         line = locate(ls, x.get("time"), x.get("quote"))
         if not line or not text:
-            dropped.append(_dropped("no-source", text, x) | {"no": x["no"]})
+            # A model lists a point that was not taken up, with nothing new and no source the transcript has: that is
+            # no proposal. One that closes the point or says something about it is, and a person may wonder where it went.
+            if x.get("open") is False or text and key(text) != key(by[x["no"]]["text"]):
+                dropped.append(_dropped("no-source", text, x) | {"no": x["no"]})
             continue
         raised[x["no"]] = (x, text, line)
     carried = []
@@ -286,8 +287,27 @@ def _marks(d: Path) -> dict:
     return obj if isinstance(obj, dict) else {}
 
 
+def schema(s: dict, area: dict, prior: list[dict]) -> dict:
+    """The answer's JSON schema, for a model that can be held to one: then a heading, a kind, a Roll and an open point's
+    number can only be ones there are. `build` checks the same things for a model that cannot."""
+    text, maybe = {"type": "string"}, lambda t: {"anyOf": [t, {"type": "null"}]}
+    own = {"text": text, "role": maybe({"type": "string", "enum": roles(area)}) if roles(area) else {"type": "null"},
+           "due": maybe({"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"}), "open": {"type": "boolean"},
+           "time": text, "quote": text}
+
+    def item(first: dict) -> dict:
+        return {"type": "object", "properties": first | own, "required": [*first, *own], "additionalProperties": False}
+
+    point = item({"heading": {"type": "integer", "enum": [h["no"] for h in s["headings"] if not h.get("fill")]},
+                  "kind": {"type": "string", "enum": list(KINDS)}})
+    carried = {"type": "array", "items": item({"no": {"type": "string", "enum": [p["no"] for p in prior]}})} if prior \
+        else {"type": "array", "maxItems": 0}
+    return {"type": "object", "properties": {"carried": carried, "points": {"type": "array", "items": point}},
+            "required": ["carried", "points"], "additionalProperties": False}
+
+
 def request(d: Path, sid: str, no: int | None = None) -> dict:
-    """The prompt for the meeting's protocol, for the local model or any other: {"no", "prompt"}."""
+    """What a model is asked for the meeting's protocol, the local one or any other: {"no", "prompt", "schema"}."""
     d = Path(d).expanduser()
     m, area, s, n, prior, ps = prepare(d, sid, no)
     day = datetime.fromisoformat(m["recorded_at"])
@@ -315,7 +335,7 @@ def request(d: Path, sid: str, no: int | None = None) -> dict:
         "Närvarande:", *(who or ["- okänt"]), "",
         "Öppna punkter från tidigare möten:", *(still or ["- inga"]), "",
         RULES, "Utskrift:", ""])
-    return {"no": n, "prompt": head + "\n".join(body) + "\n\nSvara nu med JSON-objektet.\n"}
+    return {"no": n, "prompt": head + "\n".join(body) + "\n\nSvara nu med JSON-objektet.\n", "schema": schema(s, area, prior)}
 
 
 def read(text: str) -> dict:
