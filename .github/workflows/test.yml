@@ -1,6 +1,6 @@
 name: Test
 
-# The engine on Windows and Linux. The Mac is the development computer: its tests run there (README.md), and a Mac
+# The engine and the app on Windows and Linux. The Mac is the development computer: its tests run there (README.md), and a Mac
 # runner costs ten times the minutes.
 
 on:
@@ -28,7 +28,7 @@ env:
 
 jobs:
   engine:
-    name: Engine on ${{ matrix.name }}
+    name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -84,3 +84,24 @@ jobs:
         run: uv run pytest -m slow -n 0 -s
         env:
           BYGGMOTE_TEST_GGUF: bin/model/${{ env.MODEL_FILE }}
+
+      # The app, built and driven against this engine and a knowledge base the engine writes. No model runs.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install the app
+        working-directory: app
+        run: npm ci
+
+      - name: Check the app
+        working-directory: app
+        run: npm run check
+
+      # Linux has no screen for the window: xvfb gives it one.
+      - name: Test the app
+        working-directory: app
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then xvfb-run -a npm test; else npm test; fi
