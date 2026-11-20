@@ -1,0 +1,76 @@
+/* Stommen's design tokens (docs/design/views/tokens.css there), so the two read as one family. The fonts are in the
+   app, not fetched. Text and buttons on white use coral-700: coral-500, the logo colour, is too light to read. */
+:root {
+  --coral-50: #fff1f2; --coral-100: #ffe1e3; --coral-200: #ffc7cb; --coral-500: #ff7076; --coral-600: #f0525a; --coral-700: #c93a42; --coral-800: #a82e36;
+  --ink-900: #1c1b22; --ink-700: #3b3a45; --ink-500: #6b6a77; --ink-400: #8e8d99; --ink-300: #c4c3cc;
+  --line: #ececf0; --surface: #ffffff; --canvas: #faf9fb; --sunken: #f4f3f7;
+  --ok: #2e8b6a; --ok-bg: #e7f5ef; --warn: #b7791f; --warn-bg: #fdf3dc; --bad: #c93a42; --bad-bg: #ffe8ea; --unknown: #6b6a77; --unknown-bg: #efeef3;
+  --font-display: 'Josefin Sans Variable', 'Josefin Sans', Futura, system-ui, sans-serif;
+  --font-body: 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, monospace;
+  --radius-sm: 8px; --radius-md: 12px; --radius-lg: 20px; --radius-pill: 999px;
+  --shadow-sm: 0 1px 2px rgb(28 27 34 / 0.06);
+  --focus: 0 0 0 3px rgb(255 112 118 / 0.45);
+}
+
+* { box-sizing: border-box; }
+html, body, #app { height: 100%; }
+body { margin: 0; background: var(--canvas); color: var(--ink-900); font: 15px/1.5 var(--font-body); -webkit-font-smoothing: antialiased; }
+h1, h2, h3, p { margin: 0; }
+h1 { font: 300 32px/1.2 var(--font-display); letter-spacing: 0.01em; }
+h2 { font: 600 17px/1.3 var(--font-display); letter-spacing: 0.02em; }
+h3 { font: 600 15px/1.4 var(--font-body); }
+a { color: var(--coral-700); }
+a:hover { color: var(--coral-800); }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: 0.55; }
+:focus-visible { outline: none; box-shadow: var(--focus); }
+ul, ol { margin: 0; padding: 0; list-style: none; }
+
+.muted { color: var(--ink-500); }
+.small { font-size: 13px; }
+.mono { font-family: var(--font-mono); font-size: 13px; }
+.row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.grow { flex: 1 1 auto; min-width: 0; }
+.stack { display: flex; flex-direction: column; gap: 16px; }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); padding: 24px; }
+.card > h2 { margin-bottom: 12px; }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 20px; border-radius: var(--radius-pill);
+  border: 1px solid var(--ink-300); background: var(--surface); color: var(--ink-900); font-weight: 500; text-decoration: none; }
+.btn:hover:not(:disabled) { border-color: var(--ink-500); color: var(--ink-900); }
+.btn.primary { background: var(--coral-700); border-color: var(--coral-700); color: #fff; }
+.btn.primary:hover:not(:disabled) { background: var(--coral-800); border-color: var(--coral-800); color: #fff; }
+.btn.quiet { border-color: transparent; background: transparent; color: var(--coral-700); padding: 0 12px; }
+.btn.quiet:hover:not(:disabled) { background: var(--coral-50); border-color: transparent; color: var(--coral-800); }
+
+.badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px 2px 8px; border-radius: var(--radius-pill); font-size: 13px; font-weight: 500;
+  color: var(--ink-900); background: var(--unknown-bg); white-space: nowrap; }
+.badge.ok { background: var(--ok-bg); } .badge.ok svg { color: var(--ok); }
+.badge.warn { background: var(--warn-bg); } .badge.warn svg { color: var(--warn); }
+.badge.bad { background: var(--bad-bg); } .badge.bad svg { color: var(--bad); }
+.badge svg { color: var(--unknown); }
+
+.note { display: flex; gap: 12px; align-items: flex-start; padding: 12px 16px; border-radius: var(--radius-sm); background: var(--sunken); color: var(--ink-700); }
+.note.warn { background: var(--warn-bg); } .note.warn > svg { color: var(--warn); }
+.note.bad { background: var(--bad-bg); } .note.bad > svg { color: var(--bad); }
+.note > svg { flex: none; margin-top: 2px; color: var(--ink-500); }
+
+.field { min-height: 44px; padding: 0 14px; border: 1px solid var(--ink-300); border-radius: var(--radius-sm); background: var(--surface); }
+.field:hover { border-color: var(--ink-500); }
+
+.page { padding: 32px clamp(16px, 4vw, 40px) 56px; max-width: 1280px; width: 100%; margin: 0 auto; }
+.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+.columns { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
+.columns > .main { flex: 999 1 560px; min-width: 0; }
+.columns > .side { flex: 1 1 320px; min-width: 0; }
+
+.point-no { font-family: var(--font-mono); font-size: 13px; font-weight: 500; color: var(--ink-700); }
+.time { display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px; border: 0; background: transparent; }
+.time > span { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 10px; border-radius: var(--radius-pill); background: var(--sunken);
+  font: 500 13px var(--font-mono); color: var(--ink-700); }
+.time:hover > span { background: var(--coral-100); color: var(--ink-900); }
+
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

@@ -31,3 +31,8 @@ CC BY 4.0 asks for attribution: the app has to name these models and their maker
 
 `llama-server` is from llama.cpp (The ggml authors, MIT). It is not in the repo. An app that ships a build of it ships
 its `LICENSE` too.
+
+## The app
+
+The app is built on Electron (MIT) and Svelte (MIT). Its fonts are in the app, so nothing is fetched: Inter, Josefin
+Sans and JetBrains Mono, each under the SIL Open Font License 1.1.

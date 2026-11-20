@@ -4,11 +4,35 @@ Records a construction meeting, transcribes it and writes the byggmötesprotokol
 separation and the language model all run on the computer, so sound and text never leave it. What a person approves
 goes on to Stommen as proposals.
 
-**Status:** the engine runs as a CLI on the Mac, from a recording to a numbered protocol, with either of two local
-language models. The one meant for Windows and Linux (llama.cpp) has only run on the Mac so far. Still to build: the
-Electron app, the connection to Stommen and the phone recorder.
+**Status:** the engine runs as a CLI, from a recording to a numbered protocol, with either of two local language
+models. Its tests and llama.cpp's server run on Windows and Linux on GitHub; a whole meeting has only been transcribed
+on the Mac. The app is a first version: it shows a project's meetings, the agenda and a protocol with its transcript
+and sound, records a meeting or takes a recording, and names the speakers. It cannot yet change a protocol, and it is
+not packaged for installing. Still to build: the connection to Stommen and the phone recorder.
 
 Where the engine comes from and what the models' licences ask: `NOTICE.md`.
+
+## The app
+
+Electron with Svelte 5, in `app/`. It has no data of its own: every view is what the engine's commands answer, and the
+window reaches the computer only through the calls in `app/src/shared/types.ts`.
+
+    cd app
+    npm install
+    npm run dev
+
+It uses the engine of the checkout (`engine/.venv`), so install that first, or name another with `BYGGMOTE_ENGINE`.
+Start it from a terminal: the engine needs `ffmpeg` on the path. There is no way to add a project in the app, since
+projects are to come from Stommen: add one with the engine (below).
+
+    npm run check     the types, main process and views
+    npm test          builds the app and drives it against a knowledge base the engine writes (no model runs)
+
+The tests run the window hidden (`BYGGMOTE_HIDDEN=1`), so a run does not take the screen and a click from whoever
+sits at the computer cannot land in it. Recording from a microphone to a written protocol is not in them: it needs the
+models and several minutes, and has been run by hand with a sound clip played into the app as its microphone.
+
+The views follow the sketch at https://claude.ai/artifact/W2NsCiByVoWE7AUV4rGUMZ and use Stommen's design tokens.
 
 ## The engine
 
