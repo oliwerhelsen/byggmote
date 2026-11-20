@@ -1901,7 +1901,7 @@ wheels = [
 
 [[package]]
 name = "byggmote"
-version = "2026.1118.1"
+version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "huggingface-hub" },

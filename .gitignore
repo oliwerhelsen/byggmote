@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+# The speaker model is gated where it is published, so it is fetched once by hand (README.md), never committed.
+engine/models/

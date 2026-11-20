@@ -8,7 +8,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-__version__ = "2026.1118.1"
+__version__ = "0.1.0"
 # Bumped when the app–engine contract (docs/SPEC.md) changes incompatibly; the app refuses other protocols.
 PROTOCOL = 29
 MAC, WINDOWS, LINUX = sys.platform == "darwin", sys.platform == "win32", sys.platform == "linux"

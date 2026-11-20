@@ -47,6 +47,37 @@ def summarize(model: str) -> int:
     return 0
 
 
+def protocol(a) -> int:
+    """`byggmote protocol`: the prompt, another model's answer made the protocol, or the local model from start to end."""
+    from . import protocol as pr
+    d = Path(a.dir).expanduser()
+    if a.prompt and a.answer:
+        raise ArgError("--prompt or --answer, not both")
+    if a.prompt:
+        _print(pr.request(d, a.series, a.no))
+        return 0
+    if a.answer:
+        _print(pr.answer(d, a.series, sys.stdin.read(), a.no, a.model))
+        return 0
+    from .models import REGISTRY, adapter, downloaded
+    from .run import Stopped, on_stop
+    e = next((e for e in REGISTRY if e["type"] == "llm" and a.model in (None, e["id"])), None)
+    if not e:
+        raise ArgError("no local language model here: --prompt gives the prompt, --answer takes another model's answer")
+    if not downloaded(e):
+        raise ValueError(f"model not downloaded: {e['id']}")
+    prompt = pr.request(d, a.series, a.no)["prompt"]
+    try:
+        with on_stop(), contextlib.redirect_stdout(sys.stderr):  # model libraries print
+            m = adapter(e)
+            m.load()
+            text = m.summarize(prompt)
+    except Stopped:
+        return 1
+    _print(pr.answer(d, a.series, text, a.no, e["id"]))
+    return 0
+
+
 class Parser(argparse.ArgumentParser):
     """Usage errors as the SPEC's JSON error, exit 2; the usage text goes to stderr."""
     def error(self, message):
@@ -174,6 +205,25 @@ def main(argv=None) -> int:
     x.add_argument("spelling")
     s = sub.add_parser("serve", help="resident engine: JSON requests on stdin, events on stdout")
     s.add_argument("--langs", default="sv,en", metavar="sv,en", help="preload these ASR languages (\"\": none)")
+    s = sub.add_parser("series", help="a project's meeting series and their headings (JSON)")
+    pp = s.add_subparsers(dest="op", required=True)
+    x = pp.add_parser("start", help="a new series in project AREA from {\"name\", \"headings\"} on stdin; without headings, a byggmöte's")
+    x.add_argument("area")
+    x = pp.add_parser("heading", help="{\"no\", \"name\", \"hint\"} on stdin renames a heading; without no, a new one goes last")
+    x.add_argument("area")
+    x.add_argument("series")
+    x = pp.add_parser("show", help="the project's series")
+    x.add_argument("area")
+    s = sub.add_parser("agenda", help="the next meeting's agenda: the headings and the points still open under them (JSON)")
+    s.add_argument("area")
+    s.add_argument("series")
+    s = sub.add_parser("protocol", help="write the meeting's protocol with the local model: protocol.json and protocol.md (JSON)")
+    s.add_argument("dir")
+    s.add_argument("--series", required=True, metavar="ID")
+    s.add_argument("--no", type=int, metavar="N", help="the meeting's number in the series (default: its own, else the next)")
+    s.add_argument("--model", metavar="ID")
+    s.add_argument("--prompt", action="store_true", help="only the prompt, for another model to answer")
+    s.add_argument("--answer", action="store_true", help="another model's answer on stdin becomes the protocol")
     sub.add_parser("version", help="engine and protocol version (JSON)")
     s = sub.add_parser("models", help="list models, download them ahead of first use (JSON lines), or discard a stopped download")
     s.add_argument("--json", action="store_true")
@@ -333,6 +383,19 @@ def main(argv=None) -> int:
             from . import knowledge
             to = knowledge.move_to(a.path)
             _print({"folder": str(to)})
+        elif a.cmd == "series":
+            from . import series
+            if a.op == "start":
+                _print(series.start(a.area, _stdin()))
+            elif a.op == "heading":
+                _print(series.heading(a.area, a.series, _stdin()))
+            else:
+                _print(series.load(areas.get_known(areas.load(), a.area)))
+        elif a.cmd == "agenda":
+            from . import series
+            _print(series.agenda(a.area, a.series))
+        elif a.cmd == "protocol":
+            return protocol(a)
         elif a.cmd == "move":
             d = Path(a.dir).expanduser()
             with _locked():

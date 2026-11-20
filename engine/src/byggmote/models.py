@@ -76,7 +76,7 @@ DONE = {"mlx": "*.safetensors", "mlx-lm": "*.safetensors", "onnx": "encoder-mode
 
 def local(entry: dict) -> Path | None:
     """A model shipped with the app, unpacked in BYGGMOTE_MODELS/<id> (the app sets Byggmöte.app/Contents/Resources/models)."""
-    root = os.environ.get("BYGGMOTE_MODELS")
+    root = os.environ.get("BYGGMOTE_MODELS") or Path(__file__).parents[2] / "models"  # a development checkout: engine/models
     d = root and Path(root).expanduser() / entry["id"]
     return d if d and (d / "config.yaml").exists() else None
 
