@@ -268,6 +268,8 @@ def run(a) -> int:
                                   lambda f: progress(WAVS + (1 - WAVS) * f), info["duration"])
                 return wavs
             audio = timed("extract", extract)
+            if not m["duration"]:  # a recording cut while it grew (a browser's WebM) names no length: the decoded sound has it
+                m["duration"] = info["duration"] = round(max(len(a) for a in audio.values()) / media.SR, 2)
 
             asr_e = models.default("asr", lang)
             asr = timed("load", lambda _: load(asr_e), "load:asr")

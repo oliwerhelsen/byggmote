@@ -205,6 +205,11 @@ def main(argv=None) -> int:
     x.add_argument("spelling")
     s = sub.add_parser("serve", help="resident engine: JSON requests on stdin, events on stdout")
     s.add_argument("--langs", default="sv,en", metavar="sv,en", help="preload these ASR languages (\"\": none)")
+    sub.add_parser("projects", help="the projects with their people, roles and series (JSON)")
+    s = sub.add_parser("meetings", help="a project's meetings, the latest first (JSON)")
+    s.add_argument("area")
+    s = sub.add_parser("meeting", help="one meeting: its transcript's lines and its protocol (JSON)")
+    s.add_argument("dir")
     s = sub.add_parser("series", help="a project's meeting series and their headings (JSON)")
     pp = s.add_subparsers(dest="op", required=True)
     x = pp.add_parser("start", help="a new series in project AREA from {\"name\", \"headings\"} on stdin; without headings, a byggmöte's")
@@ -383,6 +388,10 @@ def main(argv=None) -> int:
             from . import knowledge
             to = knowledge.move_to(a.path)
             _print({"folder": str(to)})
+        elif a.cmd in ("projects", "meetings", "meeting"):
+            from . import overview
+            _print(overview.projects() if a.cmd == "projects" else overview.meetings(a.area) if a.cmd == "meetings"
+                   else overview.detail(Path(a.dir)))
         elif a.cmd == "series":
             from . import series
             if a.op == "start":
