@@ -275,6 +275,9 @@ def main(argv=None) -> int:
     x.add_argument("--remove", action="store_true", help="not there after all")
     x = pp.add_parser("attendees", help="who was there, again from the meeting's speakers")
     x.add_argument("dir")
+    s = sub.add_parser("stommen", help="what Stommen has, into the knowledge base (JSON)")
+    pp = s.add_subparsers(dest="op", required=True)
+    pp.add_parser("project", help="one Projekt from {\"project\": {\"id\", \"name\"}, \"roles\", \"contacts\"} on stdin: Stommen wins")
     sub.add_parser("version", help="engine and protocol version (JSON)")
     s = sub.add_parser("models", help="list models, download them ahead of first use (JSON lines), or discard a stopped download")
     s.add_argument("--json", action="store_true")
@@ -459,6 +462,9 @@ def main(argv=None) -> int:
             return protocol(a)
         elif a.cmd == "correct":
             _print(correct(a))
+        elif a.cmd == "stommen":
+            from . import stommen
+            _print(stommen.take(_stdin()))
         elif a.cmd == "move":
             d = Path(a.dir).expanduser()
             with _locked():

@@ -134,14 +134,28 @@ def _has(text: str, q: str) -> bool:
 
 
 def roles(area: dict) -> list[str]:
-    """The project's roles, once each, in the order of its people."""
+    """The project's roles, once each. Stommen's own list when the Projekt is Stommen's (stommen.py), where a Roll can
+    be vacant; else the roles the project's people have, in their order."""
+    if "roles" in area:
+        return list(dict.fromkeys(r["name"] for r in area["roles"]))
     return list(dict.fromkeys(x["role"] for x in area.get("people", []) if x.get("role")))
+
+
+def held(area: dict) -> dict:
+    """Each person's Roll in the project, by person. Someone who holds several of Stommen's has them on one line."""
+    if "roles" not in area:
+        return {x["person"]: x["role"] for x in area.get("people", []) if x.get("role")}
+    out = {}
+    for r in area["roles"]:
+        if r.get("holder"):
+            out.setdefault(r["holder"], []).append(r["name"])
+    return {p: ", ".join(dict.fromkeys(names)) for p, names in out.items()}
 
 
 def attendees(m: dict, area: dict, ps: list[dict]) -> list[dict]:
     """Who spoke: a named person with their Roll in the project, anyone else under the name the meeting has."""
     said, names = {g["speaker"] for g in m["segments"]}, {p["id"]: p["name"] for p in ps}
-    role = {x["person"]: x.get("role") for x in area.get("people", [])}
+    role = held(area)
     out = []
     for sp in m["speakers"]:
         if sp["id"] not in said or sp["name"] == meeting.IGNORED:

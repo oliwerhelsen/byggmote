@@ -6,13 +6,14 @@ from . import areas, knowledge, meeting, people, protocol, series
 
 
 def projects() -> dict:
-    """Every project but the fallback, with who holds which Roll and the series' next meeting numbers."""
+    """Every project but the fallback, with who holds which Roll, the Roller there are to choose from (a vacant one
+    too, in a Projekt of Stommen's), the Projekt's id in Stommen when it is Stommen's, and the series' next numbers."""
     cfg = areas.load()
     names = {p["id"]: p["name"] for p in people.load()}
     return {"folder": str(knowledge.folder()), "projects": [
-        {"id": a["id"], "name": a["name"],
-         "people": [{"id": x["person"], "name": names[x["person"]]} | ({"role": x["role"]} if x.get("role") else {})
-                    for x in a.get("people", []) if x["person"] in names],
+        {"id": a["id"], "name": a["name"], "stommen": a.get("stommen"), "roles": protocol.roles(a),
+         "people": [{"id": pid, "name": names[pid]} | ({"role": protocol.held(a)[pid]} if pid in protocol.held(a) else {})
+                    for pid in dict.fromkeys([x["person"] for x in a.get("people", [])] + list(protocol.held(a))) if pid in names],
          "series": [{"id": s["id"], "name": s["name"], "next": series.next_no(s)} for s in series.load(a)["series"]]}
         for a in cfg["areas"] if a["id"] != areas.DEFAULT]}
 

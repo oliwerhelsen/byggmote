@@ -3,7 +3,8 @@
 
 export type Person = { id: string; name: string; role?: string }
 export type SeriesRef = { id: string; name: string; next: number }
-export type Project = { id: string; name: string; people: Person[]; series: SeriesRef[] }
+/** `roles`: the Roller a point can be given, a vacant one too. `stommen`: the Projekt's id there, when it is Stommen's. */
+export type Project = { id: string; name: string; stommen: string | null; roles: string[]; people: Person[]; series: SeriesRef[] }
 
 export type Kind = 'decision' | 'todo' | 'changeOrder' | 'deviation' | 'question' | 'risk' | 'note'
 /** Something for a person to read against the recording. `confirmed`: when a person said the amount is right. */

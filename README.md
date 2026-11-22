@@ -96,6 +96,21 @@ The model proposes, a person decides. `byggmote correct` is how:
   without `protocol --discard`.
 - Naming a speaker sets who was there in a draft protocol, so nothing has to be written again for that.
 
+### Stommen's Projekt
+
+Byggmöte is to have no projects of its own: a Projekt, its Roller and the Kontakter who hold them are Stommen's.
+The engine takes one Projekt as Stommen has it, and Stommen wins:
+
+    echo '{"project": {"id": "…", "name": "Kv. Eken kontorshus"},
+           "roles": [{"id": "…", "name": "Platschef", "holderId": "…", "substituteId": null}],
+           "contacts": [{"id": "…", "name": "Jonas Bergström", "organization": "Bergström Bygg AB", "email": "…"}]}' | byggmote stommen project
+
+A Roll is its own thing, as in Stommen: it can be vacant and still be given a point, and one person can hold
+several. A Kontakt becomes a person Byggmöte already knows when it can (the link from last time, else the e-mail,
+else the name), since a person is one person across projects here. Someone who is no longer a Kontakt leaves the
+project; the person and their meetings stay. The engine does not talk to Stommen: the app is to sign in and fetch.
+That part is not built, so today the command is fed by hand.
+
 ### The language model
 
 Two run the same model, Qwen3.5 9B, locally:

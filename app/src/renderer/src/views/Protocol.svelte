@@ -52,7 +52,7 @@
   // A protocol is corrected while it is a draft and no later meeting builds on it: the engine refuses anything else.
   const draft = $derived(p?.status === 'draft')
   const free = $derived(draft && m?.later === null)
-  const roles = $derived([...new Set(project.people.flatMap((x) => (x.role ? [x.role] : [])))])
+  const roles = $derived(project.roles)
   const pointable = $derived(p ? p.headings.filter((h) => !h.fill) : [])
   const pointer = $derived(m && active !== null ? (m.lines.find((l) => l.id === active) ?? null) : null)
   const silent = $derived(p ? project.people.filter((x) => !p.attendees.some((a) => a.name === x.name)) : [])

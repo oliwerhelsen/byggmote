@@ -188,7 +188,7 @@ def check(d: Path, no: str, n: int, undo: bool = False) -> dict:
 def _there(p: dict, m: dict, area: dict) -> list[dict]:
     """Who was there: those who spoke, then those a person added, each with the name and Roll they have now."""
     ps = people.load()
-    names, role = {x["id"]: x["name"] for x in ps}, {x["person"]: x.get("role") for x in area.get("people", [])}
+    names, role = {x["id"]: x["name"] for x in ps}, protocol.held(area)
     spoke = protocol.attendees(m, area, ps)
     out = list(spoke)
     for a in p.get("attendees", []):
@@ -222,7 +222,8 @@ def attend(d: Path, person: str, gone: bool = False) -> list[dict]:
                 raise ArgError(f"{person} is not someone a person added")
             p["attendees"] = [a for a in p["attendees"] if a.get("person") != pid]
         else:
-            if not any(x["person"] == pid for x in area.get("people", [])) or not any(x["id"] == pid for x in people.load()):
+            in_project = {x["person"] for x in area.get("people", [])} | set(protocol.held(area))
+            if pid not in in_project or not any(x["id"] == pid for x in people.load()):
                 raise ArgError(f"{person} is not in the project")
             p["attendees"] = _there(p | {"attendees": p["attendees"] + [{"name": pid, "person": pid, "added": meeting.now()}]}, m, area)
         return p["attendees"]
