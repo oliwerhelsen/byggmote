@@ -24,17 +24,20 @@ const EMAIL = 'maria@norrstaden.example'
 const PASSWORD = randomBytes(12).toString('hex')
 const TOKEN = `${randomBytes(16).toString('hex')}.${randomBytes(16).toString('hex')}`
 const LINDEN = '2b0c3f11-8e5d-4f7a-a2c4-91d6e0b7c3f2'
+const EKEN = '7d1f0a52-4c1e-4a0b-9b1e-2f6c8d3e5a10' // the fixture's project is Stommen's too, so its protocols can be sent
 
 type Seen = { method: string; path: string; headers: IncomingHttpHeaders; body: string }
 const seen: Seen[] = []
 let ended = false // Stommen has ended the session
 let slow = 0 // how long Stommen takes over a Projekt's roles, in milliseconds
 let tooOld = false // Stommen wants a newer Byggmöte
+let adjusted = false // the protocol is justerat in Stommen: it takes no later send
+const kept = new Map<string, number>() // what Stommen has taken, by Idempotency-Key: the version it answered with
 
 let stommen: Server
 let address: string
 let config: string
-let kept: string
+let userData: string
 let app: ElectronApplication
 let win: Page
 
@@ -52,6 +55,12 @@ function answer(method: string, path: string, headers: IncomingHttpHeaders, body
   if (method === 'POST' && path === '/api/auth/sign-out') {
     ended = true
     return [200, { success: true }]
+  }
+  if (method === 'POST' && path === `/api/mobile/v1/projects/${EKEN}/minutes`) {
+    if (adjusted) return [409, { error: { code: 'confirmed', message: 'Protokollet är justerat och kan inte ersättas.' } }]
+    const key = String(headers['idempotency-key'] ?? '')
+    if (!kept.has(key)) kept.set(key, kept.size + 1) // the same key again is the same send
+    return [200, { meetingId: 'm4', minutesId: 'p4', documentId: 'd4', version: kept.get(key), replaced: kept.get(key)! > 1 }]
   }
   if (path === '/api/mobile/v1/me') {
     return [200, { user: { id: 'u1', name: 'Maria Lindqvist', email: EMAIL }, organization: { id: 'o1', name: 'Norrstaden Fastigheter AB', readOnly: false }, roles: ['member'] }]
@@ -94,14 +103,14 @@ test.beforeAll(async () => {
   address = `http://127.0.0.1:${(stommen.address() as AddressInfo).port}`
 
   config = mkdtempSync(join(tmpdir(), 'byggmote-app-'))
-  kept = mkdtempSync(join(tmpdir(), 'byggmote-kept-'))
-  execFileSync(python, [join(__dirname, 'fixture.py')], { env: { ...process.env, BYGGMOTE_CONFIG: config } })
+  userData = mkdtempSync(join(tmpdir(), 'byggmote-kept-'))
+  execFileSync(python, [join(__dirname, 'fixture.py')], { env: { ...process.env, BYGGMOTE_CONFIG: config, BYGGMOTE_FIXTURE_STOMMEN: EKEN } })
   const args = process.env.CI && process.platform === 'linux' ? ['--no-sandbox', '.'] : ['.']
   const none = { BYGGMOTE_MODELS: join(config, 'no-models'), HF_HUB_CACHE: join(config, 'no-models'), HF_HUB_OFFLINE: '1' }
   // The app keeps what it keeps in a folder of this run's, and no keychain is asked: a test must not put anything in
   // the keychain of whoever runs it, nor wait for them to allow it.
   app = await electron.launch({ args, cwd: here, env: { ...process.env, ...none, BYGGMOTE_CONFIG: config, BYGGMOTE_HIDDEN: '1',
-    BYGGMOTE_USER_DATA: kept, BYGGMOTE_NO_KEYCHAIN: '1' } })
+    BYGGMOTE_USER_DATA: userData, BYGGMOTE_NO_KEYCHAIN: '1' } })
   win = await app.firstWindow()
   await expect(win.getByRole('heading', { name: 'Tidigare möten' })).toBeVisible()
 })
@@ -109,7 +118,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await app?.close()
   await new Promise((done) => stommen.close(done))
-  for (const d of [config, kept]) rmSync(d, { recursive: true, force: true })
+  for (const d of [config, userData]) rmSync(d, { recursive: true, force: true })
 })
 
 async function signIn(password: string, to = address): Promise<void> {
@@ -166,7 +175,7 @@ test('signing in brings the Projekt with its Roller and Kontakter, and the sessi
   // where the session is not: in the window, or readable on disk
   expect(JSON.stringify(await win.evaluate(() => window.api.stommenState()))).not.toContain(TOKEN)
   expect(await win.evaluate(() => JSON.stringify({ ...localStorage }) + document.documentElement.innerHTML)).not.toContain(TOKEN)
-  const onDisk = readFileSync(join(kept, 'stommen.json'), 'utf8')
+  const onDisk = readFileSync(join(userData, 'stommen.json'), 'utf8')
   expect(onDisk).not.toContain(TOKEN)
   expect(onDisk).not.toContain(PASSWORD)
   await expect(win.getByLabel('Lösenord')).toHaveCount(0)
@@ -212,7 +221,7 @@ test('signing out while a fetch is still running leaves nothing of the session b
   } finally {
     slow = 0
   }
-  expect(JSON.parse(readFileSync(join(kept, 'stommen.json'), 'utf8'))).toEqual({ server: address })
+  expect(JSON.parse(readFileSync(join(userData, 'stommen.json'), 'utf8'))).toEqual({ server: address })
   expect(await win.evaluate(() => window.api.stommenState())).toMatchObject({ connected: false, user: '', syncedAt: null })
 })
 
@@ -234,4 +243,64 @@ test('a Byggmöte that Stommen finds too old is told so, and leaves no session b
   expect(seen.slice(before).map((r) => r.path)).toEqual(['/api/auth/sign-in/email', '/api/mobile/v1/me', '/api/auth/sign-out'])
   expect(ended).toBe(true)
   expect(await win.evaluate(() => window.api.stommenState())).toMatchObject({ connected: false })
+})
+
+test('a protocol goes to Stommen when the person sends it, with its points and where each was said, and nothing else', async () => {
+  await win.reload()
+  await win.getByRole('button', { name: 'Stommen' }).click()
+  await signIn(PASSWORD)
+  await expect(win.getByRole('heading', { name: 'Inloggad som Maria Lindqvist' })).toBeVisible()
+  await win.getByLabel('Projekt', { exact: true }).selectOption({ label: 'Kv. Eken kontorshus' })
+  await win.getByRole('button', { name: 'Byggmöte 4' }).click()
+  const card = win.getByRole('region', { name: 'Till Stommen' })
+  await expect(card).toContainText('Protokollet är inte skickat.')
+  await expect(card).toContainText('En sak ska kontrolleras innan protokollet kan skickas.')
+  await expect(card.getByRole('button')).toHaveCount(0) // nothing unread goes
+
+  await win.getByRole('button', { name: 'Beloppet 86 500 kr i punkt 4.4.1 stämmer' }).click()
+  await card.getByRole('button', { name: 'Skicka till Stommen' }).click()
+  await expect(card).toContainText('Ljudet och resten av utskriften stannar på den här datorn.')
+  expect(seen.filter((r) => r.path.endsWith('/minutes'))).toHaveLength(0) // asked first, not sent yet
+  await card.getByRole('button', { name: 'Skicka', exact: true }).click()
+  await expect(card).toContainText(/Skickat .* version 1\./)
+  await expect(card.getByRole('button')).toHaveCount(0)
+
+  const [sent] = seen.filter((r) => r.path === `/api/mobile/v1/projects/${EKEN}/minutes`)
+  expect(sent.method).toBe('POST')
+  expect(sent.headers.authorization).toBe(`Bearer ${TOKEN}`)
+  expect(sent.headers['idempotency-key']).toMatch(/^[0-9a-f]{64}$/)
+  const body = JSON.parse(sent.body) as { meeting: { number: number }; items: { number: string; roleId: string | null; quote: string | null; saidAt: number | null; speaker: { name: string } | null; confirmedAmounts: string[] }[]; text: string }
+  expect(body.meeting.number).toBe(4)
+  const items = Object.fromEntries(body.items.map((x) => [x.number, x]))
+  expect(Object.keys(items).sort()).toEqual(['3.4.1', '4.3.1', '4.4.1'])
+  expect(items['4.4.1']).toMatchObject({ saidAt: 1062, quote: 'Beställaren godkänner ÄTA 14 till fast pris åttiosex och fem.', speaker: { name: 'Anders Holm' }, confirmedAmounts: ['86 500 kr'] })
+  expect(items['3.4.1'].roleId).toBe('eken-r3') // the Roll as Stommen knows it
+  // of the transcript only the lines the points quote: the welcome that no point points at stays on the computer
+  expect(sent.body).not.toContain('Välkomna till byggmötet')
+
+  // changed after it was sent, it says so and goes again as a later version
+  await win.getByRole('button', { name: 'Ändra punkt 4.3.1' }).click()
+  await win.getByRole('form', { name: 'Ändra punkt 4.3.1' }).getByLabel('Punkten', { exact: true }).fill('Stommen på plan tre är klar och avsynad.')
+  await win.getByRole('button', { name: 'Spara' }).click()
+  await expect(card).toContainText('Protokollet har ändrats sedan dess.')
+  await card.getByRole('button', { name: 'Skicka igen' }).click()
+  await card.getByRole('button', { name: 'Skicka', exact: true }).click()
+  await expect(card).toContainText(/Skickat .* version 2\./)
+  expect(new Set(seen.filter((r) => r.path.endsWith('/minutes')).map((r) => r.headers['idempotency-key'])).size).toBe(2)
+})
+
+test('a protocol that is justerat in Stommen is not replaced, and the app says why', async () => {
+  const card = win.getByRole('region', { name: 'Till Stommen' })
+  await win.getByRole('button', { name: 'Ändra punkt 4.3.1' }).click()
+  await win.getByRole('form', { name: 'Ändra punkt 4.3.1' }).getByLabel('Punkten', { exact: true }).fill('Stommen på plan tre är klar.')
+  await win.getByRole('button', { name: 'Spara' }).click()
+  adjusted = true
+  try {
+    await card.getByRole('button', { name: 'Skicka igen' }).click()
+    await card.getByRole('button', { name: 'Skicka', exact: true }).click()
+    await expect(card.getByRole('alert')).toHaveText('Protokollet är justerat i Stommen och kan inte ersättas.')
+    await expect(card).toContainText(/version 2\. Protokollet har ändrats sedan dess\./) // what Stommen has is still version 2
+  } finally {
+    adjusted = false
+  }
 })

@@ -8,9 +8,9 @@ goes on to Stommen as proposals.
 models. Its tests and llama.cpp's server run on Windows and Linux on GitHub; a whole meeting has only been transcribed
 on the Mac. The app is a first version: it shows a project's meetings, the agenda and a protocol with its transcript
 and sound, records a meeting or takes a recording, names the speakers, and lets a person correct the protocol. It
-signs in to Stommen as a person and fetches the person's Projekt with their Roller and Kontakter. Nothing is sent to
-Stommen yet, a correction is not tied to who is signed in, and the app is not packaged for installing. Still to
-build: sending what a person approves to Stommen, justering, and the phone recorder.
+signs in to Stommen as a person and fetches the person's Projekt with their Roller and Kontakter, and it can send a
+protocol there, though Stommen has no endpoint that takes one yet (Stommen's issue 253). A correction is not tied to
+who is signed in, and the app is not packaged for installing. Still to build: justering, and the phone recorder.
 
 Where the engine comes from and what the models' licences ask: `NOTICE.md`.
 
@@ -48,7 +48,11 @@ to the engine (`byggmote stommen project`): at sign-in, on "Hämta från Stommen
   not kept anywhere.
 - The address is https, or http for this computer's own. A redirect is not followed, so the password and the token
   go to the address the person gave and nowhere else.
-- Only the sign-in goes to Stommen. Nothing of a meeting does.
+- What goes to Stommen is the sign-in and, when the person presses "Skicka till Stommen" on a protocol and says
+  yes to what is listed, that protocol: its points, and for each how far into the recording it was said, the line
+  said there and who said it. Sound and the rest of the transcript never go. A protocol with a check left is not
+  sent, the same protocol sent twice is one send (its digest is the `Idempotency-Key`), and one changed after it was
+  sent says so and goes again as a later version.
 - The requests are made with Node's `http` and `https`, with the headers the app sets and no others. Node's `fetch`
   adds `sec-fetch-mode`, and Stommen then takes the sign-in for a browser's and refuses it for having no Origin.
 - An account with two-factor sign-in is told Byggmöte cannot do that yet (Stommen's phone app cannot either).
@@ -138,8 +142,9 @@ project; the person and their meetings stay. The engine does not talk to Stommen
 The other way, `byggmote stommen minutes "<meeting folder>"` gives a meeting's protocol as Stommen is to take it
 (Stommen's issue 253): each point with the Roll's id there, how many seconds into the recording it was said, the
 line said there and who said it, and whether it stands as the model wrote it, was changed by a person or written by
-one. It is refused while a check is left, and for a Roll that Stommen no longer has. Nothing sends it yet: Stommen
-cannot take a protocol in, and the app has no button for it.
+one. It is refused while a check is left, and for a Roll that Stommen no longer has. The app sends it and tells the
+engine what Stommen answered (`byggmote stommen sent`), so a meeting's detail can say when its protocol was sent and
+whether it has changed since.
 
 ### The language model
 

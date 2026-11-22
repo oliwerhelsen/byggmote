@@ -73,7 +73,7 @@
   <div class="stack narrow">
     <div class="note">
       <Icon name="lock" />
-      <p>Det enda som går till Stommen är inloggningen. Ljud, utskrifter och protokoll stannar på den här datorn.</p>
+      <p>Till Stommen går inloggningen och de protokoll du själv skickar. Ljud och utskrifter stannar på den här datorn.</p>
     </div>
 
     {#if problem}

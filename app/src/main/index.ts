@@ -117,6 +117,7 @@ function handlers(tell: (p: Progress) => void): { [K in Exclude<keyof Api, 'onPr
     stommenSignIn: (server, email, password) => stommen.signIn(String(server), String(email), String(password)),
     stommenSync: () => stommen.sync(),
     stommenSignOut: () => stommen.signOut(),
+    stommenSend: (dir) => stommen.sendMinutes(known(dir)),
 
     // A recording goes to disk a second at a time, so a crash an hour in loses a second, not the hour.
     async recordingStart() {

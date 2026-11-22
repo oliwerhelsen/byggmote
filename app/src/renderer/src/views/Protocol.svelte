@@ -6,7 +6,7 @@
   import { clock, day, failure, KINDS, minutes, overdue } from '../lib/format'
   import type { Go } from '../lib/view'
 
-  let { project, dir, problem: handed, go }: { project: Project; dir: string; problem: string; go: Go } = $props()
+  let { project, dir, problem: handed, connected, go }: { project: Project; dir: string; problem: string; connected: boolean; go: Go } = $props()
 
   let m = $state<MeetingDetail | null>(null)
   let problem = $state('')
@@ -23,6 +23,8 @@
   let adding = $state<number | null>(null) // the heading a new point is written under
   let asking = $state(false) // whether to write over a person's corrections
   let present = $state('')
+  let sending = $state<'' | 'ask' | 'busy'>('') // the protocol on its way to Stommen: asked about first, then sent
+  let sendProblem = $state('')
 
   async function load(): Promise<void> {
     try {
@@ -144,6 +146,22 @@
     present = ''
   }
 
+  const WHEN = new Intl.DateTimeFormat('sv-SE', { dateStyle: 'long', timeStyle: 'short' })
+  const standing = $derived(m?.stommen ?? null)
+
+  async function send(): Promise<void> {
+    sending = 'busy'
+    sendProblem = ''
+    try {
+      await window.api.stommenSend(dir)
+      await load()
+    } catch (e) {
+      sendProblem = failure(e)
+    } finally {
+      sending = ''
+    }
+  }
+
   const tone: Partial<Record<Kind, string>> = { decision: 'ok', risk: 'warn' }
   const icon = (k: Kind): 'check' | 'alert' | 'flag' => (k === 'decision' ? 'check' : k === 'risk' ? 'alert' : 'flag')
   const sentence = (t: string): string => (/[.!?]$/.test(t) ? t : `${t}.`)
@@ -260,7 +278,9 @@
           <div class="note">
             <Icon name="lock" />
             <p>
-              Protokollet är skrivet från inspelningen av en språkmodell på den här datorn. Inget har skickats ut. Varje punkt
+              Protokollet är skrivet från inspelningen av en språkmodell på den här datorn.
+              {#if !standing?.sent_at}Inget har skickats ut.{/if}
+              Varje punkt
               modellen har skrivit pekar på stället där det sades.
               {#if free}
                 Läs igenom det mot inspelningen och rätta det som är fel innan det går vidare.
@@ -277,6 +297,54 @@
                 {checks === 1 ? 'Den står under sin punkt.' : 'De står under sina punkter.'}
               </p>
             </div>
+          {/if}
+
+          {#if standing && standing.why !== 'local'}
+            <section class="card" aria-labelledby="to-stommen">
+              <h2 id="to-stommen">Till Stommen</h2>
+              <p class="muted">
+                {#if standing.sent_at}
+                  Skickat {WHEN.format(new Date(standing.sent_at))}, version {standing.version}.
+                  {#if standing.changed}Protokollet har ändrats sedan dess.{/if}
+                {:else}
+                  Protokollet är inte skickat.
+                {/if}
+              </p>
+              {#if sendProblem}
+                <div class="note bad" role="alert" style="margin-top: 12px"><Icon name="alert" /><p>{sendProblem}</p></div>
+              {/if}
+              {#if standing.why === 'checks'}
+                <p style="margin-top: 12px">
+                  {standing.about === 1 ? 'En sak ska kontrolleras' : `${standing.about} saker ska kontrolleras`} innan protokollet kan skickas.
+                </p>
+              {:else if standing.why === 'role'}
+                <p style="margin-top: 12px">
+                  Rollen ”{standing.about}” finns inte längre i Stommen. Hämta projektet igen under Stommen, eller välj en annan Roll för punkten.
+                </p>
+              {:else if !connected}
+                <p style="margin-top: 12px">Logga in i Stommen för att skicka protokollet.</p>
+                <button class="btn" style="margin-top: 12px" onclick={() => go({ name: 'stommen' })}>Till Stommen-kopplingen</button>
+              {:else if sending === 'ask'}
+                <div class="note" style="margin-top: 12px">
+                  <Icon name="lock" />
+                  <div>
+                    <p>
+                      Det här går till Stommen: protokollet med {p.points.length === 1 ? 'sin punkt' : `sina ${p.points.length} punkter`}, och för varje
+                      punkt hur långt in i inspelningen det sades, raden som sades där och vem som sa den. Ljudet och resten av utskriften
+                      stannar på den här datorn.
+                    </p>
+                    <div class="row" style="margin-top: 12px">
+                      <button class="btn primary" onclick={send}>Skicka</button>
+                      <button class="btn" onclick={() => (sending = '')}>Avbryt</button>
+                    </div>
+                  </div>
+                </div>
+              {:else if !standing.sent_at || standing.changed}
+                <button class="btn primary" style="margin-top: 12px" disabled={sending === 'busy'} onclick={() => (sending = 'ask')}>
+                  {sending === 'busy' ? 'Skickar' : standing.sent_at ? 'Skicka igen' : 'Skicka till Stommen'}
+                </button>
+              {/if}
+            </section>
           {/if}
 
           <article class="card document">

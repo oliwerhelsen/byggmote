@@ -109,7 +109,7 @@
         {#if project && view.name !== 'stommen'}<span class="muted">{project.name}</span><span class="muted" aria-hidden="true">/</span>{/if}
         <span>{TITLES[view.name]}</span>
       </p>
-      <p class="promise small"><Icon name="lock" size={16} /> Ljud och text stannar på den här datorn</p>
+      <p class="promise small"><Icon name="lock" size={16} /> Ljud och utskrift stannar på den här datorn</p>
     </header>
 
     <main>
@@ -152,7 +152,7 @@
             <Working job={view.job} {go} />
           {:else if view.name === 'protocol'}
             {#key view.dir}
-              <Protocol {project} dir={view.dir} problem={view.problem ?? ''} {go} />
+              <Protocol {project} dir={view.dir} problem={view.problem ?? ''} connected={Boolean(stommen?.connected)} {go} />
             {/key}
           {/if}
         {/key}

@@ -1,9 +1,13 @@
 """A small project for the app's tests, in the knowledge base BYGGMOTE_CONFIG names: four people with roles (one of
 them never speaks), a byggmöte series and two held meetings with protocols. The engine itself writes it, from answers a model could have given, so the
-app is tested against the real files and no model runs."""
-import json
+app is tested against the real files and no model runs.
 
-from byggmote import areas, meeting, people, protocol, series
+With BYGGMOTE_FIXTURE_STOMMEN=<a Projekt's id> the project is one of Stommen's instead: it comes in the way the app
+brings one from Stommen, with its Roller and Kontakter, so its protocols can be sent there."""
+import json
+import os
+
+from byggmote import areas, meeting, people, protocol, series, stommen
 
 SAID = [
     (0, "Maria Lindqvist", "Välkomna till byggmötet för kvarteret Eken."),
@@ -13,11 +17,18 @@ SAID = [
     (1265, "Jonas Bergström", "Jag skickar underlaget för mängdregleringen av schakt senast fredag."),
 ]
 
+WHO = (("Maria Lindqvist", "Projektledare"), ("Anders Holm", "Beställarens ombud"), ("Jonas Bergström", "Platschef"), ("Sara Nyberg", "BAS-U"))
+
 areas.load()
-project = areas.add({"name": "Kv. Eken kontorshus"})
-for name, role in (("Maria Lindqvist", "Projektledare"), ("Anders Holm", "Beställarens ombud"), ("Jonas Bergström", "Platschef"),
-                   ("Sara Nyberg", "BAS-U")):
-    people.add({"name": name, "areas": [{"area": project["id"], "role": role}]})
+if os.environ.get("BYGGMOTE_FIXTURE_STOMMEN"):
+    took = stommen.take({"project": {"id": os.environ["BYGGMOTE_FIXTURE_STOMMEN"], "name": "Kv. Eken kontorshus"},
+                         "roles": [{"id": f"eken-r{i}", "name": role, "holderId": f"eken-k{i}", "substituteId": None} for i, (_, role) in enumerate(WHO, 1)],
+                         "contacts": [{"id": f"eken-k{i}", "name": name} for i, (name, _) in enumerate(WHO, 1)]})
+    project = areas.get(areas.load(), took["project"])
+else:
+    project = areas.add({"name": "Kv. Eken kontorshus"})
+    for name, role in WHO:
+        people.add({"name": name, "areas": [{"area": project["id"], "role": role}]})
 sid = series.start(project["id"], {"name": "Byggmöte"})["id"]
 ids = {p["name"]: p["id"] for p in people.load()}
 

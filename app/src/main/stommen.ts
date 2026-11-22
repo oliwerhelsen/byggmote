@@ -3,7 +3,9 @@
 // handed what Stommen answers. The token never reaches the window. On disk it is encrypted by the operating system's
 // keychain; where the computer has none, it lives until the app quits and the person signs in again.
 //
-// Only the sign-in goes to Stommen. Nothing of a meeting does.
+// What goes to Stommen is the sign-in and, when the person sends it, a meeting's protocol: its points, and for each
+// how far into the recording it was said, the line said there and who said it. Sound and the rest of the transcript
+// never do.
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { request as overHttp } from 'node:http'
 import { request as overHttps } from 'node:https'
@@ -114,10 +116,11 @@ function address(given: string): string {
   return url.origin
 }
 
-async function send(server: string, path: string, init: { method?: string; body?: string; token?: string } = {}): Promise<Answer> {
+async function send(server: string, path: string, init: { method?: string; body?: string; token?: string; key?: string } = {}): Promise<Answer> {
   const headers: Record<string, string> = { accept: 'application/json', 'x-app': 'byggmote', 'x-app-version': app.getVersion() }
   if (init.body !== undefined) headers['content-type'] = 'application/json'
   if (init.token) headers['authorization'] = `Bearer ${init.token}`
+  if (init.key) headers['idempotency-key'] = init.key // the same protocol sent twice is one send in Stommen
   try {
     // The token and the password go to the address the person gave and nowhere else.
     return await ask(new URL(server + path), init.method ?? 'GET', headers, init.body)
@@ -218,4 +221,29 @@ export async function signOut(): Promise<StommenState> {
   if (saved && bearer) await send(saved.server, '/api/auth/sign-out', { method: 'POST', body: '{}', token: bearer }).catch(() => {})
   await forget()
   return state()
+}
+
+/**
+ * The meeting's protocol to Stommen, as the engine gives it (`byggmote stommen minutes`), and the engine is told what
+ * Stommen answered. The engine refuses while a check is left, so nothing unread goes.
+ */
+export async function sendMinutes(dir: string): Promise<{ version: number; replaced: boolean }> {
+  const saved = await read()
+  const bearer = token(saved)
+  if (!saved || !bearer) throw new StommenError('Byggmöte är inte inloggat i Stommen.')
+  const out = await call<{ project: string; minutes: unknown; digest: string }>(['stommen', 'minutes', dir])
+  const res = await send(saved.server, `/api/mobile/v1/projects/${encodeURIComponent(out.project)}/minutes`, {
+    method: 'POST', body: JSON.stringify(out.minutes), token: bearer, key: out.digest
+  })
+  if (res.status === 401) {
+    await forget()
+    throw new StommenError('Inloggningen i Stommen gäller inte längre. Logga in igen.')
+  }
+  if (res.status === 404) throw new StommenError('Projektet finns inte i Stommen längre, eller så ser du det inte där.')
+  if (res.status === 409) throw new StommenError('Protokollet är justerat i Stommen och kan inte ersättas.')
+  if (!res.ok) throw await refusal(res)
+  const took = (await res.json()) as { version?: number; replaced?: boolean }
+  if (typeof took.version !== 'number') throw new StommenError('Stommen svarade inte som väntat. Protokollet kan ha kommit fram: öppna Stommen och se efter.')
+  await call(['stommen', 'sent', dir], { version: took.version, digest: out.digest })
+  return { version: took.version, replaced: Boolean(took.replaced) }
 }

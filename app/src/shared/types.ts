@@ -84,6 +84,22 @@ export type MeetingDetail = Omit<MeetingRow, 'protocol'> & {
   corrections: number
   /** The number of the meeting that builds on this protocol, when one does: then it is not changed. */
   later: number | null
+  /** Where the protocol stands with Stommen; null without a protocol. */
+  stommen: Standing | null
+}
+
+/**
+ * Whether a protocol can go to Stommen and what stops it: `local`, the project is not Stommen's; `checks`, so many
+ * (`about`) are left for a person; `role`, a point is for a Roll (`about`) Stommen no longer has. And when it was last
+ * sent, as which version, and whether it has changed since.
+ */
+export type Standing = {
+  possible: boolean
+  why: 'local' | 'checks' | 'role' | null
+  about: number | string | null
+  sent_at: string | null
+  version: number | null
+  changed: boolean
 }
 
 export type OpenPoint = { no: string; heading: number; kind: Kind; text: string; role: string | null; due: string | null }
@@ -129,6 +145,8 @@ export interface Api {
   /** The person's Projekt with Roller and Kontakter, from Stommen into the engine. */
   stommenSync(): Promise<StommenSync>
   stommenSignOut(): Promise<StommenState>
+  /** The meeting's protocol to Stommen: its points, and for each the time, the line said there and who said it. */
+  stommenSend(dir: string): Promise<{ version: number; replaced: boolean }>
   recordingStart(): Promise<string>
   recordingChunk(id: string, bytes: Uint8Array): Promise<void>
   recordingStop(id: string): Promise<string>
@@ -137,4 +155,4 @@ export interface Api {
 }
 
 export const CHANNELS = ['projects', 'meetings', 'agenda', 'meeting', 'audio', 'startSeries', 'pickRecording', 'process',
-  'writeProtocol', 'nameSpeaker', 'changePoint', 'addPoint', 'removePoint', 'restorePoint', 'confirmCheck', 'attend', 'stommenState', 'stommenSignIn', 'stommenSync', 'stommenSignOut', 'recordingStart', 'recordingChunk', 'recordingStop', 'recordingDiscard'] as const
+  'writeProtocol', 'nameSpeaker', 'changePoint', 'addPoint', 'removePoint', 'restorePoint', 'confirmCheck', 'attend', 'stommenState', 'stommenSignIn', 'stommenSync', 'stommenSignOut', 'stommenSend', 'recordingStart', 'recordingChunk', 'recordingStop', 'recordingDiscard'] as const
