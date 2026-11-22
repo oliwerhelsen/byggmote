@@ -73,6 +73,12 @@ def test_a_role_check_goes_when_a_person_has_chosen(project, held):
     assert (none["role"], none["checks"], "edited" in none) == (None, [], False)
 
 
+def test_a_closed_point_asks_for_no_role(project, held):
+    d = held("Byggmöte 3", SAID)
+    write(d, project[1], [point(heading=5, kind="question", text="Frågan skickas.", role="Konstruktören")], no=3)
+    assert correct.change(d, "3.5.1", {"open": False})["checks"] == []
+
+
 def test_a_decision_is_not_left_open_and_a_closed_point_has_no_one_to_do_it(project, held):
     d = held("Byggmöte 3", SAID)
     write(d, project[1], [TODO], no=3)

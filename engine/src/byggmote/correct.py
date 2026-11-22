@@ -103,7 +103,7 @@ def change(d: Path, no: str, given) -> dict:
     """What a person sets on point `no` (OWN, or CARRIED for an earlier meeting's): the point as it then is.
 
     An amount check stays only while its amount is in the text: an amount a person writes is the person's. A role
-    check goes when the person has chosen, a Roll or none."""
+    check goes when the person has chosen, a Roll or none, and when the point is closed: then nobody is to do it."""
     with _editing(d) as (p, _, area):
         x = _point(p, no)
         carried = "since" in x
@@ -122,7 +122,7 @@ def change(d: Path, no: str, given) -> dict:
             text = x["text"] + " " + (x.get("follow") or "")
             amounts = {" ".join(a.group(0).split()) for a in protocol.AMOUNT.finditer(text)}
             x["checks"] = [c for c in x["checks"] if c["code"] != "amount" or c["value"] in amounts]
-        if "role" in f:
+        if "role" in f or not x["open"]:
             x["checks"] = [c for c in x["checks"] if c["code"] != "role"]
         return x
 
