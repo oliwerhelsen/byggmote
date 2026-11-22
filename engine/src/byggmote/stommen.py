@@ -5,8 +5,13 @@ be vacant, and one person can hold several.
 `take` is given what Stommen answers for one Projekt. It does not talk to Stommen: the app signs in and fetches, the
 engine keeps the knowledge base. A person is one person across projects (that is what recognises a voice), while a
 Kontakt in Stommen belongs to one Projekt, so a Kontakt is matched to a person: by the link from last time, else by
-e-mail, else by name."""
-from . import ArgError, areas, knowledge, people
+e-mail, else by name.
+
+`minutes` is the other way: a meeting's protocol as Stommen takes it, for the app to send. Nothing of the recording
+goes with it but, for each point, how far in it was said, the line that was said there and who said it."""
+from pathlib import Path
+
+from . import ArgError, areas, knowledge, meeting, people, protocol
 from .context import key
 
 MAYBE = (str, type(None))
@@ -95,3 +100,63 @@ def take(given) -> dict:
     knowledge.guides(cfg)
     return {"project": a["id"], "name": title, "people": len(who), "roles": len(roles),
             "vacant": sum(not r["holder"] for r in a["roles"]), "left": left}
+
+
+def minutes(d: Path) -> dict:
+    """The protocol of the meeting in `d` as Stommen takes it: {"project": the Projekt's id in Stommen, "minutes": what
+    is sent}. A point comes with the Roll's id in Stommen, how many seconds into the recording it was said, the whole
+    line said there and who said it (the Kontakt, when the speaker is one), and whether it stands as the model wrote
+    it, was changed by a person or written by one. Points a person took out and proposals that were never shown are
+    not in it.
+
+    Refused while something is left for a person: an amount to read against the recording, or a Roll to choose."""
+    d = Path(d).expanduser()
+    p = protocol.load(d)
+    if p is None:
+        raise ArgError("the meeting has no protocol")
+    m = meeting.load(d)
+    area = areas.get(areas.load(), m["area"])
+    pid = area.get("stommen")
+    if not pid:
+        raise ArgError("the project is not one of Stommen's")
+    if left := sum(len(protocol.unchecked(x)) for x in p["points"]):
+        raise ArgError(f"{left} checks are left in the protocol: an amount to confirm or a Roll to choose")
+
+    ps = people.load()
+    contact = {x["id"]: (x.get("stommen") or {}).get(pid) for x in ps}
+    name, by_name = {x["id"]: x["name"] for x in ps}, {x["name"]: x["id"] for x in ps}
+    rolls = {key(r["name"]): r["id"] for r in area.get("roles", [])}
+    speakers, lines = {s["id"]: s for s in m["speakers"]}, {g["id"]: g for g in m["segments"]}
+
+    def roll(x: dict) -> str | None:
+        if not x.get("role"):
+            return None
+        if key(x["role"]) not in rolls:
+            raise ArgError(f"Stommen has no Roll {x['role']} in the project (point {x['no']}): fetch the project again")
+        return rolls[key(x["role"])]
+
+    def said(x: dict) -> tuple:
+        g = lines.get(x.get("line"))
+        if not g:
+            return None, None
+        sp = speakers[g["speaker"]]
+        who = sp.get("person")
+        return g["text"], {"name": name.get(who) or sp["name"], "contactId": contact.get(who)}
+
+    items = []
+    for x in p["points"]:
+        quote, speaker = said(x)
+        items.append({
+            "number": x["no"], "heading": x["heading"], "kind": x["kind"], "text": x["text"], "roleId": roll(x),
+            "due": x.get("due"), "open": bool(x["open"]), "since": x.get("since", p["no"]),
+            "followUp": x.get("follow") if "since" in x else None,
+            "saidAt": round(x["at"]) if x.get("at") is not None else None, "quote": quote, "speaker": speaker,
+            "written": "person" if "added" in x else "changed" if "edited" in x else "model",
+            "confirmedAmounts": [c["value"] for c in x.get("checks", []) if c.get("confirmed")]})
+    there = [{"name": a["name"], "role": a.get("role"), "contactId": contact.get(a.get("person") or by_name.get(a["name"]))}
+             for a in p["attendees"]]
+    return {"project": pid, "minutes": {
+        "series": {"key": p["series"], "name": p["name"]},
+        "meeting": {"number": p["no"], "heldOn": m["recorded_at"][:10], "durationSeconds": round(m["duration"])},
+        "attendees": there, "headings": [{"number": h["no"], "name": h["name"]} for h in p["headings"]],
+        "items": items, "text": (d / protocol.TEXT).read_text(encoding="utf-8")}}

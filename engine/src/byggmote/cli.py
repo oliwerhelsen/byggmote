@@ -278,6 +278,8 @@ def main(argv=None) -> int:
     s = sub.add_parser("stommen", help="what Stommen has, into the knowledge base (JSON)")
     pp = s.add_subparsers(dest="op", required=True)
     pp.add_parser("project", help="one Projekt from {\"project\": {\"id\", \"name\"}, \"roles\", \"contacts\"} on stdin: Stommen wins")
+    x = pp.add_parser("minutes", help="the meeting's protocol as Stommen takes it, for the app to send; refused while a check is left")
+    x.add_argument("dir")
     sub.add_parser("version", help="engine and protocol version (JSON)")
     s = sub.add_parser("models", help="list models, download them ahead of first use (JSON lines), or discard a stopped download")
     s.add_argument("--json", action="store_true")
@@ -464,7 +466,7 @@ def main(argv=None) -> int:
             _print(correct(a))
         elif a.cmd == "stommen":
             from . import stommen
-            _print(stommen.take(_stdin()))
+            _print(stommen.take(_stdin()) if a.op == "project" else stommen.minutes(Path(a.dir)))
         elif a.cmd == "move":
             d = Path(a.dir).expanduser()
             with _locked():

@@ -135,6 +135,12 @@ several. A Kontakt becomes a person Byggmöte already knows when it can (the lin
 else the name), since a person is one person across projects here. Someone who is no longer a Kontakt leaves the
 project; the person and their meetings stay. The engine does not talk to Stommen: the app signs in and fetches.
 
+The other way, `byggmote stommen minutes "<meeting folder>"` gives a meeting's protocol as Stommen is to take it
+(Stommen's issue 253): each point with the Roll's id there, how many seconds into the recording it was said, the
+line said there and who said it, and whether it stands as the model wrote it, was changed by a person or written by
+one. It is refused while a check is left, and for a Roll that Stommen no longer has. Nothing sends it yet: Stommen
+cannot take a protocol in, and the app has no button for it.
+
 ### The language model
 
 Two run the same model, Qwen3.5 9B, locally:
