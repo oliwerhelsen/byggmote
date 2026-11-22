@@ -294,7 +294,7 @@
                 {#if h.fill === 'attendees'}
                   {#if p.attendees.length}
                     <ul class="attendees">
-                      {#each p.attendees as a (a.name)}
+                      {#each p.attendees as a}
                         <li>
                           <span>{a.name}{#if a.role}<span class="muted">, {a.role}</span>{/if}</span>
                           {#if a.added && a.person && draft}
