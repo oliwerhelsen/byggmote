@@ -7,5 +7,6 @@ export type View =
   | { name: 'recording'; series: SeriesRef }
   | { name: 'working'; job: Job }
   | { name: 'protocol'; dir: string; problem?: string }
+  | { name: 'stommen' }
 
 export type Go = (to: View) => void

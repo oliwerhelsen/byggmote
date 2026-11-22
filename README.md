@@ -7,9 +7,10 @@ goes on to Stommen as proposals.
 **Status:** the engine runs as a CLI, from a recording to a numbered protocol, with either of two local language
 models. Its tests and llama.cpp's server run on Windows and Linux on GitHub; a whole meeting has only been transcribed
 on the Mac. The app is a first version: it shows a project's meetings, the agenda and a protocol with its transcript
-and sound, records a meeting or takes a recording, names the speakers, and lets a person correct the protocol. It is
-not packaged for installing, and it does not know who is correcting: there is no login before Stommen is connected.
-Still to build: the connection to Stommen and the phone recorder.
+and sound, records a meeting or takes a recording, names the speakers, and lets a person correct the protocol. It
+signs in to Stommen as a person and fetches the person's Projekt with their Roller and Kontakter. Nothing is sent to
+Stommen yet, a correction is not tied to who is signed in, and the app is not packaged for installing. Still to
+build: sending what a person approves to Stommen, justering, and the phone recorder.
 
 Where the engine comes from and what the models' licences ask: `NOTICE.md`.
 
@@ -34,6 +35,26 @@ sits at the computer cannot land in it. They also show the engine folders with n
 for a protocol to be written, by mistake or because an earlier test failed and the app started over, gets an error
 and not minutes of a language model. Recording from a microphone to a written protocol is not in them: it needs the
 models and several minutes, and has been run by hand with a sound clip played into the app as its microphone.
+
+### Stommen
+
+The app signs in to Stommen the way Stommen's phone app does (ADR-0018 there): `POST /api/auth/sign-in/email` gives a
+session token, and every read under `/api/mobile/v1` carries it. The app names itself with `X-App: byggmote`. It
+fetches the person's Projekt and each one's Roller and Kontakter (`/projects`, `/projects/{id}/roles`) and hands them
+to the engine (`byggmote stommen project`): at sign-in, on "Hämta från Stommen", and when the app starts.
+
+- The token stays in the main process (`app/src/main/stommen.ts`). On disk it is encrypted by the operating system's
+  keychain; on a computer without one it lives until the app quits. The window never sees it, and the password is
+  not kept anywhere.
+- The address is https, or http for this computer's own. A redirect is not followed, so the password and the token
+  go to the address the person gave and nowhere else.
+- Only the sign-in goes to Stommen. Nothing of a meeting does.
+- An account with two-factor sign-in is told Byggmöte cannot do that yet (Stommen's phone app cannot either).
+- A Projekt that is gone from Stommen, or that the person no longer sees there, stays here with its meetings.
+
+`tests/stommen.spec.ts` runs all of this against a stand-in for Stommen on the computer. The tests give the app a
+folder of its own to keep things in (`BYGGMOTE_USER_DATA`) and no keychain (`BYGGMOTE_NO_KEYCHAIN=1`), so a run puts
+nothing in the keychain of whoever runs it. The keychain path is checked by hand on the Mac only.
 
 An engine the app started does not outlive it: quitting stops them all, also one that is writing a protocol. That
 is checked by hand on the Mac only.
@@ -108,8 +129,7 @@ The engine takes one Projekt as Stommen has it, and Stommen wins:
 A Roll is its own thing, as in Stommen: it can be vacant and still be given a point, and one person can hold
 several. A Kontakt becomes a person Byggmöte already knows when it can (the link from last time, else the e-mail,
 else the name), since a person is one person across projects here. Someone who is no longer a Kontakt leaves the
-project; the person and their meetings stay. The engine does not talk to Stommen: the app is to sign in and fetch.
-That part is not built, so today the command is fed by hand.
+project; the person and their meetings stay. The engine does not talk to Stommen: the app signs in and fetches.
 
 ### The language model
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Project } from '../../shared/types'
+  import type { Project, StommenState } from '../../shared/types'
   import Icon from './lib/Icon.svelte'
   import { failure } from './lib/format'
   import type { View } from './lib/view'
@@ -7,6 +7,7 @@
   import Meetings from './views/Meetings.svelte'
   import Protocol from './views/Protocol.svelte'
   import Recording from './views/Recording.svelte'
+  import Stommen from './views/Stommen.svelte'
   import Working from './views/Working.svelte'
 
   const TITLES: Record<View['name'], string> = {
@@ -14,7 +15,8 @@
     agenda: 'Dagordning',
     recording: 'Inspelning',
     working: 'Mötet bearbetas',
-    protocol: 'Protokoll'
+    protocol: 'Protokoll',
+    stommen: 'Stommen'
   }
 
   let projects = $state<Project[]>([])
@@ -22,6 +24,7 @@
   let problem = $state('')
   let chosen = $state(localStorage.getItem('project') ?? '')
   let view = $state<View>({ name: 'meetings' })
+  let stommen = $state<StommenState | null>(null)
 
   const project = $derived(projects.find((p) => p.id === chosen) ?? projects[0])
   // A recording or a job in progress is not left by a click in the menu.
@@ -38,6 +41,21 @@
     }
   }
   void load()
+
+  /** Where the app stands with Stommen, and when it is signed in, what Stommen has now: Stommen wins. */
+  async function connect(): Promise<void> {
+    try {
+      stommen = await window.api.stommenState()
+      if (!stommen.connected) return
+      await window.api.stommenSync()
+      await load()
+    } catch {
+      // Stommen out of reach stops nothing here: the projects are on this computer, and the Stommen view says what is wrong.
+    } finally {
+      stommen = await window.api.stommenState().catch(() => stommen)
+    }
+  }
+  void connect()
 
   function choose(id: string): void {
     chosen = id
@@ -61,21 +79,34 @@
           <option value={p.id}>{p.name}</option>
         {/each}
       </select>
-
-      <nav aria-label="Huvudmeny">
-        <button class="item current" aria-current="page" disabled={held} onclick={() => go({ name: 'meetings' })}>
-          <Icon name="list" /> Möten
-        </button>
-      </nav>
     {/if}
 
-    <p class="foot small muted">Stommen är inte kopplat än. Projekt och Roller ligger på den här datorn.</p>
+    <nav aria-label="Huvudmeny">
+      {#if projects.length}
+        <button class="item" class:current={view.name !== 'stommen'} aria-current={view.name !== 'stommen' ? 'page' : undefined} disabled={held}
+          onclick={() => go({ name: 'meetings' })}>
+          <Icon name="list" /> Möten
+        </button>
+      {/if}
+      <button class="item" class:current={view.name === 'stommen'} aria-current={view.name === 'stommen' ? 'page' : undefined} disabled={held}
+        onclick={() => go({ name: 'stommen' })}>
+        <Icon name="link" /> Stommen
+      </button>
+    </nav>
+
+    <p class="foot small muted">
+      {#if stommen?.connected}
+        Kopplad till Stommen som {stommen.user}.
+      {:else}
+        Stommen är inte kopplat än. Projekt och Roller ligger på den här datorn.
+      {/if}
+    </p>
   </aside>
 
   <div class="content">
     <header>
       <p class="crumbs">
-        {#if project}<span class="muted">{project.name}</span><span class="muted" aria-hidden="true">/</span>{/if}
+        {#if project && view.name !== 'stommen'}<span class="muted">{project.name}</span><span class="muted" aria-hidden="true">/</span>{/if}
         <span>{TITLES[view.name]}</span>
       </p>
       <p class="promise small"><Icon name="lock" size={16} /> Ljud och text stannar på den här datorn</p>
@@ -95,15 +126,18 @@
             </div>
           </div>
         </div>
+      {:else if view.name === 'stommen'}
+        {#if stommen}
+          <Stommen {stommen} changed={(s) => (stommen = s)} refresh={load} />
+        {:else}
+          <div class="page"><p class="muted">Läser in kopplingen till Stommen.</p></div>
+        {/if}
       {:else if !project}
         <div class="page">
           <div class="card">
             <h2>Inga projekt än</h2>
-            <p class="muted">
-              Projekt och Roller ska hämtas från Stommen, och den kopplingen är inte byggd. Tills dess läggs ett projekt upp från
-              kommandoraden, med <span class="mono">byggmote areas add</span>.
-            </p>
-            <button class="btn" style="margin-top: 16px" onclick={load}>Läs in igen</button>
+            <p class="muted">Projekt och Roller hämtas från Stommen. Logga in där, så kommer dina Projekt hit.</p>
+            <button class="btn primary" style="margin-top: 16px" onclick={() => go({ name: 'stommen' })}>Koppla till Stommen</button>
           </div>
         </div>
       {:else}
@@ -116,7 +150,7 @@
             <Recording {project} series={view.series} {go} />
           {:else if view.name === 'working'}
             <Working job={view.job} {go} />
-          {:else}
+          {:else if view.name === 'protocol'}
             {#key view.dir}
               <Protocol {project} dir={view.dir} problem={view.problem ?? ''} {go} />
             {/key}

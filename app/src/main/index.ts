@@ -4,6 +4,10 @@ import { join, resolve } from 'node:path'
 import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron'
 import type { Agenda, Api, Done, Job, MeetingDetail, MeetingRow, NewPoint, PointFields, Progress, Project, SeriesRef } from '../shared/types'
 import { call, run, stopAll } from './engine'
+import * as stommen from './stommen'
+
+// The tests give the app a folder of its own for what it keeps, so a run never reads or writes the person's.
+if (process.env['BYGGMOTE_USER_DATA']) app.setPath('userData', process.env['BYGGMOTE_USER_DATA'])
 
 // What the window may name. It only ever gets a folder or a file from here, so one it makes up is refused: the
 // window shows text a language model wrote, and that text must not become a path.
@@ -108,6 +112,11 @@ function handlers(tell: (p: Progress) => void): { [K in Exclude<keyof Api, 'onPr
     restorePoint: (dir, no) => correct(['restore', known(dir), point(no)]),
     confirmCheck: (dir, no, n, undo) => correct(['check', known(dir), point(no), String(Math.trunc(n)), ...(undo ? ['--undo'] : [])]),
     attend: (dir, personId, gone) => correct(['attend', known(dir), person(personId), ...(gone ? ['--remove'] : [])]),
+
+    stommenState: () => stommen.state(),
+    stommenSignIn: (server, email, password) => stommen.signIn(String(server), String(email), String(password)),
+    stommenSync: () => stommen.sync(),
+    stommenSignOut: () => stommen.signOut(),
 
     // A recording goes to disk a second at a time, so a crash an hour in loses a second, not the hour.
     async recordingStart() {

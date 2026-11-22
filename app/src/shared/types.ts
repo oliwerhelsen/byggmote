@@ -98,6 +98,11 @@ export type Done = { dir: string; protocolError: string | null }
 /** Where a job is: the engine's own step names while it transcribes, then `protocol`. */
 export type Progress = { step: string; state: 'start' | 'progress' | 'done'; fraction?: number }
 
+/** Where the app stands with Stommen. `kept`: the computer can keep the session safely, so it lasts over a restart. */
+export type StommenState = { server: string; connected: boolean; user: string; organization: string; syncedAt: string | null; kept: boolean }
+/** What a fetch from Stommen brought: the Projekt, the Kontakter in them, and the Roller nobody holds. */
+export type StommenSync = { projects: number; people: number; vacant: number }
+
 export interface Api {
   projects(): Promise<{ folder: string; projects: Project[] }>
   meetings(projectId: string): Promise<MeetingRow[]>
@@ -118,6 +123,12 @@ export interface Api {
   confirmCheck(dir: string, no: string, n: number, undo: boolean): Promise<void>
   /** A person of the project was at the meeting and said nothing; `gone`: was not there after all. */
   attend(dir: string, personId: string, gone: boolean): Promise<void>
+  stommenState(): Promise<StommenState>
+  /** The password goes to the main process and from there to Stommen. It is not kept. */
+  stommenSignIn(server: string, email: string, password: string): Promise<StommenState>
+  /** The person's Projekt with Roller and Kontakter, from Stommen into the engine. */
+  stommenSync(): Promise<StommenSync>
+  stommenSignOut(): Promise<StommenState>
   recordingStart(): Promise<string>
   recordingChunk(id: string, bytes: Uint8Array): Promise<void>
   recordingStop(id: string): Promise<string>
@@ -126,4 +137,4 @@ export interface Api {
 }
 
 export const CHANNELS = ['projects', 'meetings', 'agenda', 'meeting', 'audio', 'startSeries', 'pickRecording', 'process',
-  'writeProtocol', 'nameSpeaker', 'changePoint', 'addPoint', 'removePoint', 'restorePoint', 'confirmCheck', 'attend', 'recordingStart', 'recordingChunk', 'recordingStop', 'recordingDiscard'] as const
+  'writeProtocol', 'nameSpeaker', 'changePoint', 'addPoint', 'removePoint', 'restorePoint', 'confirmCheck', 'attend', 'stommenState', 'stommenSignIn', 'stommenSync', 'stommenSignOut', 'recordingStart', 'recordingChunk', 'recordingStop', 'recordingDiscard'] as const

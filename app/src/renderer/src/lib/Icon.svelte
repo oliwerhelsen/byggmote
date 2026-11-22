@@ -20,7 +20,8 @@
     refresh: 'M20 12a8 8 0 1 1-2.4-5.7M20 4v5h-5',
     edit: 'M4 20h4L19 9l-4-4L4 16zM13 7l4 4',
     trash: 'M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13',
-    undo: 'M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3'
+    undo: 'M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3',
+    link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1'
   } as const
 
   let { name, size = 18 }: { name: keyof typeof PATHS; size?: number } = $props()
