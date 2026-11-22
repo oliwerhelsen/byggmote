@@ -4,7 +4,7 @@ The model proposes, this module decides what is shown. A point is kept only when
 then it points at the line where that is said: no source, nothing shown. The numbers (<meeting>.<heading>.<n>) are
 set here, never by the model, and a point an earlier meeting left open follows along under its own number until a
 meeting closes it. An amount always carries a check with the words the recording has, for a person to confirm.
-`protocol.json` is the record, `protocol.md` the same for reading."""
+`protocol.json` is the record, `protocol.md` the same for reading. What a person then changes is in correct.py."""
 import difflib
 import json
 import re
@@ -66,6 +66,24 @@ def load(d: Path) -> dict | None:
     """The meeting's protocol, None when it has none."""
     p = Path(d) / FILE
     return read_json(p, "no", "points") if p.exists() else None
+
+
+def unchecked(x: dict) -> list[dict]:
+    """The point's checks no person has confirmed."""
+    return [c for c in x.get("checks", []) if not c.get("confirmed")]
+
+
+def corrections(p: dict) -> int:
+    """How much of the protocol a person has set right (correct.py): the points changed, added, removed or with a check
+    confirmed, and who was added as there. All of it is lost when a model writes the protocol again."""
+    pts = p.get("points", [])
+    return (sum("edited" in x or "added" in x or len(unchecked(x)) < len(x.get("checks", [])) for x in pts)
+            + len(p.get("removed", [])) + sum("added" in a for a in p.get("attendees", [])))
+
+
+def later(area: dict, s: dict, n: int) -> int | None:
+    """The first meeting after number `n` that has a protocol: it builds on the ones before it, so they stay as they are."""
+    return next((k for k, x in series.meetings(area, s) if k > n and (x / FILE).exists()), None)
 
 
 def open_points(area: dict, s: dict, before: int) -> list[dict]:
@@ -241,7 +259,7 @@ def _point(x: dict, name: str) -> list[str]:
                f"  - På mötet: {_sentence(x['follow'])}{at}" if x["follow"] else f"  - På mötet sägs: ”{x['said']}”{at}"]
     else:
         out = [f"- **{x['no']}** {KINDS[x['kind']]}. {_sentence(x['text'])}{who}{at}"]
-    for c in x.get("checks", []):
+    for c in unchecked(x):
         if c["code"] == "amount":
             out.append(f"  - Kontrollera beloppet {c['value']}. I inspelningen sägs: ”{c['said']}”")
         elif c["code"] == "role":
@@ -350,16 +368,19 @@ def read(text: str) -> dict:
     return obj
 
 
-def answer(d: Path, sid: str, text: str, no: int | None = None, model: str | None = None) -> dict:
+def answer(d: Path, sid: str, text: str, no: int | None = None, model: str | None = None, discard: bool = False) -> dict:
     """The model's answer becomes the meeting's protocol, and the meeting takes its number in the series. A protocol
-    a later meeting builds on is not written again: its points' numbers are on that meeting's agenda."""
+    a later meeting builds on is not written again: its points' numbers are on that meeting's agenda. Nor is one a
+    person has corrected, unless `discard` says the corrections may go."""
     d, found = Path(d).expanduser(), read(text)
     with knowledge.locked(knowledge.folder()):
         m, area, s, n, prior, ps = prepare(d, sid, no)
         if n < 1:
             raise ArgError(f"bad meeting number: {n}")
-        if later := [k for k, x in series.meetings(area, s) if k > n and (x / FILE).exists()]:
-            raise ArgError(f"{s['name']} {later[0]} builds on this protocol")
+        if (k := later(area, s, n)) is not None:
+            raise ArgError(f"{s['name']} {k} builds on this protocol")
+        if not discard and (had := corrections(load(d) or {})):
+            raise ArgError(f"the protocol has {had} corrections by a person: --discard writes over them")
         n = series.file(area, sid, d, n)
         p = build(m, area, s, n, found, prior, ps, model)
         atomic_write(d / FILE, json.dumps(p, ensure_ascii=False, indent=1) + "\n")

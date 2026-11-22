@@ -57,7 +57,7 @@ def protocol(a) -> int:
         _print(pr.request(d, a.series, a.no))
         return 0
     if a.answer:
-        _print(pr.answer(d, a.series, sys.stdin.read(), a.no, a.model))
+        _print(pr.answer(d, a.series, sys.stdin.read(), a.no, a.model, a.discard))
         return 0
     from .models import REGISTRY, adapter, downloaded
     from .run import Stopped, on_stop
@@ -67,6 +67,8 @@ def protocol(a) -> int:
     if not downloaded(e):
         raise ValueError(f"model not downloaded: {e['id']}")
     req = pr.request(d, a.series, a.no)
+    if not a.discard and (had := pr.corrections(pr.load(d) or {})):  # before the model has worked a minute for nothing
+        raise ArgError(f"the protocol has {had} corrections by a person: --discard writes over them")
     try:
         with on_stop(), contextlib.redirect_stdout(sys.stderr):  # model libraries print
             m = adapter(e)
@@ -74,8 +76,27 @@ def protocol(a) -> int:
             text = m.summarize(req["prompt"], req["schema"])
     except Stopped:
         return 1
-    _print(pr.answer(d, a.series, text, a.no, e["id"]))
+    _print(pr.answer(d, a.series, text, a.no, e["id"], a.discard))
     return 0
+
+
+def correct(a) -> dict | list | None:
+    """`byggmote correct`: what a person sets right in a protocol."""
+    from . import correct as co
+    d = Path(a.dir).expanduser()
+    if a.op == "change":
+        return co.change(d, a.no, _stdin())
+    if a.op == "add":
+        return co.add(d, _stdin())
+    if a.op == "remove":
+        return co.remove(d, a.no)
+    if a.op == "restore":
+        return co.restore(d, a.no)
+    if a.op == "check":
+        return co.check(d, a.no, a.n, a.undo)
+    if a.op == "attend":
+        return co.attend(d, a.person, a.remove)
+    return co.attendees(d)
 
 
 class Parser(argparse.ArgumentParser):
@@ -229,6 +250,31 @@ def main(argv=None) -> int:
     s.add_argument("--model", metavar="ID")
     s.add_argument("--prompt", action="store_true", help="only the prompt and the answer's JSON schema, for another model to answer")
     s.add_argument("--answer", action="store_true", help="another model's answer on stdin becomes the protocol")
+    s.add_argument("--discard", action="store_true", help="write over a protocol a person has corrected")
+    s = sub.add_parser("correct", help="what a person sets right in a meeting's protocol; fields as JSON on stdin (JSON)")
+    pp = s.add_subparsers(dest="op", required=True)
+    x = pp.add_parser("change", help="set text, kind, heading, role, due, open of point NO; follow, role, due, open of an earlier meeting's")
+    x.add_argument("dir")
+    x.add_argument("no")
+    x = pp.add_parser("add", help="a point from {\"heading\", \"kind\", \"text\", \"open\", \"role\", \"due\", \"line\"}")
+    x.add_argument("dir")
+    x = pp.add_parser("remove", help="point NO out of the protocol; it is kept, to put back")
+    x.add_argument("dir")
+    x.add_argument("no")
+    x = pp.add_parser("restore", help="a removed point back")
+    x.add_argument("dir")
+    x.add_argument("no")
+    x = pp.add_parser("check", help="check N (from 1) of point NO is read against the recording and right")
+    x.add_argument("dir")
+    x.add_argument("no")
+    x.add_argument("n", type=int)
+    x.add_argument("--undo", action="store_true")
+    x = pp.add_parser("attend", help="a person of the project was there and said nothing")
+    x.add_argument("dir")
+    x.add_argument("person", metavar="@ID")
+    x.add_argument("--remove", action="store_true", help="not there after all")
+    x = pp.add_parser("attendees", help="who was there, again from the meeting's speakers")
+    x.add_argument("dir")
     sub.add_parser("version", help="engine and protocol version (JSON)")
     s = sub.add_parser("models", help="list models, download them ahead of first use (JSON lines), or discard a stopped download")
     s.add_argument("--json", action="store_true")
@@ -356,11 +402,17 @@ def main(argv=None) -> int:
             if a.remove:
                 if a.new is not None or a.email:
                     raise ArgError("--remove takes no NEW or --email")
-                _print(naming.remove(d, a.speaker))
+                done = naming.remove(d, a.speaker)
             else:
                 if a.new is None:
                     raise ArgError("expected NEW or --remove")
-                _print(naming.name(d, a.speaker, a.new, a.email))
+                done = naming.name(d, a.speaker, a.new, a.email)
+            try:  # a draft protocol says who was there: now with the name. The naming is done whatever comes of this.
+                from . import correct as co
+                co.attendees(d)
+            except (OSError, ValueError):
+                pass
+            _print(done)
         elif a.cmd == "areas":
             if a.op == "delete":
                 _print(areas.delete(a.id))
@@ -405,6 +457,8 @@ def main(argv=None) -> int:
             _print(series.agenda(a.area, a.series))
         elif a.cmd == "protocol":
             return protocol(a)
+        elif a.cmd == "correct":
+            _print(correct(a))
         elif a.cmd == "move":
             d = Path(a.dir).expanduser()
             with _locked():

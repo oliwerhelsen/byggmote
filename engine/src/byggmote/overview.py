@@ -28,7 +28,7 @@ def _row(d: Path, m: dict, filed: tuple | None) -> dict:
         p = protocol.load(d)
         pts = (p or {}).get("points", [])
         about = p and {"status": p.get("status"), "points": sum("since" not in x for x in pts), "carried": sum("since" in x for x in pts),
-                       "open": sum(bool(x.get("open")) for x in pts), "checks": sum(len(x.get("checks", [])) for x in pts)}
+                       "open": sum(bool(x.get("open")) for x in pts), "checks": sum(len(protocol.unchecked(x)) for x in pts)}
     except ValueError:  # a protocol nobody can read is shown as that, not as no protocol
         about = {"status": "unreadable"}
     return {"dir": str(d), "title": m.get("title", ""), "recorded_at": m.get("recorded_at"), "duration": m.get("duration", 0),
@@ -46,10 +46,13 @@ def meetings(area_id: str) -> list[dict]:
 
 
 def detail(d: Path) -> dict:
-    """One meeting: its row, the transcript's lines with who says them, and the whole protocol."""
+    """One meeting: its row, the transcript's lines with who says them, and the whole protocol. With a protocol:
+    `corrections`, how much of it a person has set right, and `later`, the meeting that builds on it, if one does
+    (then it is neither corrected nor written again)."""
     d = Path(d).expanduser()
     m = meeting.load(d)
     area = areas.get(areas.load(), m["area"])
+    p = protocol.load(d)
     names = {s["id"]: s for s in m["speakers"]}
     said = list(dict.fromkeys(g["speaker"] for g in m["segments"]))
     return _row(d, m, _filed(area).get(d.resolve())) | {
@@ -57,4 +60,5 @@ def detail(d: Path) -> dict:
         "speakers": [{"id": i, "name": names[i]["name"], "person": names[i].get("person")} for i in said if names[i]["name"] != meeting.IGNORED],
         "lines": [{"id": g["id"], "at": g["start"], "speaker": g["speaker"], "who": names[g["speaker"]]["name"], "text": g["text"]}
                   for g in m["segments"] if names[g["speaker"]]["name"] != meeting.IGNORED],
-        "protocol": protocol.load(d)}
+        "protocol": p, "corrections": protocol.corrections(p or {}),
+        "later": protocol.later(area, series.get(series.load(area), p["series"]), p["no"]) if p else None}
