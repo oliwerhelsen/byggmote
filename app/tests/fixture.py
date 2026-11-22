@@ -1,5 +1,5 @@
-"""A small project for the app's tests, in the knowledge base BYGGMOTE_CONFIG names: three people with roles, a byggmöte
-series and two held meetings with protocols. The engine itself writes it, from answers a model could have given, so the
+"""A small project for the app's tests, in the knowledge base BYGGMOTE_CONFIG names: four people with roles (one of
+them never speaks), a byggmöte series and two held meetings with protocols. The engine itself writes it, from answers a model could have given, so the
 app is tested against the real files and no model runs."""
 import json
 
@@ -15,7 +15,8 @@ SAID = [
 
 areas.load()
 project = areas.add({"name": "Kv. Eken kontorshus"})
-for name, role in (("Maria Lindqvist", "Projektledare"), ("Anders Holm", "Beställarens ombud"), ("Jonas Bergström", "Platschef")):
+for name, role in (("Maria Lindqvist", "Projektledare"), ("Anders Holm", "Beställarens ombud"), ("Jonas Bergström", "Platschef"),
+                   ("Sara Nyberg", "BAS-U")):
     people.add({"name": name, "areas": [{"area": project["id"], "role": role}]})
 sid = series.start(project["id"], {"name": "Byggmöte"})["id"]
 ids = {p["name"]: p["id"] for p in people.load()}

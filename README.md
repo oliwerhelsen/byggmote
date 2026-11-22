@@ -7,8 +7,9 @@ goes on to Stommen as proposals.
 **Status:** the engine runs as a CLI, from a recording to a numbered protocol, with either of two local language
 models. Its tests and llama.cpp's server run on Windows and Linux on GitHub; a whole meeting has only been transcribed
 on the Mac. The app is a first version: it shows a project's meetings, the agenda and a protocol with its transcript
-and sound, records a meeting or takes a recording, and names the speakers. It cannot yet change a protocol, and it is
-not packaged for installing. Still to build: the connection to Stommen and the phone recorder.
+and sound, records a meeting or takes a recording, names the speakers, and lets a person correct the protocol. It is
+not packaged for installing, and it does not know who is correcting: there is no login before Stommen is connected.
+Still to build: the connection to Stommen and the phone recorder.
 
 Where the engine comes from and what the models' licences ask: `NOTICE.md`.
 
@@ -29,8 +30,13 @@ projects are to come from Stommen: add one with the engine (below).
     npm test          builds the app and drives it against a knowledge base the engine writes (no model runs)
 
 The tests run the window hidden (`BYGGMOTE_HIDDEN=1`), so a run does not take the screen and a click from whoever
-sits at the computer cannot land in it. Recording from a microphone to a written protocol is not in them: it needs the
+sits at the computer cannot land in it. They also show the engine folders with no models in them: a test that asks
+for a protocol to be written, by mistake or because an earlier test failed and the app started over, gets an error
+and not minutes of a language model. Recording from a microphone to a written protocol is not in them: it needs the
 models and several minutes, and has been run by hand with a sound clip played into the app as its microphone.
+
+An engine the app started does not outlive it: quitting stops them all, also one that is writing a protocol. That
+is checked by hand on the Mac only.
 
 The views follow the sketch at https://claude.ai/artifact/W2NsCiByVoWE7AUV4rGUMZ and use Stommen's design tokens.
 
@@ -68,6 +74,27 @@ touching `~/Documents/Byggmöte`.
   number until a meeting closes it, so a heading keeps its number for good: rename it or add one last, never move one.
 - **Amounts.** Every amount in a point carries a check with the words the recording has, for a person to confirm.
 - **Roles.** Responsibility goes to a Roll the project has. A role it lacks becomes a check, never a guess.
+
+### What a person corrects
+
+The model proposes, a person decides. `byggmote correct` is how:
+
+    echo '{"text": "ÄTA 14 beställs till fast pris 86 500 kr.", "open": false}' | byggmote correct change "<meeting folder>" 5.4.1
+    echo '{"heading": 4, "kind": "todo", "text": "Pris på ÄTA 15 lämnas.", "open": true, "role": "Platschef", "line": 12}' | byggmote correct add "<meeting folder>"
+    byggmote correct remove "<meeting folder>" 5.4.2        and `restore` puts it back
+    byggmote correct check "<meeting folder>" 5.4.1 1       the amount is read against the recording and right
+    byggmote correct attend "<meeting folder>" @sara-nyberg was there and said nothing
+
+- A point a person changes keeps what the model wrote (`proposed`), one a person writes is marked `added`, and one
+  taken out is kept in the protocol's `removed`. What is a person's can always be told from what is a model's.
+- A point's number is its name. A removed point leaves its number unused, and a point that is added, or moved to
+  another heading, takes the next number there.
+- An earlier meeting's open point is followed up or closed, not rewritten or removed: its text is that meeting's.
+- A decision or a note is never left open, and only what stays open has a Roll and a day.
+- An amount check stays while its amount is in the text. An amount a person writes is the person's.
+- A protocol a later meeting builds on is not corrected, and a corrected protocol is not written again by a model
+  without `protocol --discard`.
+- Naming a speaker sets who was there in a draft protocol, so nothing has to be written again for that.
 
 ### The language model
 

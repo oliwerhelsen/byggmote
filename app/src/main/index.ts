@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { appendFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron'
-import type { Agenda, Api, Done, Job, MeetingDetail, MeetingRow, Progress, Project, SeriesRef } from '../shared/types'
-import { call, run } from './engine'
+import type { Agenda, Api, Done, Job, MeetingDetail, MeetingRow, NewPoint, PointFields, Progress, Project, SeriesRef } from '../shared/types'
+import { call, run, stopAll } from './engine'
 
 // What the window may name. It only ever gets a folder or a file from here, so one it makes up is refused: the
 // window shows text a language model wrote, and that text must not become a path.
@@ -18,6 +18,21 @@ const known = (dir: string): string => {
 }
 
 const scratch = (): string => join(app.getPath('temp'), 'byggmote-recordings')
+
+// A point's number and a person's id go to the engine as arguments. Neither may be read as an option.
+const point = (no: string): string => {
+  if (!/^\d+\.\d+\.\d+$/.test(no)) throw new Error('unknown point')
+  return no
+}
+const person = (id: string): string => {
+  if (!/^[^\s@-][^\s@]*$/.test(id)) throw new Error('unknown person')
+  return `@${id}`
+}
+
+/** One correction of a protocol: `byggmote correct`, the fields on its stdin. */
+const correct = async (args: string[], fields?: PointFields | NewPoint): Promise<void> => {
+  await call(['correct', ...args], fields)
+}
 
 function handlers(tell: (p: Progress) => void): { [K in Exclude<keyof Api, 'onProgress'>]: (...args: Parameters<Api[K]>) => ReturnType<Api[K]> } {
   return {
@@ -78,13 +93,21 @@ function handlers(tell: (p: Progress) => void): { [K in Exclude<keyof Api, 'onPr
       }
     },
 
-    async writeProtocol(dir, seriesId) {
-      await call(['protocol', known(dir), '--series', seriesId])
+    async writeProtocol(dir, seriesId, discard) {
+      await call(['protocol', known(dir), '--series', seriesId, ...(discard ? ['--discard'] : [])])
     },
 
     async nameSpeaker(dir, speaker, personId) {
-      await call(['name', known(dir), speaker, `@${personId}`])
+      if (!/^\w+$/.test(speaker)) throw new Error('unknown speaker')
+      await call(['name', known(dir), speaker, person(personId)])
     },
+
+    changePoint: (dir, no, fields) => correct(['change', known(dir), point(no)], fields),
+    addPoint: (dir, fields) => correct(['add', known(dir)], fields),
+    removePoint: (dir, no) => correct(['remove', known(dir), point(no)]),
+    restorePoint: (dir, no) => correct(['restore', known(dir), point(no)]),
+    confirmCheck: (dir, no, n, undo) => correct(['check', known(dir), point(no), String(Math.trunc(n)), ...(undo ? ['--undo'] : [])]),
+    attend: (dir, personId, gone) => correct(['attend', known(dir), person(personId), ...(gone ? ['--remove'] : [])]),
 
     // A recording goes to disk a second at a time, so a crash an hour in loses a second, not the hour.
     async recordingStart() {
@@ -159,6 +182,8 @@ void app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) open()
   })
 })
+
+app.on('will-quit', stopAll)
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()

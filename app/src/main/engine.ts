@@ -1,6 +1,6 @@
 // The engine is a command line program (engine/). The app starts it for each thing it wants and reads JSON back:
 // one object from most commands, a line per event from `run`.
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { join } from 'node:path'
 import { app } from 'electron'
 
@@ -13,8 +13,21 @@ export function enginePath(): string {
   return join(app.getAppPath(), '..', 'engine', '.venv', ...bin)
 }
 
+// The engines at work. One that writes a protocol runs a language model for minutes: it does not outlive the app.
+const running = new Set<ChildProcess>()
+
+export function stopAll(): void {
+  for (const child of running) {
+    // On Windows the command is a launcher with Python under it, and stopping the launcher leaves Python running.
+    if (process.platform === 'win32' && child.pid) spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true }).on('error', () => {})
+    else child.kill()
+  }
+}
+
 function start(args: string[], input?: unknown) {
   const child = spawn(enginePath(), args, { env: process.env, windowsHide: true })
+  running.add(child)
+  child.on('close', () => running.delete(child)).on('error', () => running.delete(child))
   let err = ''
   child.stderr.setEncoding('utf8').on('data', (d: string) => (err = (err + d).slice(-4000)))
   child.stdin.on('error', () => {}) // the engine may be gone before it has read: `close` says why
