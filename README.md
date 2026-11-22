@@ -8,9 +8,9 @@ goes on to Stommen as proposals.
 models. Its tests and llama.cpp's server run on Windows and Linux on GitHub; a whole meeting has only been transcribed
 on the Mac. The app is a first version: it shows a project's meetings, the agenda and a protocol with its transcript
 and sound, records a meeting or takes a recording, names the speakers, and lets a person correct the protocol. It
-signs in to Stommen as a person and fetches the person's Projekt with their Roller and Kontakter, and it can send a
-protocol there, though Stommen has no endpoint that takes one yet (Stommen's issue 253). A correction is not tied to
-who is signed in, and the app is not packaged for installing. Still to build: justering, and the phone recorder.
+signs in to Stommen as a person, fetches the person's Projekt with their Roller and Kontakter, and sends a protocol
+there when the person asks. A correction is not tied to who is signed in, and the app is not packaged for installing.
+Still to build: justering, and the phone recorder.
 
 Where the engine comes from and what the models' licences ask: `NOTICE.md`.
 
@@ -61,8 +61,10 @@ to the engine (`byggmote stommen project`): at sign-in, on "Hämta från Stommen
 `tests/stommen.spec.ts` runs all of this against a stand-in for Stommen on the computer. The tests give the app a
 folder of its own to keep things in (`BYGGMOTE_USER_DATA`) and no keychain (`BYGGMOTE_NO_KEYCHAIN=1`), so a run puts
 nothing in the keychain of whoever runs it. The keychain path is checked by hand on the Mac only. Against a real
-Stommen (a local one, from the branch that added the roles endpoint) the sign-in, the fetch and the sign-out are
-checked by hand once: that is where the `fetch` problem above showed, which the stand-in had not caught.
+Stommen (a local one, with a database made for the trial) the sign-in, the fetch and the sign-out are checked by hand
+once: that is where the `fetch` problem above showed, which the stand-in had not caught. So is sending: a protocol
+went from the app into Stommen with its points, the seconds into the recording and the Roller, and again as a second
+version after a correction.
 
 An engine the app started does not outlive it: quitting stops them all, also one that is writing a protocol. That
 is checked by hand on the Mac only.
@@ -139,8 +141,8 @@ several. A Kontakt becomes a person Byggmöte already knows when it can (the lin
 else the name), since a person is one person across projects here. Someone who is no longer a Kontakt leaves the
 project; the person and their meetings stay. The engine does not talk to Stommen: the app signs in and fetches.
 
-The other way, `byggmote stommen minutes "<meeting folder>"` gives a meeting's protocol as Stommen is to take it
-(Stommen's issue 253): each point with the Roll's id there, how many seconds into the recording it was said, the
+The other way, `byggmote stommen minutes "<meeting folder>"` gives a meeting's protocol as Stommen takes it
+(`POST /api/mobile/v1/projects/{id}/minutes` there): each point with the Roll's id there, how many seconds into the recording it was said, the
 line said there and who said it, and whether it stands as the model wrote it, was changed by a person or written by
 one. It is refused while a check is left, and for a Roll that Stommen no longer has. The app sends it and tells the
 engine what Stommen answered (`byggmote stommen sent`), so a meeting's detail can say when its protocol was sent and
