@@ -29,6 +29,7 @@ type Seen = { method: string; path: string; headers: IncomingHttpHeaders; body: 
 const seen: Seen[] = []
 let ended = false // Stommen has ended the session
 let slow = 0 // how long Stommen takes over a Projekt's roles, in milliseconds
+let tooOld = false // Stommen wants a newer Byggmöte
 
 let stommen: Server
 let address: string
@@ -45,6 +46,9 @@ function answer(method: string, path: string, headers: IncomingHttpHeaders, body
     return [200, { redirect: false, user: { id: 'u1', email: EMAIL } }, { 'set-auth-token': TOKEN }]
   }
   if (headers.authorization !== `Bearer ${TOKEN}` || ended) return [401, { error: { code: 'unauthorized', message: 'Inte inloggad' } }]
+  if (tooOld && path.startsWith('/api/mobile/v1/')) {
+    return [426, { error: { code: 'update_required', message: 'Uppdatera Byggmöte', detail: 'Den här versionen av Byggmöte är för gammal. Hämta den senaste versionen av Byggmöte.' } }]
+  }
   if (method === 'POST' && path === '/api/auth/sign-out') {
     ended = true
     return [200, { success: true }]
@@ -208,4 +212,24 @@ test('signing out while a fetch is still running leaves nothing of the session b
   }
   expect(JSON.parse(readFileSync(join(kept, 'stommen.json'), 'utf8'))).toEqual({ server: address })
   expect(await win.evaluate(() => window.api.stommenState())).toMatchObject({ connected: false, user: '', syncedAt: null })
+})
+
+test('a Byggmöte that Stommen finds too old is told so, and leaves no session behind there', async () => {
+  // the test before signed out behind the view's back: the window starts again, as when the app does
+  await win.reload()
+  await win.getByRole('button', { name: 'Stommen' }).click()
+  await expect(win.getByRole('heading', { name: 'Logga in i Stommen' })).toBeVisible()
+  tooOld = true
+  const before = seen.length
+  try {
+    await signIn(PASSWORD)
+    await expect(win.getByRole('alert')).toHaveText(
+      'Stommen svarar: Uppdatera Byggmöte. Den här versionen av Byggmöte är för gammal. Hämta den senaste versionen av Byggmöte.')
+  } finally {
+    tooOld = false
+  }
+  await expect(win.getByRole('heading', { name: 'Logga in i Stommen' })).toBeVisible()
+  expect(seen.slice(before).map((r) => r.path)).toEqual(['/api/auth/sign-in/email', '/api/mobile/v1/me', '/api/auth/sign-out'])
+  expect(ended).toBe(true)
+  expect(await win.evaluate(() => window.api.stommenState())).toMatchObject({ connected: false })
 })

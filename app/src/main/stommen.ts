@@ -125,7 +125,15 @@ export async function signIn(server: string, email: string, password: string): P
     const body = (await res.json().catch(() => null)) as { twoFactorRedirect?: boolean } | null
     throw new StommenError(body?.twoFactorRedirect ? 'Kontot har tvåstegsinloggning, och den klarar Byggmöte inte än.' : 'Inloggningen gav ingen session. Försök igen.')
   }
-  const me = await get<Me>(base, bearer, '/me')
+  let me: Me
+  try {
+    me = await get<Me>(base, bearer, '/me')
+  } catch (e) {
+    // Signed in, and then refused (a Byggmöte too old for Stommen, an organization that is closed): the session that
+    // was just made is ended again, so none is left in Stommen that nobody holds.
+    await send(base, '/api/auth/sign-out', { method: 'POST', body: '{}', token: bearer }).catch(() => {})
+    throw e
+  }
   const saved: Saved = { server: base, user: me.user.name || me.user.email || '', organization: me.organization.name }
   unkept = null
   if (keeps()) saved.token = safeStorage.encryptString(bearer).toString('base64')
