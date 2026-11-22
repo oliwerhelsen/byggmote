@@ -5,6 +5,8 @@
 //
 // Only the sign-in goes to Stommen. Nothing of a meeting does.
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { request as overHttp } from 'node:http'
+import { request as overHttps } from 'node:https'
 import { dirname, join } from 'node:path'
 import { app, safeStorage } from 'electron'
 import type { StommenState, StommenSync } from '../shared/types'
@@ -22,6 +24,46 @@ type Roles = {
 export class StommenError extends Error {}
 
 const WAIT = 20_000
+const LARGEST = 8 * 1024 * 1024 // an answer larger than this is not Stommen's
+
+/** What came back: enough of a `Response` for what is read here. */
+type Answer = { status: number; ok: boolean; header(name: string): string | null; json(): Promise<unknown> }
+
+/**
+ * One request, with the headers given and no others. Not `fetch`: Node's adds `sec-fetch-mode`, which makes Stommen
+ * take the sign-in for a browser's and refuse it for having no Origin. Nor is a redirect followed here.
+ */
+function ask(url: URL, method: string, headers: Record<string, string>, body?: string): Promise<Answer> {
+  return new Promise((resolve, reject) => {
+    const req = (url.protocol === 'https:' ? overHttps : overHttp)(url, { method, headers, timeout: WAIT }, (res) => {
+      const parts: Buffer[] = []
+      let size = 0
+      res.on('data', (part: Buffer) => {
+        size += part.length
+        if (size > LARGEST) req.destroy(new Error('too large'))
+        else parts.push(part)
+      })
+      res.on('error', reject)
+      res.on('end', () => {
+        const status = res.statusCode ?? 0
+        const text = Buffer.concat(parts).toString('utf8')
+        resolve({
+          status,
+          ok: status >= 200 && status < 300,
+          header: (name) => {
+            const value = res.headers[name.toLowerCase()]
+            return (Array.isArray(value) ? value[0] : value) ?? null
+          },
+          json: async () => JSON.parse(text) as unknown
+        })
+      })
+    })
+    req.on('timeout', () => req.destroy(new Error('timeout')))
+    req.on('error', reject)
+    if (body !== undefined) req.setHeader('content-length', Buffer.byteLength(body))
+    req.end(body)
+  })
+}
 const file = (): string => join(app.getPath('userData'), 'stommen.json')
 
 // A session the computer cannot keep safely: here until the app quits.
@@ -72,20 +114,20 @@ function address(given: string): string {
   return url.origin
 }
 
-async function send(server: string, path: string, init: { method?: string; body?: string; token?: string } = {}): Promise<Response> {
+async function send(server: string, path: string, init: { method?: string; body?: string; token?: string } = {}): Promise<Answer> {
   const headers: Record<string, string> = { accept: 'application/json', 'x-app': 'byggmote', 'x-app-version': app.getVersion() }
   if (init.body !== undefined) headers['content-type'] = 'application/json'
   if (init.token) headers['authorization'] = `Bearer ${init.token}`
   try {
-    // A redirect is not followed: the token and the password go to the address the person gave and nowhere else.
-    return await fetch(server + path, { method: init.method ?? 'GET', body: init.body, headers, redirect: 'manual', signal: AbortSignal.timeout(WAIT) })
+    // The token and the password go to the address the person gave and nowhere else.
+    return await ask(new URL(server + path), init.method ?? 'GET', headers, init.body)
   } catch {
     throw new StommenError(`Det gick inte att nå Stommen på ${server}.`)
   }
 }
 
 /** Stommen's own words for a refusal, when it gave any: its API answers `{error: {message, detail}}`, its sign-in `{message}`. */
-async function refusal(res: Response): Promise<StommenError> {
+async function refusal(res: Answer): Promise<StommenError> {
   const body = (await res.json().catch(() => null)) as { error?: { message?: string; detail?: string }; message?: string } | null
   const said = [body?.error?.message, body?.error?.detail].filter(Boolean).join('. ') || body?.message
   return new StommenError(said ? `Stommen svarar: ${said}` : `Stommen svarar med fel ${res.status}.`)
@@ -120,7 +162,7 @@ export async function signIn(server: string, email: string, password: string): P
   const res = await send(base, '/api/auth/sign-in/email', { method: 'POST', body: JSON.stringify({ email: email.trim(), password }) })
   if (res.status === 400 || res.status === 401) throw new StommenError('E-postadressen eller lösenordet stämmer inte.')
   if (!res.ok) throw await refusal(res)
-  const bearer = res.headers.get('set-auth-token')
+  const bearer = res.header('set-auth-token')
   if (!bearer) {
     const body = (await res.json().catch(() => null)) as { twoFactorRedirect?: boolean } | null
     throw new StommenError(body?.twoFactorRedirect ? 'Kontot har tvåstegsinloggning, och den klarar Byggmöte inte än.' : 'Inloggningen gav ingen session. Försök igen.')

@@ -150,12 +150,14 @@ test('signing in brings the Projekt with its Roller and Kontakter, and the sessi
   expect(linden.people.map((p) => [p.name, p.role])).toEqual([['Maria Lindqvist', 'Projektledare'], ['Anders Holm', undefined], ['Elin Sjöberg', 'Platschef']])
   expect(linden.people[0].id).toBe(projects.find((p) => p.name === 'Kv. Eken kontorshus')!.people[0].id)
 
-  // what the app sent: it names itself, and it does not look like a browser (Stommen withholds the token from one)
+  // what the app sent: it names itself, and nothing in it looks like a browser's request. Stommen asks a browser for
+  // an Origin at sign-in and withholds the token from one, and Node's own `fetch` sends `sec-fetch-mode` unasked.
   const first = seen.find((r) => r.path === '/api/auth/sign-in/email' && r.body.includes(PASSWORD))!
   expect(first.headers['x-app']).toBe('byggmote')
   expect(first.headers['x-app-version']).toMatch(/^\d+\.\d+\.\d+/)
-  expect(first.headers['sec-fetch-site']).toBeUndefined()
-  expect(first.headers.origin).toBeUndefined()
+  for (const r of seen) {
+    expect(Object.keys(r.headers).filter((h) => h.startsWith('sec-') || ['origin', 'referer', 'cookie'].includes(h))).toEqual([])
+  }
   const reads = seen.filter((r) => r.path.startsWith('/api/mobile/v1/'))
   expect(reads.map((r) => r.path)).toEqual(['/api/mobile/v1/me', '/api/mobile/v1/projects', `/api/mobile/v1/projects/${LINDEN}/roles`])
   expect(reads.every((r) => r.headers.authorization === `Bearer ${TOKEN}` && r.headers['x-app'] === 'byggmote')).toBe(true)

@@ -49,12 +49,16 @@ to the engine (`byggmote stommen project`): at sign-in, on "Hämta från Stommen
 - The address is https, or http for this computer's own. A redirect is not followed, so the password and the token
   go to the address the person gave and nowhere else.
 - Only the sign-in goes to Stommen. Nothing of a meeting does.
+- The requests are made with Node's `http` and `https`, with the headers the app sets and no others. Node's `fetch`
+  adds `sec-fetch-mode`, and Stommen then takes the sign-in for a browser's and refuses it for having no Origin.
 - An account with two-factor sign-in is told Byggmöte cannot do that yet (Stommen's phone app cannot either).
 - A Projekt that is gone from Stommen, or that the person no longer sees there, stays here with its meetings.
 
 `tests/stommen.spec.ts` runs all of this against a stand-in for Stommen on the computer. The tests give the app a
 folder of its own to keep things in (`BYGGMOTE_USER_DATA`) and no keychain (`BYGGMOTE_NO_KEYCHAIN=1`), so a run puts
-nothing in the keychain of whoever runs it. The keychain path is checked by hand on the Mac only.
+nothing in the keychain of whoever runs it. The keychain path is checked by hand on the Mac only. Against a real
+Stommen (a local one, from the branch that added the roles endpoint) the sign-in, the fetch and the sign-out are
+checked by hand once: that is where the `fetch` problem above showed, which the stand-in had not caught.
 
 An engine the app started does not outlive it: quitting stops them all, also one that is writing a protocol. That
 is checked by hand on the Mac only.
