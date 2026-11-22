@@ -9,9 +9,11 @@ e-mail, else by name.
 
 `minutes` is the other way: a meeting's protocol as Stommen takes it, for the app to send. Nothing of the recording
 goes with it but, for each point, how far in it was said, the line that was said there and who said it."""
+import hashlib
+import json
 from pathlib import Path
 
-from . import ArgError, areas, knowledge, meeting, people, protocol
+from . import ArgError, areas, atomic_write, knowledge, meeting, people, protocol
 from .context import key
 
 MAYBE = (str, type(None))
@@ -109,7 +111,8 @@ def minutes(d: Path) -> dict:
     it, was changed by a person or written by one. Points a person took out and proposals that were never shown are
     not in it.
 
-    Refused while something is left for a person: an amount to read against the recording, or a Roll to choose."""
+    Refused while something is left for a person: an amount to read against the recording, or a Roll to choose.
+    `digest` names what is sent: the same protocol gives the same one, so sending it twice is one send."""
     d = Path(d).expanduser()
     p = protocol.load(d)
     if p is None:
@@ -117,10 +120,8 @@ def minutes(d: Path) -> dict:
     m = meeting.load(d)
     area = areas.get(areas.load(), m["area"])
     pid = area.get("stommen")
-    if not pid:
-        raise ArgError("the project is not one of Stommen's")
-    if left := sum(len(protocol.unchecked(x)) for x in p["points"]):
-        raise ArgError(f"{left} checks are left in the protocol: an amount to confirm or a Roll to choose")
+    if stops := _stops(p, area):
+        raise ArgError(stops[2])
 
     ps = people.load()
     contact = {x["id"]: (x.get("stommen") or {}).get(pid) for x in ps}
@@ -129,11 +130,7 @@ def minutes(d: Path) -> dict:
     speakers, lines = {s["id"]: s for s in m["speakers"]}, {g["id"]: g for g in m["segments"]}
 
     def roll(x: dict) -> str | None:
-        if not x.get("role"):
-            return None
-        if key(x["role"]) not in rolls:
-            raise ArgError(f"Stommen has no Roll {x['role']} in the project (point {x['no']}): fetch the project again")
-        return rolls[key(x["role"])]
+        return rolls[key(x["role"])] if x.get("role") else None
 
     def said(x: dict) -> tuple:
         g = lines.get(x.get("line"))
@@ -155,8 +152,47 @@ def minutes(d: Path) -> dict:
             "confirmedAmounts": [c["value"] for c in x.get("checks", []) if c.get("confirmed")]})
     there = [{"name": a["name"], "role": a.get("role"), "contactId": contact.get(a.get("person") or by_name.get(a["name"]))}
              for a in p["attendees"]]
-    return {"project": pid, "minutes": {
-        "series": {"key": p["series"], "name": p["name"]},
-        "meeting": {"number": p["no"], "heldOn": m["recorded_at"][:10], "durationSeconds": round(m["duration"])},
-        "attendees": there, "headings": [{"number": h["no"], "name": h["name"]} for h in p["headings"]],
-        "items": items, "text": (d / protocol.TEXT).read_text(encoding="utf-8")}}
+    out = {"series": {"key": p["series"], "name": p["name"]},
+           "meeting": {"number": p["no"], "heldOn": m["recorded_at"][:10], "durationSeconds": round(m["duration"])},
+           "attendees": there, "headings": [{"number": h["no"], "name": h["name"]} for h in p["headings"]],
+           "items": items, "text": (d / protocol.TEXT).read_text(encoding="utf-8")}
+    digest = hashlib.sha256(json.dumps(out, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return {"project": pid, "minutes": out, "digest": digest}
+
+
+def _stops(p: dict, area: dict) -> tuple | None:
+    """What stops a protocol from going to Stommen: (code, what it is about, the words for a developer). `local`: the
+    project is not Stommen's. `checks`: so many are left for a person. `role`: a point is for a Roll Stommen no longer
+    has."""
+    if not area.get("stommen"):
+        return "local", None, "the project is not one of Stommen's"
+    if left := sum(len(protocol.unchecked(x)) for x in p["points"]):
+        return "checks", left, f"{left} checks are left in the protocol: an amount to confirm or a Roll to choose"
+    rolls = {key(r["name"]) for r in area.get("roles", [])}
+    for x in p["points"]:
+        if x.get("role") and key(x["role"]) not in rolls:
+            return "role", x["role"], f"Stommen has no Roll {x['role']} in the project (point {x['no']}): fetch the project again"
+    return None
+
+
+def sent(d: Path, given) -> dict:
+    """Stommen took the protocol: {"version", "digest"} from the app, kept with the protocol so the app can say when
+    it was sent and whether it has been changed since."""
+    f = areas.fields(given, {"version": int, "digest": str}, ("version", "digest"))
+    d = Path(d).expanduser()
+    with knowledge.locked(knowledge.folder()):
+        p = protocol.load(d)
+        if p is None:
+            raise ArgError("the meeting has no protocol")
+        p["stommen"] = {"sent_at": meeting.now(), "version": f["version"], "digest": f["digest"]}
+        atomic_write(d / protocol.FILE, json.dumps(p, ensure_ascii=False, indent=1) + "\n")
+    return p["stommen"]
+
+
+def sending(d: Path, p: dict, area: dict) -> dict:
+    """Where the protocol stands with Stommen, for the app: whether it can be sent and what stops it (`_stops`), when
+    it was last sent and as which version, and whether it has been changed since."""
+    stops, was = _stops(p, area), p.get("stommen") or {}
+    now = None if stops else minutes(d)["digest"]
+    return {"possible": stops is None, "why": stops and stops[0], "about": stops and stops[1], "sent_at": was.get("sent_at"),
+            "version": was.get("version"), "changed": bool(was) and now != was.get("digest")}

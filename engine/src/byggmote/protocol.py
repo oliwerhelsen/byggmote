@@ -397,6 +397,8 @@ def answer(d: Path, sid: str, text: str, no: int | None = None, model: str | Non
             raise ArgError(f"the protocol has {had} corrections by a person: --discard writes over them")
         n = series.file(area, sid, d, n)
         p = build(m, area, s, n, found, prior, ps, model)
+        if was := (load(d) or {}).get("stommen"):  # written again, it is still the protocol Stommen was sent a version of
+            p["stommen"] = was
         atomic_write(d / FILE, json.dumps(p, ensure_ascii=False, indent=1) + "\n")
         atomic_write(d / TEXT, render(p, m, areas.name(area)))
     pts = p["points"]

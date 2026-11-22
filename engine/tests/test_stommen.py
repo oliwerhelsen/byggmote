@@ -167,6 +167,50 @@ def test_a_protocol_is_not_sent_for_a_roll_stommen_no_longer_has(config):
         stommen.minutes(hold("Byggmöte 2", SAID))
 
 
+def test_the_protocol_remembers_what_stommen_was_sent_and_says_when_it_has_changed(config):
+    areas.load()
+    stommen.take(given())
+    sid = series.start(eken()["id"], {"name": "Byggmöte"})["id"]
+    d = hold("Byggmöte 1", SAID)
+    answer = json.dumps({"points": [point(kind="decision", text="Beställaren godkänner ÄTA 14 till fast pris 86 500 kr."),
+                                    point(heading=5, kind="todo", text="Underlag skickas.", role="Platschef")]})
+    protocol.answer(d, sid, answer)
+
+    def stands() -> dict:
+        return overview.detail(d)["stommen"]
+
+    assert stands() == {"possible": False, "why": "checks", "about": 1, "sent_at": None, "version": None, "changed": False}
+    correct.check(d, "1.4.1", 1)
+    assert (stands()["possible"], stands()["why"], stands()["changed"]) == (True, None, False)
+
+    first = stommen.minutes(d)
+    assert first["digest"] == stommen.minutes(d)["digest"] and len(first["digest"]) == 64  # the same protocol, the same send
+    kept = stommen.sent(d, {"version": 1, "digest": first["digest"]})
+    assert (kept["version"], stands()["version"], stands()["sent_at"], stands()["changed"]) == (1, 1, kept["sent_at"], False)
+
+    correct.change(d, "1.5.1", {"due": "2026-11-26"})
+    assert stands()["changed"] is True and stommen.minutes(d)["digest"] != first["digest"]
+    stommen.sent(d, {"version": 2, "digest": stommen.minutes(d)["digest"]})
+    assert (stands()["version"], stands()["changed"]) == (2, False)
+
+    protocol.answer(d, sid, answer, discard=True)  # written again by a model: Stommen still has version 2 of it
+    assert (stands()["version"], stands()["why"], stands()["changed"]) == (2, "checks", True)
+
+    stommen.take(given(roles=[r | ({"name": "Arbetschef"} if r["id"] == "r-plats" else {}) for r in ROLES]))
+    correct.check(d, "1.4.1", 1)
+    assert (stands()["possible"], stands()["why"], stands()["about"]) == (False, "role", "Platschef")
+    for bad in ({"version": "1", "digest": "x"}, {"version": 1}, "text"):
+        with pytest.raises(ArgError):
+            stommen.sent(d, bad)
+
+
+def test_a_project_of_our_own_says_so(project, held):
+    d = held("Byggmöte 3", SAID)
+    protocol.answer(d, project[1], json.dumps({"points": [point(kind="note")]}), 3)
+    assert overview.detail(d)["stommen"] == {"possible": False, "why": "local", "about": None, "sent_at": None, "version": None, "changed": False}
+    assert overview.detail(held("Byggmöte 4", SAID))["stommen"] is None  # no protocol, nothing to send
+
+
 def test_a_project_of_our_own_has_nothing_to_send(project, held):
     d = held("Byggmöte 3", SAID)
     protocol.answer(d, project[1], json.dumps({"points": [point(kind="note")]}), 3)

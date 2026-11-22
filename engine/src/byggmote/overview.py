@@ -2,7 +2,7 @@
 transcript and protocol. Read only, so the app shows what the engine's files say without knowing how they are kept."""
 from pathlib import Path
 
-from . import areas, knowledge, meeting, people, protocol, series
+from . import areas, knowledge, meeting, people, protocol, series, stommen
 
 
 def projects() -> dict:
@@ -49,7 +49,7 @@ def meetings(area_id: str) -> list[dict]:
 def detail(d: Path) -> dict:
     """One meeting: its row, the transcript's lines with who says them, and the whole protocol. With a protocol:
     `corrections`, how much of it a person has set right, and `later`, the meeting that builds on it, if one does
-    (then it is neither corrected nor written again)."""
+    (then it is neither corrected nor written again), and `stommen`, where the protocol stands with Stommen."""
     d = Path(d).expanduser()
     m = meeting.load(d)
     area = areas.get(areas.load(), m["area"])
@@ -61,5 +61,5 @@ def detail(d: Path) -> dict:
         "speakers": [{"id": i, "name": names[i]["name"], "person": names[i].get("person")} for i in said if names[i]["name"] != meeting.IGNORED],
         "lines": [{"id": g["id"], "at": g["start"], "speaker": g["speaker"], "who": names[g["speaker"]]["name"], "text": g["text"]}
                   for g in m["segments"] if names[g["speaker"]]["name"] != meeting.IGNORED],
-        "protocol": p, "corrections": protocol.corrections(p or {}),
+        "protocol": p, "corrections": protocol.corrections(p or {}), "stommen": stommen.sending(d, p, area) if p else None,
         "later": protocol.later(area, series.get(series.load(area), p["series"]), p["no"]) if p else None}
