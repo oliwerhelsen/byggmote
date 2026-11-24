@@ -410,11 +410,10 @@
                 </p>
               {:else if standing.why === 'role'}
                 <p style="margin-top: 12px">
-                  Rollen ”{standing.about}” finns inte längre i Stommen. Hämta projektet igen under Stommen, eller välj en annan Roll för punkten.
+                  Rollen ”{standing.about}” finns inte längre i Stommen. Hämta projektet igen under Inställningar → Stommen, eller välj en annan Roll för punkten.
                 </p>
               {:else if !connected}
-                <p style="margin-top: 12px">Logga in i Stommen för att skicka protokollet.</p>
-                <button class="btn" style="margin-top: 12px" onclick={() => go({ name: 'stommen' })}>Till Stommen-kopplingen</button>
+                <p style="margin-top: 12px">Logga in i Stommen under Inställningar för att skicka protokollet.</p>
               {:else if sending === 'ask'}
                 <div class="note" style="margin-top: 12px">
                   <Icon name="lock" />

@@ -239,7 +239,6 @@
   .item.current { background: var(--coral-50); }
   .item :global(svg) { color: var(--coral-700); }
   .account { margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
-  .link { padding: 0; border: 0; background: transparent; color: var(--coral-700); text-decoration: underline; }
   .content { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
   header { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 64px; padding: 0 clamp(16px, 4vw, 40px);
     background: var(--surface); border-bottom: 1px solid var(--line); }
