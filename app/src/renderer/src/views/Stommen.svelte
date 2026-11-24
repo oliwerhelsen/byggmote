@@ -66,7 +66,7 @@
   <div class="page-head">
     <div>
       <h1>Stommen</h1>
-      <p class="muted">Projekt, Roller och Kontakter hör hemma i Stommen. Byggmöte hämtar dem därifrån.</p>
+      <p class="muted">Byggmöte fungerar utan Stommen. Är du inloggad hämtas dina Projekt, Roller och Kontakter hit, och protokoll kan skickas dit.</p>
     </div>
   </div>
 
