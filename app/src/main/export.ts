@@ -1,5 +1,5 @@
 import { BrowserWindow } from 'electron'
-import { Document, HeadingLevel, Packer, Paragraph, TextRun } from 'docx'
+import { BorderStyle, Document, HeadingLevel, Packer, Paragraph, TextRun } from 'docx'
 
 // protocol.md is the one text the engine writes. Word and PDF are made from it here, so they cannot differ from
 // what the window shows. It only has headings, a paragraph and bullets (one level of sub-bullets) with **bold**.
@@ -22,16 +22,43 @@ export function blocks(md: string): Block[] {
 const parts = (text: string): { text: string; bold: boolean }[] =>
   text.split(/(\*\*[^*]+\*\*)/).filter(Boolean).map((s) => (s.startsWith('**') ? { text: s.slice(2, -2), bold: true } : { text: s, bold: false }))
 
+// Same look as the PDF below: sans-serif, a light title, bold headings with a thin rule, grey notes under a point.
+const FONT = 'Arial'
+const INK = '1A1A1A'
+const GREY = '555555'
+const RULE = 'DDDDDD'
+
 export async function toDocx(md: string): Promise<Buffer> {
-  const runs = (t: string): TextRun[] => parts(t).map((p) => new TextRun({ text: p.text, bold: p.bold }))
+  // Font, colour and size go on every run: Word honours that where a document default is not always applied.
+  const runs = (t: string, extra: { color?: string; size?: number; bold?: boolean } = {}): TextRun[] =>
+    parts(t).map((p) => new TextRun({ text: p.text, font: FONT, color: INK, size: 22, ...extra, bold: extra.bold || p.bold }))
   const paragraphs = blocks(md).map((b) => {
-    if (b.kind === 'h1') return new Paragraph({ heading: HeadingLevel.TITLE, children: runs(b.text) })
-    if (b.kind === 'h2') return new Paragraph({ heading: HeadingLevel.HEADING_1, spacing: { before: 280 }, children: runs(b.text) })
-    if (b.kind === 'li') return new Paragraph({ bullet: { level: 0 }, children: runs(b.text) })
-    if (b.kind === 'sub') return new Paragraph({ bullet: { level: 1 }, children: runs(b.text) })
+    if (b.kind === 'h1') return new Paragraph({ heading: HeadingLevel.TITLE, children: runs(b.text, { size: 40 }) })
+    if (b.kind === 'h2')
+      return new Paragraph({
+        heading: HeadingLevel.HEADING_1,
+        border: { bottom: { style: BorderStyle.SINGLE, size: 6, space: 3, color: RULE } },
+        children: runs(b.text, { size: 26, bold: true })
+      })
+    if (b.kind === 'li') return new Paragraph({ bullet: { level: 0 }, spacing: { after: 80 }, children: runs(b.text) })
+    // A note under a point: smaller, grey, indented, with no bullet of its own.
+    if (b.kind === 'sub') return new Paragraph({ indent: { left: 720 }, spacing: { after: 80 }, children: runs(b.text, { color: GREY, size: 20 }) })
     return new Paragraph({ spacing: { after: 120 }, children: runs(b.text) })
   })
-  return Packer.toBuffer(new Document({ creator: 'Byggmöte', sections: [{ children: paragraphs }] }))
+  const font = FONT
+  return Packer.toBuffer(
+    new Document({
+      creator: 'Byggmöte',
+      styles: {
+        default: { document: { run: { font, size: 22, color: INK }, paragraph: { spacing: { line: 330 } } } },
+        paragraphStyles: [
+          { id: 'Title', name: 'Title', basedOn: 'Normal', run: { font, size: 40, bold: false, color: INK }, paragraph: { spacing: { after: 80 } } },
+          { id: 'Heading1', name: 'heading 1', basedOn: 'Normal', next: 'Normal', quickFormat: true, run: { font, size: 26, bold: true, color: INK }, paragraph: { spacing: { before: 360, after: 120 }, keepNext: true } }
+        ]
+      },
+      sections: [{ properties: { page: { margin: { top: 1150, bottom: 1150, left: 1150, right: 1150 } } }, children: paragraphs }]
+    })
+  )
 }
 
 const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
