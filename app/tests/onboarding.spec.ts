@@ -80,9 +80,9 @@ test('the settings keep a name and a choice, and say where the meetings are', as
   await expect(win.getByLabel('Känn igen röster')).not.toBeChecked()
 })
 
-test('the models tab lists them, and the first run can be shown again', async () => {
+test('the models tab shows how many are installed, and the first run can be shown again', async () => {
   await win.getByRole('tab', { name: 'Modeller' }).click()
-  await expect(win.getByRole('list', { name: 'Modeller' })).toBeVisible()
+  await expect(win.getByText(/av \d+ modeller installerade/)).toBeVisible()
   await win.getByRole('tab', { name: 'Allmänt' }).click()
   await win.getByRole('button', { name: 'Visa introduktionen' }).click()
   await expect(win.getByRole('heading', { name: 'Välkommen till Byggmöte' })).toBeVisible()
