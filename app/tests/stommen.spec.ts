@@ -121,15 +121,23 @@ test.afterAll(async () => {
   for (const d of [config, userData]) rmSync(d, { recursive: true, force: true })
 })
 
+/** Stommen is reached from Inställningar, where the connection is kept. */
+async function openStommen(): Promise<void> {
+  await win.getByRole('button', { name: 'Inställningar' }).click()
+  await win.getByRole('button', { name: /Koppla till Stommen|Hantera kopplingen/ }).click()
+}
+
 async function signIn(password: string, to = address): Promise<void> {
-  await win.getByLabel('Adress till Stommen').fill(to)
+  const server = win.getByLabel('Adress till Stommen')
+  if (!(await server.isVisible())) await win.getByText('Avancerat').click() // the address sits under Avancerat
+  await server.fill(to)
   await win.getByLabel('E-post').fill(EMAIL)
   await win.getByLabel('Lösenord').fill(password)
   await win.getByRole('button', { name: 'Logga in' }).click()
 }
 
 test('the address is Stommen over https, and a wrong password is said plainly', async () => {
-  await win.getByRole('button', { name: 'Stommen' }).click()
+  await openStommen()
   await expect(win.getByRole('heading', { name: 'Stommen', level: 1 })).toBeVisible()
   await expect(win.getByText('Stommen är inte kopplat än.')).toBeVisible()
 
@@ -149,7 +157,7 @@ test('signing in brings the Projekt with its Roller and Kontakter, and the sessi
   await expect(win.getByText('Ett Projekt hämtade, med 3 Kontakter. En Roll är vakant.')).toBeVisible()
   await expect(win.getByText('Kopplad till Stommen som Maria Lindqvist.')).toBeVisible()
   await expect(win.getByText('Du loggar in igen nästa gång appen startar.')).toBeVisible() // this run has no keychain
-  await expect(win.getByLabel('Projekt', { exact: true }).locator('option')).toHaveText(['Kv. Eken kontorshus', 'Kv. Linden'])
+  await expect(win.getByLabel('Projekt', { exact: true }).locator('option')).toHaveText(['Kv. Eken kontorshus', 'Kv. Linden', 'Nytt projekt…'])
 
   // what the engine now has: Stommen's Projekt, the vacant Roll too, and the one person who is in both projects once
   const { projects } = await win.evaluate(() => window.api.projects())
@@ -188,7 +196,7 @@ test('a session Stommen has ended shows as signed out, with the address kept', a
   await expect(win.getByRole('heading', { name: 'Logga in i Stommen' })).toBeVisible()
   await expect(win.getByLabel('Adress till Stommen')).toHaveValue(address)
   await expect(win.getByText('Stommen är inte kopplat än.')).toBeVisible()
-  await expect(win.getByLabel('Projekt', { exact: true }).locator('option')).toHaveText(['Kv. Eken kontorshus', 'Kv. Linden']) // what was fetched stays
+  await expect(win.getByLabel('Projekt', { exact: true }).locator('option')).toHaveText(['Kv. Eken kontorshus', 'Kv. Linden', 'Nytt projekt…']) // what was fetched stays
 })
 
 test('signing out ends the session in Stommen too', async () => {
@@ -228,7 +236,7 @@ test('signing out while a fetch is still running leaves nothing of the session b
 test('a Byggmöte that Stommen finds too old is told so, and leaves no session behind there', async () => {
   // the test before signed out behind the view's back: the window starts again, as when the app does
   await win.reload()
-  await win.getByRole('button', { name: 'Stommen' }).click()
+  await openStommen()
   await expect(win.getByRole('heading', { name: 'Logga in i Stommen' })).toBeVisible()
   tooOld = true
   const before = seen.length
@@ -247,10 +255,11 @@ test('a Byggmöte that Stommen finds too old is told so, and leaves no session b
 
 test('a protocol goes to Stommen when the person sends it, with its points and where each was said, and nothing else', async () => {
   await win.reload()
-  await win.getByRole('button', { name: 'Stommen' }).click()
+  await openStommen()
   await signIn(PASSWORD)
   await expect(win.getByRole('heading', { name: 'Inloggad som Maria Lindqvist' })).toBeVisible()
   await win.getByLabel('Projekt', { exact: true }).selectOption({ label: 'Kv. Eken kontorshus' })
+  await win.getByRole('button', { name: 'Möten', exact: true }).click() // choosing a project opens its overview
   await win.getByRole('button', { name: 'Byggmöte 4' }).click()
   const card = win.getByRole('region', { name: 'Till Stommen' })
   await expect(card).toContainText('Protokollet är inte skickat.')

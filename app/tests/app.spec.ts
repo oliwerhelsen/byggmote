@@ -86,13 +86,25 @@ test('a protocol: who was there, the points with their checks, and the transcrip
 })
 
 test('nothing is recorded before everyone knows', async () => {
-  await win.getByRole('button', { name: 'Spela in mötet' }).click()
-  await expect(win.getByRole('heading', { name: 'Byggmöte 5' })).toBeVisible()
+  await win.getByRole('button', { name: 'Spela in möte' }).click()
   const start = win.getByRole('button', { name: 'Börja spela in' })
   await expect(start).toBeDisabled()
   await win.getByRole('checkbox', { name: 'Alla i rummet vet att mötet spelas in' }).check()
   await expect(start).toBeEnabled()
+  await start.click()
+  await expect(win.getByRole('heading', { name: 'Byggmöte 5' })).toBeVisible()
   await expect(win.locator('.heading')).toHaveCount(11)
+  await win.getByRole('button', { name: /Till möten|Avbryta inspelningen|Avbryt inspelningen/ }).click()
+})
+
+test('a meeting can be recorded without an agenda', async () => {
+  await win.getByRole('button', { name: 'Spela in möte' }).click()
+  await win.getByLabel('Utan dagordning').check()
+  await win.getByRole('checkbox', { name: 'Alla i rummet vet att mötet spelas in' }).check()
+  await win.getByRole('button', { name: 'Börja spela in' }).click()
+  await expect(win.getByRole('heading', { name: 'Byggmöte 5' })).toBeVisible()
+  await expect(win.locator('.heading')).toHaveCount(0)
+  await expect(win.getByRole('heading', { name: 'Dagordning' })).toHaveCount(0)
 })
 
 const protocol4 = async (): Promise<void> => {

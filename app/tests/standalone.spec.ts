@@ -1,4 +1,4 @@
-// The app with no Stommen at all, on a computer that has never run it: a project made in the window, the people at its
+// The app with no Stommen at all, on a computer that has never run it: a project made in the window, its overview, its
 // meetings, a rename and a removal, and the first mötesserie so a meeting can be recorded at once. Nothing here asks the
 // engine for a model, and nothing signs in anywhere.
 import { mkdtempSync, rmSync } from 'node:fs'
@@ -38,54 +38,43 @@ test('with no project it asks for one, and says nothing about needing Stommen', 
   await expect(win.getByText('Projekt och Roller hämtas från Stommen')).toHaveCount(0)
 })
 
-test('a project is made and opens on its first meeting', async () => {
+test('a project is made and opens on its overview, from which the meetings are one click away', async () => {
   await win.getByLabel('Projektets namn').fill('Kv. Björken')
   await win.getByRole('button', { name: 'Skapa projekt' }).click()
+  await expect(win.getByRole('heading', { name: 'Kv. Björken', level: 1 })).toBeVisible()
+  await win.getByRole('button', { name: 'Gå till mötena' }).click()
   await expect(win.getByRole('heading', { name: 'Byggmöte 1' })).toBeVisible()
-  await expect(win.getByRole('button', { name: 'Spela in mötet' })).toBeVisible()
+  await expect(win.getByRole('button', { name: 'Spela in möte' })).toBeVisible()
 })
 
-test('people are added with a Roll and are taken out', async () => {
-  await win.getByRole('button', { name: 'Projekt', exact: true }).click()
-  const form = win.getByRole('form', { name: 'Lägg till person i Kv. Björken' })
-  await form.getByLabel('Namn').fill('Anna Lind')
-  await form.getByLabel('Roll').fill('Platschef')
-  await form.getByRole('button', { name: 'Lägg till' }).click()
-  await expect(win.getByText('Anna Lind, Platschef')).toBeVisible()
-
-  await form.getByLabel('Namn').fill('Erik Berg')
-  await form.getByRole('button', { name: 'Lägg till' }).click()
-  await expect(win.getByText('Erik Berg', { exact: true })).toBeVisible()
-
-  await win.getByRole('button', { name: 'Ta bort Erik Berg från Kv. Björken' }).click()
-  await expect(win.getByText('Erik Berg')).toHaveCount(0)
-  await expect(win.getByText('Anna Lind, Platschef')).toBeVisible()
-})
-
-test('a project is renamed, and a removed one leaves the list', async () => {
+test('a project is renamed, a new one is named in a dialog, and a removed one leaves the select', async () => {
+  await win.getByRole('button', { name: 'Översikt' }).click()
   await win.getByRole('button', { name: 'Byt namn' }).click()
   await win.getByLabel('Nytt namn').fill('Kv. Asken')
   await win.getByRole('button', { name: 'Spara' }).click()
-  await expect(win.getByRole('heading', { name: 'Kv. Asken' })).toBeVisible()
+  await expect(win.getByRole('heading', { name: 'Kv. Asken', level: 1 })).toBeVisible()
 
-  await win.getByLabel('Projektets namn').fill('Kv. Lönnen')
-  await win.getByRole('button', { name: 'Skapa projekt' }).click()
-  await expect(win.getByRole('heading', { name: 'Byggmöte 1' })).toBeVisible() // it opens on the new project
-  await win.getByRole('button', { name: 'Projekt', exact: true }).click()
-  await expect(win.getByRole('heading', { name: 'Kv. Lönnen' })).toBeVisible()
-  await win.getByRole('region', { name: 'Kv. Lönnen' }).getByRole('button', { name: 'Ta bort projektet' }).click()
+  await win.getByLabel('Projekt', { exact: true }).selectOption({ label: 'Nytt projekt…' })
+  const dialog = win.getByRole('dialog', { name: 'Nytt projekt' })
+  await dialog.getByLabel('Projektets namn').fill('Kv. Lönnen')
+  await dialog.getByRole('button', { name: 'Skapa projekt' }).click()
+  await expect(win.getByRole('heading', { name: 'Kv. Lönnen', level: 1 })).toBeVisible() // it opens on the new project's overview
+  await expect(dialog).toHaveCount(0)
+
+  await win.getByRole('button', { name: 'Ta bort projektet' }).click()
   await win.getByRole('button', { name: 'Ta bort projektet' }).last().click()
-  await expect(win.getByRole('heading', { name: 'Kv. Lönnen' })).toHaveCount(0)
-  await expect(win.getByRole('heading', { name: 'Kv. Asken' })).toBeVisible()
+  await expect(win.getByRole('heading', { name: 'Kv. Asken', level: 1 })).toBeVisible()
+  await expect(win.getByLabel('Projekt', { exact: true }).locator('option')).toHaveText(['Kv. Asken', 'Nytt projekt…'])
 })
 
 test('the window never offered to send anything to Stommen', async () => {
   await expect(win.getByText('Skicka till Stommen')).toHaveCount(0)
 })
 
-test('a computer not yet signed in offers Logga in, which opens the Stommen view', async () => {
-  await win.getByRole('button', { name: 'Logga in' }).click()
+test('a computer not yet signed in reaches the Stommen view from Inställningar', async () => {
+  await win.getByRole('button', { name: 'Inställningar' }).click()
+  await win.getByRole('button', { name: 'Koppla till Stommen' }).click()
   await expect(win.getByRole('heading', { name: 'Stommen', level: 1 })).toBeVisible()
   await expect(win.getByRole('heading', { name: 'Logga in i Stommen' })).toBeVisible()
-  await expect(win.getByRole('button', { name: 'Logga in' })).toHaveCount(1) // the form's own; the menu's is gone
+  await expect(win.getByRole('button', { name: 'Logga in' })).toHaveCount(1) // the form's own
 })

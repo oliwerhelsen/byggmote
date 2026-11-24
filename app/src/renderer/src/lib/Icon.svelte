@@ -10,6 +10,7 @@
     check: 'M5 12l5 5 9-10',
     alert: 'M12 4l9 16H3zM12 10v4M12 17v.5',
     clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2',
+    home: 'M4 11l8-7 8 7M6 10v10h12V10',
     list: 'M8 6h12M8 12h12M8 18h12M4 6h.5M4 12h.5M4 18h.5',
     plus: 'M12 5v14M5 12h14',
     back: 'M15 5l-7 7 7 7',
