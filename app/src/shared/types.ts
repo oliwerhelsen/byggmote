@@ -155,7 +155,7 @@ export interface Api {
   /** A person at the project's meetings, with their Roll if they have one. Refused in one of Stommen's. */
   personAdd(projectId: string, name: string, role: string): Promise<void>
   personRemove(projectId: string, personId: string): Promise<void>
-  /** The meeting's protocol as a Markdown file the person chooses where to keep; false when they cancelled. */
+  /** The meeting's protocol as a Word, PDF or Markdown file the person chooses where to keep; false when they cancelled. */
   protocolSave(dir: string): Promise<boolean>
   protocolCopy(dir: string): Promise<void>
   recordingStart(): Promise<string>

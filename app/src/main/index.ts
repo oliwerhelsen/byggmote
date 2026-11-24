@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import { appendFile, copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
-import { basename, join, resolve } from 'node:path'
+import { basename, extname, join, resolve } from 'node:path'
 import { app, BrowserWindow, clipboard, dialog, ipcMain, session, shell } from 'electron'
 import type { Agenda, Api, Done, Job, MeetingDetail, MeetingRow, NewPoint, PointFields, Progress, Project, SeriesRef } from '../shared/types'
 import { call, run, stopAll } from './engine'
+import { toDocx, toPdf } from './export'
 import * as stommen from './stommen'
 
 // The tests give the app a folder of its own for what it keeps, so a run never reads or writes the person's.
@@ -185,12 +186,20 @@ function handlers(tell: (p: Progress) => void): { [K in Exclude<keyof Api, 'onPr
       const win = BrowserWindow.getFocusedWindow()
       const options: Electron.SaveDialogOptions = {
         title: 'Spara protokollet',
-        defaultPath: `${basename(d)}.md`,
-        filters: [{ name: 'Markdown', extensions: ['md'] }]
+        defaultPath: `${basename(d)}.docx`,
+        filters: [
+          { name: 'Word', extensions: ['docx'] },
+          { name: 'PDF', extensions: ['pdf'] },
+          { name: 'Markdown', extensions: ['md'] }
+        ]
       }
       const got = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
       if (got.canceled || !got.filePath) return false
-      await copyFile(join(d, 'protocol.md'), got.filePath)
+      const file = join(d, 'protocol.md')
+      const ext = extname(got.filePath).toLowerCase()
+      if (ext === '.docx') await writeFile(got.filePath, await toDocx(await readFile(file, 'utf8')))
+      else if (ext === '.pdf') await writeFile(got.filePath, await toPdf(await readFile(file, 'utf8')))
+      else await copyFile(file, got.filePath)
       return true
     },
     async protocolCopy(dir) {
