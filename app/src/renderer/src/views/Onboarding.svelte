@@ -97,11 +97,11 @@
       </div>
     {:else if step === 2}
       <div class="stack" aria-labelledby="h2">
-        <h1 id="h2">AI-modeller för inspelning och protokoll</h1>
-        <p class="muted">Vi laddar ner AI-modeller som skriver ut det som sägs på mötet, skiljer talarna åt och skriver protokollet. De ligger på din dator, så ljudet lämnar den aldrig och Byggmöte fungerar utan internet. Nedladdningen görs bara en gång och du kan gå vidare medan den pågår.</p>
+        <h1 id="h2">Förbereder Byggmöte</h1>
+        <p class="muted">Vi installerar det som behövs för att skriva ut mötet och göra protokollet. Allt ligger på din dator, så ljudet lämnar den aldrig och Byggmöte fungerar utan internet. Det görs bara en gång och du kan gå vidare medan det pågår.</p>
         <Models changed={(n) => (missing = n)} />
         <div class="row">
-          <button class="btn primary" onclick={next}>{missing === 0 ? 'Fortsätt' : 'Fortsätt, hämta senare'}</button>
+          <button class="btn primary" onclick={next}>{missing === 0 ? 'Fortsätt' : 'Fortsätt, installera senare'}</button>
         </div>
       </div>
     {:else if step === 3}
@@ -118,7 +118,7 @@
         <h1 id="h4">Klart{settings.name ? `, ${settings.name.split(' ')[0]}` : ''}</h1>
         <ul class="sum">
           <li><Icon name="check" size={16} /> Du är med på alla möten</li>
-          <li><Icon name={missing === 0 ? 'check' : 'clock'} size={16} /> {missing === 0 ? 'Modellerna finns på datorn' : 'Modellerna hämtas, du kan börja ändå'}</li>
+          <li><Icon name={missing === 0 ? 'check' : 'clock'} size={16} /> {missing === 0 ? 'Allt är installerat' : 'Installationen pågår, du kan börja ändå'}</li>
           <li><Icon name={stommen?.connected ? 'check' : 'link'} size={16} /> {stommen?.connected ? `Kopplad till Stommen som ${stommen.user}` : 'Stommen kopplar du när du vill, under Inställningar'}</li>
         </ul>
         <p class="small muted">Allt här går att ändra under Inställningar.</p>
