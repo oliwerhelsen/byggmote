@@ -40,7 +40,7 @@ test.beforeEach(async () => {
 })
 
 test('the meetings of a project, the next one and what is still open', async () => {
-  await expect(win.getByRole('heading', { name: 'Byggmöte 5' })).toBeVisible()
+  await expect(win.getByRole('heading', { name: 'Spela in ett möte' })).toBeVisible()
   await expect(win.getByText('En öppen punkt följer med från tidigare möten. En har passerat sitt datum.')).toBeVisible()
   const rows = win.locator('tbody tr')
   await expect(rows).toHaveCount(2)
