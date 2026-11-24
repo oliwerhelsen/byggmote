@@ -85,3 +85,25 @@ export function run(args: string[], on: (e: RunEvent) => void): Promise<string> 
     })
   })
 }
+
+/** A command that prints a JSON event a line, with a way to stop it: `byggmote models download`. Resolves with its exit code. */
+export function stream(args: string[], on: (e: Record<string, unknown>) => void): { done: Promise<number>; stop: () => void } {
+  const { child } = start(args)
+  const done = new Promise<number>((resolve, reject) => {
+    let rest = ''
+    child.stdout.setEncoding('utf8').on('data', (d: string) => {
+      const lines = (rest + d).split('\n')
+      rest = lines.pop() ?? ''
+      for (const line of lines) {
+        try {
+          on(JSON.parse(line))
+        } catch {
+          // a line that is not an event is not for the window
+        }
+      }
+    })
+    child.on('error', (e) => reject(new EngineError(`the engine did not start: ${e.message}`)))
+    child.on('close', (code) => resolve(code ?? 1))
+  })
+  return { done, stop: () => child.kill() }
+}

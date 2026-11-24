@@ -110,7 +110,7 @@ test.beforeAll(async () => {
   // The app keeps what it keeps in a folder of this run's, and no keychain is asked: a test must not put anything in
   // the keychain of whoever runs it, nor wait for them to allow it.
   app = await electron.launch({ args, cwd: here, env: { ...process.env, ...none, BYGGMOTE_CONFIG: config, BYGGMOTE_HIDDEN: '1',
-    BYGGMOTE_USER_DATA: userData, BYGGMOTE_NO_KEYCHAIN: '1' } })
+    BYGGMOTE_USER_DATA: userData, BYGGMOTE_NO_KEYCHAIN: '1', BYGGMOTE_SETUP: '1' } })
   win = await app.firstWindow()
   await expect(win.getByRole('heading', { name: 'Tidigare möten' })).toBeVisible()
 })

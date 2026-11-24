@@ -24,7 +24,8 @@ test.beforeAll(async () => {
   // asks for a protocol to be written, by mistake or after another test failed, gets an error and not minutes of work.
   const none = { BYGGMOTE_MODELS: join(config, 'no-models'), HF_HUB_CACHE: join(config, 'no-models'), HF_HUB_OFFLINE: '1' }
   // Hidden: a test run does not take the screen, and whoever sits at the computer cannot click in it.
-  app = await electron.launch({ args, cwd: here, env: { ...process.env, ...none, BYGGMOTE_CONFIG: config, BYGGMOTE_HIDDEN: '1' } })
+  app = await electron.launch({ args, cwd: here, env: { ...process.env, ...none, BYGGMOTE_CONFIG: config, BYGGMOTE_HIDDEN: '1',
+    BYGGMOTE_USER_DATA: mkdtempSync(join(tmpdir(), 'byggmote-app-user-')), BYGGMOTE_SETUP: '1' } })
   win = await app.firstWindow()
 })
 

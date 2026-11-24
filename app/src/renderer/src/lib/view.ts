@@ -9,5 +9,6 @@ export type View =
   | { name: 'protocol'; dir: string; problem?: string }
   | { name: 'projects' }
   | { name: 'stommen' }
+  | { name: 'settings' }
 
 export type Go = (to: View) => void

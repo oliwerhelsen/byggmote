@@ -2,8 +2,9 @@ import { randomUUID } from 'node:crypto'
 import { appendFile, copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { basename, extname, join, resolve } from 'node:path'
 import { app, BrowserWindow, clipboard, dialog, ipcMain, session, shell } from 'electron'
-import type { Agenda, Api, Done, Job, MeetingDetail, MeetingRow, NewPoint, PointFields, Progress, Project, SeriesRef } from '../shared/types'
-import { call, run, stopAll } from './engine'
+import type { Agenda, Api, Done, Job, MeetingDetail, MeetingRow, ModelEvent, ModelRow, NewPoint, PointFields, Progress, Project, SeriesRef } from '../shared/types'
+import { call, run, stopAll, stream } from './engine'
+import * as kept from './settings'
 import { toDocx, toPdf } from './export'
 import * as stommen from './stommen'
 
@@ -15,6 +16,8 @@ if (process.env['BYGGMOTE_USER_DATA']) app.setPath('userData', process.env['BYGG
 const meetings = new Set<string>()
 const recordings = new Set<string>()
 const taping = new Map<string, string>()
+// The model download at work. There is one at a time, and it does not outlive the app.
+let fetching: { done: Promise<number>; stop: () => void } | null = null
 
 const known = (dir: string): string => {
   const d = resolve(dir)
@@ -68,7 +71,7 @@ const correct = async (args: string[], fields?: PointFields | NewPoint): Promise
   await call(['correct', ...args], fields)
 }
 
-function handlers(tell: (p: Progress) => void): { [K in Exclude<keyof Api, 'onProgress'>]: (...args: Parameters<Api[K]>) => ReturnType<Api[K]> } {
+function handlers(tell: (p: Progress) => void, tellModels: (e: ModelEvent) => void): { [K in Exclude<keyof Api, 'onProgress' | 'onModels'>]: (...args: Parameters<Api[K]>) => ReturnType<Api[K]> } {
   return {
     projects: () => call<{ folder: string; projects: Project[] }>(['projects']),
 
@@ -233,6 +236,62 @@ function handlers(tell: (p: Progress) => void): { [K in Exclude<keyof Api, 'onPr
       const file = taping.get(id)
       taping.delete(id)
       if (file) await rm(file, { force: true })
+    },
+
+    settings: () => kept.read(),
+
+    async settingsSet(patch) {
+      const cur = await kept.read()
+      const next = { ...cur }
+      if (typeof patch.name === 'string' && patch.name.trim() !== cur.name) {
+        const name = patch.name.trim().split(/\s+/).join(' ')
+        if (name) await call(['me', name]) // the engine knows who is using the app: they are at every meeting
+        next.name = name
+      }
+      if (typeof patch.voices === 'boolean' && patch.voices !== cur.voices) {
+        await call(['voices', patch.voices ? 'on' : 'off'])
+        next.voices = patch.voices
+      }
+      if (typeof patch.openAtLogin === 'boolean' && patch.openAtLogin !== cur.openAtLogin) {
+        if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: patch.openAtLogin }) // a dev run would register Electron itself
+        next.openAtLogin = patch.openAtLogin
+      }
+      if (typeof patch.microphone === 'string') next.microphone = patch.microphone.slice(0, 500)
+      return kept.write(next)
+    },
+
+    async setUp(done) {
+      return kept.write({ ...(await kept.read()), setUp: Boolean(done) })
+    },
+
+    models: () => call<ModelRow[]>(['models', '--json']),
+
+    async modelsDownload(ids) {
+      if (fetching) throw new Error('En hämtning pågår redan.')
+      const known = (await call<ModelRow[]>(['models', '--json'])).map((m) => m.id)
+      if (ids.some((i) => !known.includes(String(i)))) throw new Error('unknown model')
+      const job = (fetching = stream(['models', 'download', ...ids.map(String)], (e) => tellModels(e as ModelEvent)))
+      try {
+        await job.done
+      } finally {
+        fetching = null
+      }
+    },
+
+    async modelsCancel() {
+      fetching?.stop()
+    },
+
+    async folderShow() {
+      shell.showItemInFolder((await call<{ folder: string }>(['projects'])).folder)
+    },
+
+    async folderChoose() {
+      const win = BrowserWindow.getFocusedWindow()
+      const options: Electron.OpenDialogOptions = { title: 'Välj mapp för Byggmöte', properties: ['openDirectory', 'createDirectory'] }
+      const got = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
+      if (got.canceled || !got.filePaths[0]) return null
+      return (await call<{ folder: string }>(['folder', got.filePaths[0]])).folder
     }
   }
 }
@@ -271,7 +330,10 @@ void app.whenReady().then(() => {
   const tell = (p: Progress): void => {
     for (const w of BrowserWindow.getAllWindows()) w.webContents.send('progress', p)
   }
-  for (const [name, fn] of Object.entries(handlers(tell))) {
+  const tellModels = (e: ModelEvent): void => {
+    for (const w of BrowserWindow.getAllWindows()) w.webContents.send('models', e)
+  }
+  for (const [name, fn] of Object.entries(handlers(tell, tellModels))) {
     ipcMain.handle(name, (_e, ...args: unknown[]) => (fn as (...a: unknown[]) => unknown)(...args))
   }
   open()
@@ -280,7 +342,10 @@ void app.whenReady().then(() => {
   })
 })
 
-app.on('will-quit', stopAll)
+app.on('will-quit', () => {
+  fetching?.stop()
+  stopAll()
+})
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()

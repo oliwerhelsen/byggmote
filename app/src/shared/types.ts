@@ -119,6 +119,13 @@ export type StommenState = { server: string; connected: boolean; user: string; o
 /** What a fetch from Stommen brought: the Projekt, the Kontakter in them, and the Roller nobody holds. */
 export type StommenSync = { projects: number; people: number; vacant: number }
 
+/** What the person has set in the app itself, kept in the app's own folder. `setUp`: the first-run steps are done. */
+export type Settings = { setUp: boolean; name: string; voices: boolean; openAtLogin: boolean; microphone: string }
+/** A model the engine knows, as `byggmote models --json` lists it. */
+export type ModelRow = { id: string; type: 'asr' | 'diarize' | 'llm'; name: string; langs: string[]; model: string; size: number; license: string; downloaded: boolean }
+/** What a download says as it goes: bytes of one model, one finished, one failed, and the end. */
+export type ModelEvent = { event: 'download' | 'downloaded' | 'error' | 'done'; model?: string; id?: string; done?: number; total?: number; message?: string; failed?: string[] }
+
 export interface Api {
   projects(): Promise<{ folder: string; projects: Project[] }>
   meetings(projectId: string): Promise<MeetingRow[]>
@@ -162,8 +169,21 @@ export interface Api {
   recordingChunk(id: string, bytes: Uint8Array): Promise<void>
   recordingStop(id: string): Promise<string>
   recordingDiscard(id: string): Promise<void>
+  settings(): Promise<Settings>
+  /** Any of the settings but `setUp`. The name and Recognise Voices go on to the engine; opening at login to the system. */
+  settingsSet(patch: Partial<Omit<Settings, 'setUp'>>): Promise<Settings>
+  /** The first-run steps are done, or (`false`) are to be shown again. */
+  setUp(done: boolean): Promise<Settings>
+  models(): Promise<ModelRow[]>
+  /** Resolves when the download has ended; `ids` empty means every model the app needs. Progress comes through `onModels`. */
+  modelsDownload(ids: string[]): Promise<void>
+  modelsCancel(): Promise<void>
+  /** Where the meetings are kept now, and a way to show or change it. `folderChoose` resolves null when cancelled. */
+  folderShow(): Promise<void>
+  folderChoose(): Promise<string | null>
   onProgress(listener: (p: Progress) => void): () => void
+  onModels(listener: (e: ModelEvent) => void): () => void
 }
 
 export const CHANNELS = ['projects', 'meetings', 'agenda', 'meeting', 'audio', 'startSeries', 'pickRecording', 'process',
-  'writeProtocol', 'nameSpeaker', 'changePoint', 'addPoint', 'removePoint', 'restorePoint', 'confirmCheck', 'attend', 'stommenState', 'stommenSignIn', 'stommenSync', 'stommenSignOut', 'stommenSend', 'projectAdd', 'projectRename', 'projectDelete', 'personAdd', 'personRemove', 'protocolSave', 'protocolCopy', 'recordingStart', 'recordingChunk', 'recordingStop', 'recordingDiscard'] as const
+  'writeProtocol', 'nameSpeaker', 'changePoint', 'addPoint', 'removePoint', 'restorePoint', 'confirmCheck', 'attend', 'stommenState', 'stommenSignIn', 'stommenSync', 'stommenSignOut', 'stommenSend', 'projectAdd', 'projectRename', 'projectDelete', 'personAdd', 'personRemove', 'protocolSave', 'protocolCopy', 'recordingStart', 'recordingChunk', 'recordingStop', 'recordingDiscard', 'settings', 'settingsSet', 'setUp', 'models', 'modelsDownload', 'modelsCancel', 'folderShow', 'folderChoose'] as const

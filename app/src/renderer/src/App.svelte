@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Project, StommenState } from '../../shared/types'
+  import type { Project, Settings as Kept, StommenState } from '../../shared/types'
   import Icon from './lib/Icon.svelte'
   import { failure } from './lib/format'
   import type { View } from './lib/view'
@@ -7,7 +7,9 @@
   import Meetings from './views/Meetings.svelte'
   import Projects from './views/Projects.svelte'
   import Protocol from './views/Protocol.svelte'
+  import Onboarding from './views/Onboarding.svelte'
   import Recording from './views/Recording.svelte'
+  import Settings from './views/Settings.svelte'
   import Stommen from './views/Stommen.svelte'
   import Working from './views/Working.svelte'
 
@@ -18,7 +20,8 @@
     working: 'Mötet bearbetas',
     protocol: 'Protokoll',
     projects: 'Projekt',
-    stommen: 'Stommen'
+    stommen: 'Stommen',
+    settings: 'Inställningar'
   }
 
   let projects = $state<Project[]>([])
@@ -27,16 +30,21 @@
   let chosen = $state(localStorage.getItem('project') ?? '')
   let view = $state<View>({ name: 'meetings' })
   let stommen = $state<StommenState | null>(null)
+  let settings = $state<Kept | null>(null)
+  let folder = $state('')
+  void window.api.settings().then((s) => (settings = s))
 
   const project = $derived(projects.find((p) => p.id === chosen) ?? projects[0])
   // A recording or a job in progress is not left by a click in the menu.
   // The views that are not about the chosen project's meetings.
-  const elsewhere = $derived(view.name === 'stommen' || view.name === 'projects')
+  const elsewhere = $derived(view.name === 'stommen' || view.name === 'projects' || view.name === 'settings')
   const held = $derived(view.name === 'recording' || view.name === 'working')
 
   async function load(): Promise<void> {
     try {
-      projects = (await window.api.projects()).projects
+      const got = await window.api.projects()
+      projects = got.projects
+      folder = got.folder
       problem = ''
     } catch (e) {
       problem = failure(e)
@@ -72,6 +80,9 @@
   }
 </script>
 
+{#if settings && !settings.setUp}
+  <Onboarding {settings} {stommen} changed={(s) => (settings = s)} stommenChanged={(s) => (stommen = s)} refresh={load} done={() => (view = { name: 'meetings' })} />
+{:else}
 <div class="shell">
   <aside>
     <div class="brand"><Icon name="wave" size={22} /><span><b>B</b>YGGMÖTE</span></div>
@@ -99,6 +110,10 @@
       <button class="item" class:current={view.name === 'stommen'} aria-current={view.name === 'stommen' ? 'page' : undefined} disabled={held}
         onclick={() => go({ name: 'stommen' })}>
         <Icon name="link" /> Stommen
+      </button>
+      <button class="item" class:current={view.name === 'settings'} aria-current={view.name === 'settings' ? 'page' : undefined} disabled={held}
+        onclick={() => go({ name: 'settings' })}>
+        <Icon name="gear" /> Inställningar
       </button>
     </nav>
 
@@ -134,6 +149,11 @@
             </div>
           </div>
         </div>
+      {:else if view.name === 'settings'}
+        {#if settings}
+          <Settings {settings} {stommen} {folder} {go} changed={(s) => (settings = s)} moved={load}
+            intro={async () => (settings = await window.api.setUp(false))} />
+        {/if}
       {:else if view.name === 'stommen'}
         {#if stommen}
           <Stommen {stommen} changed={(s) => (stommen = s)} refresh={load} />
@@ -167,6 +187,7 @@
     </main>
   </div>
 </div>
+{/if}
 
 <style>
   .shell { display: flex; height: 100%; }
