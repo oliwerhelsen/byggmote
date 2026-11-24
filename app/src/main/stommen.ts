@@ -102,6 +102,9 @@ function token(saved: Saved | null): string | null {
   }
 }
 
+/** Where Stommen runs unless the person has chosen another address under Avancerat. */
+export const DEFAULT_SERVER = 'https://app.stommen.io'
+
 /** The address as the person wrote it, as an origin. Stommen is reached over https; only this computer's own over http. */
 function address(given: string): string {
   let url: URL
@@ -156,12 +159,12 @@ async function forget(): Promise<void> {
 export async function state(): Promise<StommenState> {
   const saved = await read()
   const connected = token(saved) !== null
-  return { server: saved?.server ?? '', connected, user: connected ? (saved?.user ?? '') : '', organization: connected ? (saved?.organization ?? '') : '',
+  return { server: saved?.server || DEFAULT_SERVER, connected, user: connected ? (saved?.user ?? '') : '', organization: connected ? (saved?.organization ?? '') : '',
     syncedAt: connected ? (saved?.syncedAt ?? null) : null, kept: keeps() }
 }
 
 export async function signIn(server: string, email: string, password: string): Promise<StommenState> {
-  const base = address(server)
+  const base = address(server.trim() || DEFAULT_SERVER)
   const res = await send(base, '/api/auth/sign-in/email', { method: 'POST', body: JSON.stringify({ email: email.trim(), password }) })
   if (res.status === 400 || res.status === 401) throw new StommenError('E-postadressen eller lösenordet stämmer inte.')
   if (!res.ok) throw await refusal(res)

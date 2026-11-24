@@ -114,10 +114,6 @@
       <form class="card form" onsubmit={signIn} aria-labelledby="signin">
         <h2 id="signin">Logga in i Stommen</h2>
         <div>
-          <label class="label" for="server">Adress till Stommen</label>
-          <input id="server" class="field" type="text" required autocomplete="url" spellcheck="false" placeholder="Samma adress som i webbläsaren" bind:value={server} />
-        </div>
-        <div>
           <label class="label" for="email">E-post</label>
           <input id="email" class="field" type="email" required autocomplete="username" bind:value={email} />
         </div>
@@ -130,6 +126,13 @@
             {busy === 'in' ? 'Loggar in' : 'Logga in'}
           </button>
         </div>
+        <details>
+          <summary class="small muted">Avancerat</summary>
+          <div style="margin-top: 8px">
+            <label class="label" for="server">Adress till Stommen</label>
+            <input id="server" class="field" type="text" required autocomplete="url" spellcheck="false" bind:value={server} />
+          </div>
+        </details>
         <p class="small muted">Lösenordet skickas till Stommen och sparas inte i Byggmöte.</p>
       </form>
     {/if}
