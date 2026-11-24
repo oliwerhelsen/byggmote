@@ -97,8 +97,8 @@
       </div>
     {:else if step === 2}
       <div class="stack" aria-labelledby="h2">
-        <h1 id="h2">Taligenkänning och protokoll</h1>
-        <p class="muted">Byggmöte hämtar modellerna en gång, sedan fungerar det utan internet. Du kan gå vidare medan de hämtas.</p>
+        <h1 id="h2">AI-modeller för inspelning och protokoll</h1>
+        <p class="muted">Vi laddar ner AI-modeller som skriver ut det som sägs på mötet, skiljer talarna åt och skriver protokollet. De ligger på din dator, så ljudet lämnar den aldrig och Byggmöte fungerar utan internet. Nedladdningen görs bara en gång och du kan gå vidare medan den pågår.</p>
         <Models changed={(n) => (missing = n)} />
         <div class="row">
           <button class="btn primary" onclick={next}>{missing === 0 ? 'Fortsätt' : 'Fortsätt, hämta senare'}</button>

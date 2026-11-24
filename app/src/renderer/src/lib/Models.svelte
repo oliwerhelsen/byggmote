@@ -7,7 +7,7 @@
 
   let { changed = () => {} }: { changed?: (missing: number) => void } = $props()
 
-  const KINDS: Record<ModelRow['type'], string> = { asr: 'Tal till text', diarize: 'Vem som talar', llm: 'Skriver protokollet' }
+  const KINDS: Record<ModelRow['type'], string> = { asr: 'Skriver ut det som sägs', diarize: 'Känner igen vem som talar', llm: 'Skriver protokollet' }
 
   let rows = $state<ModelRow[]>([])
   let loaded = $state(false)

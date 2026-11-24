@@ -43,7 +43,7 @@ test('the first run comes first, and needs a name before it goes on', async () =
 
 test('the models can be left for later, and Stommen can be skipped', async () => {
   await win.getByRole('button', { name: 'Fortsätt' }).click()
-  await expect(win.getByRole('heading', { name: 'Taligenkänning och protokoll' })).toBeVisible()
+  await expect(win.getByRole('heading', { name: 'AI-modeller för inspelning och protokoll' })).toBeVisible()
   await expect(win.getByRole('list', { name: 'Modeller' }).getByRole('button', { name: 'Hämta', exact: true }).first()).toBeVisible()
   await win.getByRole('button', { name: 'Fortsätt, hämta senare' }).click()
   await expect(win.getByRole('heading', { name: 'Stommen', exact: true })).toBeVisible()
