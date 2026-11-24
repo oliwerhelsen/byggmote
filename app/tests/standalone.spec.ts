@@ -71,9 +71,10 @@ test('the window never offered to send anything to Stommen', async () => {
   await expect(win.getByText('Skicka till Stommen')).toHaveCount(0)
 })
 
-test('a computer not yet signed in offers Logga in, which opens the Stommen view', async () => {
-  await win.getByRole('button', { name: 'Logga in' }).click()
+test('a computer not yet signed in reaches the Stommen view from Inställningar', async () => {
+  await win.getByRole('button', { name: 'Inställningar' }).click()
+  await win.getByRole('button', { name: 'Koppla till Stommen' }).click()
   await expect(win.getByRole('heading', { name: 'Stommen', level: 1 })).toBeVisible()
   await expect(win.getByRole('heading', { name: 'Logga in i Stommen' })).toBeVisible()
-  await expect(win.getByRole('button', { name: 'Logga in' })).toHaveCount(1) // the form's own; the menu's is gone
+  await expect(win.getByRole('button', { name: 'Logga in' })).toHaveCount(1) // the form's own
 })

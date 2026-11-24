@@ -134,26 +134,21 @@
           <Icon name="list" /> Möten
         </button>
       {/if}
-      <button class="item" class:current={view.name === 'stommen'} aria-current={view.name === 'stommen' ? 'page' : undefined} disabled={held}
-        onclick={() => go({ name: 'stommen' })}>
-        <Icon name="link" /> Stommen
-      </button>
-      <button class="item" class:current={view.name === 'settings'} aria-current={view.name === 'settings' ? 'page' : undefined} disabled={held}
-        onclick={() => go({ name: 'settings' })}>
-        <Icon name="gear" /> Inställningar
-      </button>
+      <div class="account">
+        <p class="small muted">
+          {#if stommen?.connected}
+            Kopplad till Stommen som {stommen.user}.
+          {:else}
+            Stommen är inte kopplat än. Projekt och personer ligger på den här datorn.
+          {/if}
+        </p>
+        <button class="item" class:current={elsewhere} aria-current={elsewhere ? 'page' : undefined} disabled={held}
+          onclick={() => go({ name: 'settings' })}>
+          <Icon name="gear" /> Inställningar
+        </button>
+      </div>
     </nav>
 
-    <p class="foot small muted">
-      {#if stommen?.connected}
-        Kopplad till Stommen som {stommen.user}.
-      {:else}
-        Stommen är inte kopplat än. Projekt och personer ligger på den här datorn.
-      {/if}
-    </p>
-    {#if stommen && !stommen.connected && view.name !== 'stommen'}
-      <button class="btn primary login" disabled={held} onclick={() => go({ name: 'stommen' })}>Logga in</button>
-    {/if}
   </aside>
 
   <div class="content">
@@ -233,18 +228,17 @@
   dialog::backdrop { background: rgb(0 0 0 / 0.35); }
   dialog h2 { margin-bottom: 16px; }
   .narrow { max-width: 680px; }
-  .login { width: 100%; }
   .shell { display: flex; height: 100%; }
   aside { flex: 0 0 248px; display: flex; flex-direction: column; gap: 8px; padding: 20px 16px; background: var(--surface); border-right: 1px solid var(--line); }
   .brand { display: flex; align-items: center; gap: 10px; height: 24px; margin-bottom: 20px; color: var(--coral-500); }
   .brand span { font: 300 17px var(--font-display); letter-spacing: 0.24em; color: var(--coral-700); padding-top: 3px; }
   .brand b { font-weight: 600; }
   select { width: 100%; margin-bottom: 12px; }
-  nav { display: flex; flex-direction: column; gap: 2px; }
+  nav { flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px; }
   .item { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px; border: 0; border-radius: var(--radius-sm); background: transparent; text-align: left; font-weight: 500; }
   .item.current { background: var(--coral-50); }
   .item :global(svg) { color: var(--coral-700); }
-  .foot { margin-top: auto; }
+  .account { margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
   .link { padding: 0; border: 0; background: transparent; color: var(--coral-700); text-decoration: underline; }
   .content { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
   header { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 64px; padding: 0 clamp(16px, 4vw, 40px);
@@ -256,7 +250,7 @@
   @media (max-width: 760px) {
     .shell { flex-direction: column; }
     aside { flex: none; border-right: 0; border-bottom: 1px solid var(--line); }
-    .foot, .login { display: none; }
+    .account > p { display: none; }
     .promise { display: none; }
   }
 </style>
