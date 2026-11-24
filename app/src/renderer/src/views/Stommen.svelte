@@ -66,7 +66,10 @@
   <div class="page-head">
     <div>
       <h1>Stommen</h1>
-      <p class="muted">Byggmöte fungerar utan Stommen. Är du inloggad hämtas dina Projekt, Roller och Kontakter hit, och protokoll kan skickas dit.</p>
+      <p class="muted">
+        Har du ett konto i Stommen, logga in här så hämtas dina Projekt, Roller och Kontakter hit och protokoll kan skickas dit.
+        Saknar du konto kan du <a href="https://stommen.io" target="_blank" rel="noreferrer">skaffa ett på stommen.io</a>, eller hoppa över det här steget.
+      </p>
     </div>
   </div>
 
