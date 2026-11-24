@@ -153,7 +153,7 @@
         </section>
       {:else if tab === 'models'}
         <section class="card">
-          <h2>Taligenkänning och protokoll</h2>
+          <h2>AI-modeller för inspelning och protokoll</h2>
           <p class="muted" style="margin-bottom: 12px">Modellerna körs på den här datorn. De hämtas en gång, sedan fungerar Byggmöte utan internet.</p>
           <Models />
         </section>
