@@ -122,7 +122,9 @@ test.afterAll(async () => {
 })
 
 async function signIn(password: string, to = address): Promise<void> {
-  await win.getByLabel('Adress till Stommen').fill(to)
+  const server = win.getByLabel('Adress till Stommen')
+  if (!(await server.isVisible())) await win.getByText('Avancerat').click() // the address sits under Avancerat
+  await server.fill(to)
   await win.getByLabel('E-post').fill(EMAIL)
   await win.getByLabel('Lösenord').fill(password)
   await win.getByRole('button', { name: 'Logga in' }).click()
@@ -149,7 +151,7 @@ test('signing in brings the Projekt with its Roller and Kontakter, and the sessi
   await expect(win.getByText('Ett Projekt hämtade, med 3 Kontakter. En Roll är vakant.')).toBeVisible()
   await expect(win.getByText('Kopplad till Stommen som Maria Lindqvist.')).toBeVisible()
   await expect(win.getByText('Du loggar in igen nästa gång appen startar.')).toBeVisible() // this run has no keychain
-  await expect(win.getByLabel('Projekt', { exact: true }).locator('option')).toHaveText(['Kv. Eken kontorshus', 'Kv. Linden'])
+  await expect(win.getByLabel('Projekt', { exact: true }).locator('option')).toHaveText(['Kv. Eken kontorshus', 'Kv. Linden', 'Nytt projekt…'])
 
   // what the engine now has: Stommen's Projekt, the vacant Roll too, and the one person who is in both projects once
   const { projects } = await win.evaluate(() => window.api.projects())
@@ -188,7 +190,7 @@ test('a session Stommen has ended shows as signed out, with the address kept', a
   await expect(win.getByRole('heading', { name: 'Logga in i Stommen' })).toBeVisible()
   await expect(win.getByLabel('Adress till Stommen')).toHaveValue(address)
   await expect(win.getByText('Stommen är inte kopplat än.')).toBeVisible()
-  await expect(win.getByLabel('Projekt', { exact: true }).locator('option')).toHaveText(['Kv. Eken kontorshus', 'Kv. Linden']) // what was fetched stays
+  await expect(win.getByLabel('Projekt', { exact: true }).locator('option')).toHaveText(['Kv. Eken kontorshus', 'Kv. Linden', 'Nytt projekt…']) // what was fetched stays
 })
 
 test('signing out ends the session in Stommen too', async () => {
@@ -251,6 +253,7 @@ test('a protocol goes to Stommen when the person sends it, with its points and w
   await signIn(PASSWORD)
   await expect(win.getByRole('heading', { name: 'Inloggad som Maria Lindqvist' })).toBeVisible()
   await win.getByLabel('Projekt', { exact: true }).selectOption({ label: 'Kv. Eken kontorshus' })
+  await win.getByRole('button', { name: 'Möten', exact: true }).click() // choosing a project opens its overview
   await win.getByRole('button', { name: 'Byggmöte 4' }).click()
   const card = win.getByRole('region', { name: 'Till Stommen' })
   await expect(card).toContainText('Protokollet är inte skickat.')
