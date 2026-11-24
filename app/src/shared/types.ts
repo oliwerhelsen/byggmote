@@ -138,6 +138,8 @@ export interface Api {
   /** `discard`: the protocol has a person's corrections, and they may go. */
   writeProtocol(dir: string, seriesId: string, discard?: boolean): Promise<void>
   nameSpeaker(dir: string, speaker: string, personId: string): Promise<void>
+  /** The meeting's title, as the person words it. */
+  setTitle(dir: string, title: string): Promise<void>
   changePoint(dir: string, no: string, fields: PointFields): Promise<void>
   addPoint(dir: string, fields: NewPoint): Promise<void>
   removePoint(dir: string, no: string): Promise<void>
@@ -186,4 +188,4 @@ export interface Api {
 }
 
 export const CHANNELS = ['projects', 'meetings', 'agenda', 'meeting', 'audio', 'startSeries', 'pickRecording', 'process',
-  'writeProtocol', 'nameSpeaker', 'changePoint', 'addPoint', 'removePoint', 'restorePoint', 'confirmCheck', 'attend', 'stommenState', 'stommenSignIn', 'stommenSync', 'stommenSignOut', 'stommenSend', 'projectAdd', 'projectRename', 'projectDelete', 'personAdd', 'personRemove', 'protocolSave', 'protocolCopy', 'recordingStart', 'recordingChunk', 'recordingStop', 'recordingDiscard', 'settings', 'settingsSet', 'setUp', 'models', 'modelsDownload', 'modelsCancel', 'folderShow', 'folderChoose'] as const
+  'writeProtocol', 'nameSpeaker', 'setTitle', 'changePoint', 'addPoint', 'removePoint', 'restorePoint', 'confirmCheck', 'attend', 'stommenState', 'stommenSignIn', 'stommenSync', 'stommenSignOut', 'stommenSend', 'projectAdd', 'projectRename', 'projectDelete', 'personAdd', 'personRemove', 'protocolSave', 'protocolCopy', 'recordingStart', 'recordingChunk', 'recordingStop', 'recordingDiscard', 'settings', 'settingsSet', 'setUp', 'models', 'modelsDownload', 'modelsCancel', 'folderShow', 'folderChoose'] as const

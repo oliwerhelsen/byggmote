@@ -28,6 +28,19 @@
   let sending = $state<'' | 'ask' | 'busy'>('') // the protocol on its way to Stommen: asked about first, then sent
   let sendProblem = $state('')
   let copied = $state(false)
+  let renaming = $state<string | null>(null) // the title while it is being written
+
+  async function rename(): Promise<void> {
+    const text = renaming?.trim()
+    renaming = null
+    if (!text || !m || text === m.title) return
+    try {
+      await window.api.setTitle(dir, text)
+      await load()
+    } catch (e) {
+      problem = failure(e)
+    }
+  }
 
   /** The protocol as the Markdown file it also is: saved where the person says, or on the clipboard. */
   async function keep(how: 'save' | 'copy'): Promise<void> {
@@ -62,6 +75,8 @@
 
   const p = $derived(m?.protocol ?? null)
   const series = $derived(project.series.find((s) => s.id === (m?.series ?? p?.series)) ?? project.series[0])
+  // Until the person words a title of their own it is the one the series gave: its name and number.
+  const renamed = $derived(Boolean(m && p && m.title.toLowerCase() !== `${p.name} ${p.no}`.toLowerCase()))
   const unnamed = $derived(m ? m.speakers.filter((s) => !s.person && /^Talare \d+$/.test(s.name)) : [])
   const shown = $derived.by(() => {
     const q = query.trim().toLowerCase()
@@ -237,7 +252,16 @@
     <div class="page-head">
       <div>
         <div class="row">
-          <h1>{p ? `Protokoll, ${p.name.toLowerCase()} ${p.no}` : m.title}</h1>
+          {#if renaming !== null}
+            <form class="row" onsubmit={(e) => { e.preventDefault(); void rename() }}>
+              <input class="field" aria-label="Mötets namn" bind:value={renaming} onkeydown={(e) => e.key === 'Escape' && (renaming = null)} />
+              <button class="btn" type="submit" disabled={!renaming.trim()}>Spara</button>
+              <button class="btn" type="button" onclick={() => (renaming = null)}>Avbryt</button>
+            </form>
+          {:else}
+            <h1>{p && !renamed ? `Protokoll, ${p.name.toLowerCase()} ${p.no}` : m.title}</h1>
+          {/if}
+          {#if renaming === null}<button class="btn" onclick={() => (renaming = m?.title ?? '')}><Icon name="edit" /> Byt namn</button>{/if}
           {#if p?.status === 'draft'}<span class="badge"><Icon name="file" size={14} /> Utkast</span>{/if}
         </div>
         <p class="muted">{day(m.recorded_at)}. {minutes(m.duration)}, {m.speakers.length === 1 ? 'en talare' : `${m.speakers.length} talare`}.</p>

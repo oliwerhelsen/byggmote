@@ -139,6 +139,12 @@ function handlers(tell: (p: Progress) => void, tellModels: (e: ModelEvent) => vo
       await call(['name', known(dir), speaker, person(personId)])
     },
 
+    async setTitle(dir, title) {
+      const text = String(title).replace(/\s+/g, ' ').trim()
+      if (!text) throw new Error('Mötet behöver ett namn')
+      await call(['title', known(dir), text])
+    },
+
     changePoint: (dir, no, fields) => correct(['change', known(dir), point(no)], fields),
     addPoint: (dir, fields) => correct(['add', known(dir)], fields),
     removePoint: (dir, no) => correct(['remove', known(dir), point(no)]),
