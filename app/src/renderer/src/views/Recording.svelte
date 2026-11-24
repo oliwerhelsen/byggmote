@@ -61,7 +61,12 @@
   async function begin(): Promise<void> {
     problem = ''
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true, channelCount: 1 } })
+      const wanted = (await window.api.settings().catch(() => null))?.microphone
+      const audio = { echoCancellation: false, noiseSuppression: false, autoGainControl: true, channelCount: 1 }
+      // The microphone chosen in the settings; if it is gone (unplugged), the computer's own, not no recording.
+      stream = await navigator.mediaDevices.getUserMedia({ audio: wanted ? { ...audio, deviceId: { exact: wanted } } : audio }).catch(() =>
+        navigator.mediaDevices.getUserMedia({ audio })
+      )
     } catch {
       problem = 'Byggmöte kommer inte åt mikrofonen. Tillåt mikrofonen för Byggmöte i datorns inställningar och försök igen.'
       return

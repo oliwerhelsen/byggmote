@@ -13,7 +13,9 @@ there when the person asks. A correction is not tied to who is signed in, and th
 It also works with no Stommen at all: a project is made in the window (Projekt in the menu), with the people at its
 meetings and their Roller, and its first mötesserie is started with it. A protocol is kept as `protocol.md` in the
 meeting's folder, and the window can save it as a file or copy its text. Stommen is the thing to add later, from the
-Stommen view. Still to build: justering, and the phone recorder.
+Stommen view. A first run (name, microphone, models, Stommen) and Inställningar (name, where meetings are kept, microphone, Recognise Voices,
+open at login, models, licences) are in the app; the app keeps them in its own folder (`settings.json`). Still to build:
+justering, and the phone recorder.
 
 Where the engine comes from and what the models' licences ask: `NOTICE.md`.
 

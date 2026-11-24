@@ -21,7 +21,7 @@ test.beforeAll(async () => {
   app = await electron.launch({
     args,
     cwd: here,
-    env: { ...process.env, ...none, BYGGMOTE_CONFIG: config, BYGGMOTE_USER_DATA: userData, BYGGMOTE_NO_KEYCHAIN: '1', BYGGMOTE_HIDDEN: '1' }
+    env: { ...process.env, ...none, BYGGMOTE_CONFIG: config, BYGGMOTE_USER_DATA: userData, BYGGMOTE_NO_KEYCHAIN: '1', BYGGMOTE_HIDDEN: '1', BYGGMOTE_SETUP: '1' }
   })
   win = await app.firstWindow()
 })
