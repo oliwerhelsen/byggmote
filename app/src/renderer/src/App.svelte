@@ -179,7 +179,7 @@
             <Working job={view.job} {go} />
           {:else if view.name === 'protocol'}
             {#key view.dir}
-              <Protocol {project} dir={view.dir} problem={view.problem ?? ''} connected={Boolean(stommen?.connected)} {go} />
+              <Protocol {project} dir={view.dir} problem={view.problem ?? ''} connected={Boolean(stommen?.connected)} {go} refresh={load} />
             {/key}
           {/if}
         {/key}
