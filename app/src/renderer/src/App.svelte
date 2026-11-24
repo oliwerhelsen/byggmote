@@ -24,6 +24,9 @@
     settings: 'Inställningar'
   }
 
+  // The select's last option leads to the Projekt view, where a project is made.
+  const NEW = '__new'
+
   let projects = $state<Project[]>([])
   let loaded = $state(false)
   let problem = $state('')
@@ -89,10 +92,12 @@
 
     {#if projects.length}
       <label class="small muted" for="project">Projekt</label>
-      <select id="project" class="field" value={project?.id} disabled={held} onchange={(e) => choose(e.currentTarget.value)}>
+      <select id="project" class="field" value={view.name === 'projects' ? NEW : project?.id} disabled={held}
+        onchange={(e) => (e.currentTarget.value === NEW ? go({ name: 'projects' }) : choose(e.currentTarget.value))}>
         {#each projects as p (p.id)}
           <option value={p.id}>{p.name}</option>
         {/each}
+        <option value={NEW}>Nytt projekt…</option>
       </select>
     {/if}
 
@@ -103,10 +108,6 @@
           <Icon name="list" /> Möten
         </button>
       {/if}
-      <button class="item" class:current={view.name === 'projects'} aria-current={view.name === 'projects' ? 'page' : undefined} disabled={held}
-        onclick={() => go({ name: 'projects' })}>
-        <Icon name="person" /> Projekt
-      </button>
       <button class="item" class:current={view.name === 'stommen'} aria-current={view.name === 'stommen' ? 'page' : undefined} disabled={held}
         onclick={() => go({ name: 'stommen' })}>
         <Icon name="link" /> Stommen
