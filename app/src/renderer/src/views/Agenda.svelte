@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Agenda, Project, SeriesRef } from '../../../shared/types'
   import Icon from '../lib/Icon.svelte'
+  import RecordDialog from '../lib/RecordDialog.svelte'
   import { failure, KINDS, overdue } from '../lib/format'
   import type { Go } from '../lib/view'
 
@@ -8,6 +9,7 @@
 
   let agenda = $state<Agenda | null>(null)
   let problem = $state('')
+  let recorder = $state<{ show: (s: SeriesRef, agenda?: boolean) => void }>()
 
   $effect(() => {
     window.api
@@ -27,7 +29,7 @@
     </div>
     <div class="row">
       <button class="btn" onclick={() => go({ name: 'meetings' })}><Icon name="back" /> Till möten</button>
-      <button class="btn primary" onclick={() => go({ name: 'recording', series })}><Icon name="mic" /> Spela in mötet</button>
+      <button class="btn primary" onclick={() => recorder?.show(series, true)}><Icon name="mic" /> Spela in mötet</button>
     </div>
   </div>
 
@@ -90,6 +92,8 @@
     </div>
   {/if}
 </div>
+
+<RecordDialog bind:this={recorder} {go} />
 
 <style>
   .headings > li { padding: 14px 0; border-bottom: 1px solid var(--line); }

@@ -44,7 +44,7 @@ test('a project is made and opens on its overview, from which the meetings are o
   await expect(win.getByRole('heading', { name: 'Kv. Björken', level: 1 })).toBeVisible()
   await win.getByRole('button', { name: 'Gå till mötena' }).click()
   await expect(win.getByRole('heading', { name: 'Byggmöte 1' })).toBeVisible()
-  await expect(win.getByRole('button', { name: 'Spela in mötet' })).toBeVisible()
+  await expect(win.getByRole('button', { name: 'Spela in möte' })).toBeVisible()
 })
 
 test('a project is renamed, a new one is named in a dialog, and a removed one leaves the select', async () => {

@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Agenda, MeetingRow, OpenPoint, Project, SeriesRef } from '../../../shared/types'
   import Icon from '../lib/Icon.svelte'
+  import RecordDialog from '../lib/RecordDialog.svelte'
   import { date, failure, KINDS, minutes, overdue } from '../lib/format'
   import type { Go } from '../lib/view'
 
@@ -10,6 +11,7 @@
   let agendas = $state<Record<string, Agenda>>({})
   let problem = $state('')
   let starting = $state(false)
+  let recorder = $state<{ show: (s: SeriesRef, agenda?: boolean) => void }>()
 
   $effect(() => {
     const series = project.series.map((s) => s.id) // read here, so a new series loads its agenda
@@ -90,11 +92,10 @@
     <div class="main stack">
       {#each project.series as s (s.id)}
         <section class="card next" aria-labelledby="next-{s.id}">
-          <p class="small muted">Nästa möte</p>
-          <h2 id="next-{s.id}">{s.name} {s.next}</h2>
-          <p class="muted">{carried(agendas[s.id])}</p>
+          <h2 id="next-{s.id}">Spela in ett möte</h2>
+          <p class="muted">{s.name} {s.next}. {carried(agendas[s.id])}</p>
           <div class="row" style="margin-top: 20px">
-            <button class="btn primary" onclick={() => go({ name: 'recording', series: s })}><Icon name="mic" /> Spela in mötet</button>
+            <button class="btn primary" onclick={() => recorder?.show(s)}><Icon name="mic" /> Spela in möte</button>
             <button class="btn" onclick={() => go({ name: 'agenda', series: s })}>Se dagordningen</button>
             <button class="btn quiet" onclick={() => add(s)}><Icon name="plus" /> Lägg till en inspelning</button>
           </div>
@@ -164,6 +165,8 @@
     </aside>
   </div>
 </div>
+
+<RecordDialog bind:this={recorder} {go} />
 
 <style>
   .next h2 { font: 300 28px/1.2 var(--font-display); margin: 2px 0 6px; }
