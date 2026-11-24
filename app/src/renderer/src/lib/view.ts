@@ -4,7 +4,7 @@ import type { Job, SeriesRef } from '../../../shared/types'
 export type View =
   | { name: 'meetings' }
   | { name: 'agenda'; series: SeriesRef }
-  | { name: 'recording'; series: SeriesRef }
+  | { name: 'recording'; series: SeriesRef; agenda: boolean }
   | { name: 'working'; job: Job }
   | { name: 'protocol'; dir: string; problem?: string }
   | { name: 'overview' }

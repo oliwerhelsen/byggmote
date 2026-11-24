@@ -1,15 +1,15 @@
 <script lang="ts">
+  import { onMount } from 'svelte'
   import type { Agenda, Kind, Project, SeriesRef } from '../../../shared/types'
   import Icon from '../lib/Icon.svelte'
   import { clock, failure, KINDS } from '../lib/format'
   import type { Go } from '../lib/view'
 
-  let { project, series, go }: { project: Project; series: SeriesRef; go: Go } = $props()
+  let { project, series, agenda: withAgenda, go }: { project: Project; series: SeriesRef; agenda: boolean; go: Go } = $props()
 
   const MARKS: Kind[] = ['decision', 'todo', 'changeOrder', 'question']
 
   let agenda = $state<Agenda | null>(null)
-  let consent = $state(false)
   let phase = $state<'idle' | 'recording' | 'paused' | 'saving'>('idle')
   let elapsed = $state(0) // seconds of recorded sound: a pause does not count
   let level = $state(0)
@@ -27,14 +27,18 @@
   let since = 0
   let ticking: ReturnType<typeof setInterval> | undefined
 
-  $effect(() => {
-    window.api
-      .agenda(project.id, series.id)
-      .then((a) => (agenda = a))
-      .catch((e) => (problem = failure(e)))
-  })
+  // The agenda is read while the microphone opens, and the first heading is pressed once both are there.
+  let loaded: Promise<unknown> = Promise.resolve()
+  const load = (): Promise<unknown> =>
+    withAgenda
+    ? window.api
+        .agenda(project.id, series.id)
+        .then((a) => (agenda = a))
+        .catch((e) => (problem = failure(e)))
+    : Promise.resolve()
 
   const title = $derived(`${series.name} ${agenda?.no ?? series.next}`)
+  // Without an agenda nothing is pressed: the protocol finds the headings itself, which the marks only help with.
   const next = $derived.by(() => {
     if (!agenda) return null
     const i = agenda.headings.findIndex((h) => h.no === current)
@@ -86,7 +90,8 @@
       since = performance.now()
       phase = 'recording'
       ticking = setInterval(() => (elapsed = now()), 250)
-      if (agenda?.headings[0]) press(agenda.headings[0].no)
+      await loaded
+      if (withAgenda && agenda?.headings[0]) press(agenda.headings[0].no)
     } catch (e) {
       problem = failure(e)
       quiet()
@@ -154,6 +159,11 @@
   }
   const at = (no: number): number | undefined => pressed.findLast((p) => p.no === no)?.at
 
+  // Everyone has been told in the dialog before this view opens, so the recording starts at once.
+  onMount(() => {
+    loaded = load()
+    void begin()
+  })
   $effect(() => quiet)
 </script>
 
@@ -190,11 +200,7 @@
         </div>
 
         {#if phase === 'idle'}
-          <label class="consent">
-            <input type="checkbox" bind:checked={consent} />
-            <span>Alla i rummet vet att mötet spelas in</span>
-          </label>
-          <button class="btn primary" disabled={!consent} onclick={begin}><Icon name="mic" /> Börja spela in</button>
+          <button class="btn primary" onclick={begin}><Icon name="mic" /> {problem ? 'Försök igen' : 'Börja spela in'}</button>
         {:else}
           <div class="row">
             <button class="btn" disabled={phase === 'saving'} onclick={pause}>
@@ -227,6 +233,7 @@
       </section>
     </div>
 
+    {#if withAgenda}
     <aside class="side card" aria-labelledby="agenda">
       <h2 id="agenda">Dagordning</h2>
       <p class="muted small">Tryck när ni byter rubrik, så hamnar det som sägs på rätt ställe i protokollet.</p>
@@ -255,6 +262,7 @@
         <p class="muted">Läser in dagordningen.</p>
       {/if}
     </aside>
+    {/if}
   </div>
 </div>
 
@@ -266,8 +274,6 @@
   @keyframes pulse { 50% { opacity: 0.3; } }
   .level { width: min(360px, 100%); height: 8px; border-radius: 4px; background: var(--sunken); overflow: hidden; margin-bottom: 12px; }
   .level div { height: 100%; background: var(--ok); transition: width 0.08s linear; }
-  .consent { display: flex; align-items: center; gap: 10px; min-height: 44px; }
-  .consent input { width: 20px; height: 20px; accent-color: var(--coral-700); }
   .marked { margin-top: 16px; }
   .marked li { display: flex; align-items: center; gap: 16px; border-top: 1px solid var(--line); }
   .headings { margin-top: 12px; display: flex; flex-direction: column; gap: 2px; }

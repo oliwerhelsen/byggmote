@@ -203,7 +203,7 @@
           {:else if view.name === 'agenda'}
             <Agenda {project} series={view.series} {go} />
           {:else if view.name === 'recording'}
-            <Recording {project} series={view.series} {go} />
+            <Recording {project} series={view.series} agenda={view.agenda} {go} />
           {:else if view.name === 'working'}
             <Working job={view.job} {go} />
           {:else if view.name === 'protocol'}
