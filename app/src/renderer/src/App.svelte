@@ -124,6 +124,9 @@
         Stommen är inte kopplat än. Projekt och personer ligger på den här datorn.
       {/if}
     </p>
+    {#if stommen && !stommen.connected && view.name !== 'stommen'}
+      <button class="btn primary login" disabled={held} onclick={() => go({ name: 'stommen' })}>Logga in</button>
+    {/if}
   </aside>
 
   <div class="content">
@@ -190,6 +193,7 @@
 {/if}
 
 <style>
+  .login { width: 100%; }
   .shell { display: flex; height: 100%; }
   aside { flex: 0 0 248px; display: flex; flex-direction: column; gap: 8px; padding: 20px 16px; background: var(--surface); border-right: 1px solid var(--line); }
   .brand { display: flex; align-items: center; gap: 10px; height: 24px; margin-bottom: 20px; color: var(--coral-500); }
@@ -212,7 +216,7 @@
   @media (max-width: 760px) {
     .shell { flex-direction: column; }
     aside { flex: none; border-right: 0; border-bottom: 1px solid var(--line); }
-    .foot { display: none; }
+    .foot, .login { display: none; }
     .promise { display: none; }
   }
 </style>

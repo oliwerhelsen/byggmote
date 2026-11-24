@@ -82,3 +82,10 @@ test('a project is renamed, and a removed one leaves the list', async () => {
 test('the window never offered to send anything to Stommen', async () => {
   await expect(win.getByText('Skicka till Stommen')).toHaveCount(0)
 })
+
+test('a computer not yet signed in offers Logga in, which opens the Stommen view', async () => {
+  await win.getByRole('button', { name: 'Logga in' }).click()
+  await expect(win.getByRole('heading', { name: 'Stommen', level: 1 })).toBeVisible()
+  await expect(win.getByRole('heading', { name: 'Logga in i Stommen' })).toBeVisible()
+  await expect(win.getByRole('button', { name: 'Logga in' })).toHaveCount(1) // the form's own; the menu's is gone
+})
