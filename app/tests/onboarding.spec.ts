@@ -72,7 +72,7 @@ test('the settings keep a name and a choice, and say where the meetings are', as
   await expect(voices).toBeChecked()
   await voices.uncheck()
   // Kept when the main process says so, not when the box looks unticked.
-  await expect.poll(() => win.evaluate(async () => (await window.api.settings()).voices)).toBe(false)
+  await expect.poll(() => win.evaluate(async () => (await (globalThis as unknown as { api: { settings(): Promise<{ voices: boolean }> } }).api.settings()).voices)).toBe(false)
   await win.reload()
   await win.getByRole('button', { name: 'Inställningar' }).click()
   await expect(win.getByLabel('Ditt namn')).toHaveValue('Anna Maria Berg')
