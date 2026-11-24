@@ -5,6 +5,7 @@
   import type { View } from './lib/view'
   import Agenda from './views/Agenda.svelte'
   import Meetings from './views/Meetings.svelte'
+  import Projects from './views/Projects.svelte'
   import Protocol from './views/Protocol.svelte'
   import Recording from './views/Recording.svelte'
   import Stommen from './views/Stommen.svelte'
@@ -16,6 +17,7 @@
     recording: 'Inspelning',
     working: 'Mötet bearbetas',
     protocol: 'Protokoll',
+    projects: 'Projekt',
     stommen: 'Stommen'
   }
 
@@ -83,11 +85,15 @@
 
     <nav aria-label="Huvudmeny">
       {#if projects.length}
-        <button class="item" class:current={view.name !== 'stommen'} aria-current={view.name !== 'stommen' ? 'page' : undefined} disabled={held}
-          onclick={() => go({ name: 'meetings' })}>
+        <button class="item" class:current={!['stommen', 'projects'].includes(view.name)} aria-current={!['stommen', 'projects'].includes(view.name) ? 'page' : undefined}
+          disabled={held} onclick={() => go({ name: 'meetings' })}>
           <Icon name="list" /> Möten
         </button>
       {/if}
+      <button class="item" class:current={view.name === 'projects'} aria-current={view.name === 'projects' ? 'page' : undefined} disabled={held}
+        onclick={() => go({ name: 'projects' })}>
+        <Icon name="person" /> Projekt
+      </button>
       <button class="item" class:current={view.name === 'stommen'} aria-current={view.name === 'stommen' ? 'page' : undefined} disabled={held}
         onclick={() => go({ name: 'stommen' })}>
         <Icon name="link" /> Stommen
@@ -98,7 +104,7 @@
       {#if stommen?.connected}
         Kopplad till Stommen som {stommen.user}.
       {:else}
-        Stommen är inte kopplat än. Projekt och Roller ligger på den här datorn.
+        Stommen är inte kopplat än. Projekt och personer ligger på den här datorn.
       {/if}
     </p>
   </aside>
@@ -106,7 +112,7 @@
   <div class="content">
     <header>
       <p class="crumbs">
-        {#if project && view.name !== 'stommen'}<span class="muted">{project.name}</span><span class="muted" aria-hidden="true">/</span>{/if}
+        {#if project && view.name !== 'stommen' && view.name !== 'projects'}<span class="muted">{project.name}</span><span class="muted" aria-hidden="true">/</span>{/if}
         <span>{TITLES[view.name]}</span>
       </p>
       <p class="promise small"><Icon name="lock" size={16} /> Ljud och utskrift stannar på den här datorn</p>
@@ -132,14 +138,13 @@
         {:else}
           <div class="page"><p class="muted">Läser in kopplingen till Stommen.</p></div>
         {/if}
-      {:else if !project}
-        <div class="page">
-          <div class="card">
-            <h2>Inga projekt än</h2>
-            <p class="muted">Projekt och Roller hämtas från Stommen. Logga in där, så kommer dina Projekt hit.</p>
-            <button class="btn primary" style="margin-top: 16px" onclick={() => go({ name: 'stommen' })}>Koppla till Stommen</button>
+      {:else if view.name === 'projects' || !project}
+        <Projects {projects} chosen={project?.id ?? ''} refresh={load} {choose} first={!projects.length} />
+        {#if !projects.length}
+          <div class="page" style="padding-top: 0">
+            <p class="small muted">Har du Stommen? <button class="link" onclick={() => go({ name: 'stommen' })}>Koppla dit</button> så hämtas dina Projekt, Roller och Kontakter hit.</p>
           </div>
-        </div>
+        {/if}
       {:else}
         {#key project.id}
           {#if view.name === 'meetings'}
@@ -173,6 +178,7 @@
   .item.current { background: var(--coral-50); }
   .item :global(svg) { color: var(--coral-700); }
   .foot { margin-top: auto; }
+  .link { padding: 0; border: 0; background: transparent; color: var(--coral-700); text-decoration: underline; }
   .content { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
   header { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 64px; padding: 0 clamp(16px, 4vw, 40px);
     background: var(--surface); border-bottom: 1px solid var(--line); }

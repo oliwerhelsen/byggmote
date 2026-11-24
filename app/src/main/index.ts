@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
-import { appendFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
-import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron'
+import { appendFile, copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { basename, join, resolve } from 'node:path'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, session, shell } from 'electron'
 import type { Agenda, Api, Done, Job, MeetingDetail, MeetingRow, NewPoint, PointFields, Progress, Project, SeriesRef } from '../shared/types'
 import { call, run, stopAll } from './engine'
 import * as stommen from './stommen'
@@ -32,6 +32,27 @@ const person = (id: string): string => {
   if (!/^[^\s@-][^\s@]*$/.test(id)) throw new Error('unknown person')
   return `@${id}`
 }
+
+// A project's id goes to the engine as an argument, so it may not be read as an option either.
+const projectId = (id: string): string => {
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) throw new Error('unknown project')
+  return id
+}
+const words = (s: unknown, what: string): string => {
+  const t = String(s ?? '').split(/\s+/).filter(Boolean).join(' ')
+  if (!t) throw new Error(`${what} saknas`)
+  return t
+}
+
+/** The project's people as the engine keeps them (a person and a Roll each), for a change to write back whole. */
+async function members(id: string): Promise<{ person: string; role?: string }[]> {
+  const p = (await call<{ projects: Project[] }>(['projects'])).projects.find((x) => x.id === id)
+  if (!p) throw new Error('unknown project')
+  if (p.stommen) throw new Error('Projektets personer och Roller kommer från Stommen')
+  return p.people.map((x) => (x.role ? { person: x.id, role: x.role } : { person: x.id }))
+}
+
+const setMembers = (id: string, people: { person: string; role?: string }[]): Promise<unknown> => call(['areas', 'set', projectId(id)], { people })
 
 /** One correction of a protocol: `byggmote correct`, the fields on its stdin. */
 const correct = async (args: string[], fields?: PointFields | NewPoint): Promise<void> => {
@@ -118,6 +139,51 @@ function handlers(tell: (p: Progress) => void): { [K in Exclude<keyof Api, 'onPr
     stommenSync: () => stommen.sync(),
     stommenSignOut: () => stommen.signOut(),
     stommenSend: (dir) => stommen.sendMinutes(known(dir)),
+
+    async projectAdd(name) {
+      const a = await call<{ id: string }>(['areas', 'add'], { name: words(name, 'Namn') })
+      await call(['series', 'start', a.id], { name: 'Byggmöte' })
+      return a.id
+    },
+    async projectRename(id, name) {
+      await call(['areas', 'set', projectId(id)], { name: words(name, 'Namn') })
+    },
+    async projectDelete(id) {
+      await call(['areas', 'delete', projectId(id)])
+    },
+    async personAdd(id, name, role) {
+      const cur = await members(id)
+      const p = await call<{ id: string }>(['people', 'add'], { name: words(name, 'Namn') })
+      if (cur.some((x) => x.person === p.id)) throw new Error('Personen finns redan i projektet')
+      const r = String(role ?? '').trim()
+      await setMembers(id, [...cur, r ? { person: p.id, role: r } : { person: p.id }])
+    },
+    async personSetRole(id, personId, role) {
+      const r = String(role ?? '').trim()
+      const who = person(personId).slice(1)
+      await setMembers(id, (await members(id)).map((x) => (x.person === who ? (r ? { person: who, role: r } : { person: who }) : x)))
+    },
+    async personRemove(id, personId) {
+      const who = person(personId).slice(1)
+      await setMembers(id, (await members(id)).filter((x) => x.person !== who))
+    },
+
+    async protocolSave(dir) {
+      const d = known(dir)
+      const win = BrowserWindow.getFocusedWindow()
+      const options: Electron.SaveDialogOptions = {
+        title: 'Spara protokollet',
+        defaultPath: `${basename(d)}.md`,
+        filters: [{ name: 'Markdown', extensions: ['md'] }]
+      }
+      const got = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
+      if (got.canceled || !got.filePath) return false
+      await copyFile(join(d, 'protocol.md'), got.filePath)
+      return true
+    },
+    async protocolCopy(dir) {
+      clipboard.writeText(await readFile(join(known(dir), 'protocol.md'), 'utf8'))
+    },
 
     // A recording goes to disk a second at a time, so a crash an hour in loses a second, not the hour.
     async recordingStart() {

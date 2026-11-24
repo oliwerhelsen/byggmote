@@ -10,7 +10,10 @@ on the Mac. The app is a first version: it shows a project's meetings, the agend
 and sound, records a meeting or takes a recording, names the speakers, and lets a person correct the protocol. It
 signs in to Stommen as a person, fetches the person's Projekt with their Roller and Kontakter, and sends a protocol
 there when the person asks. A correction is not tied to who is signed in, and the app is not packaged for installing.
-Still to build: justering, and the phone recorder.
+It also works with no Stommen at all: a project is made in the window (Projekt in the menu), with the people at its
+meetings and their Roller, and its first mötesserie is started with it. A protocol is kept as `protocol.md` in the
+meeting's folder, and the window can save it as a file or copy its text. Stommen is the thing to add later, from the
+Stommen view. Still to build: justering, and the phone recorder.
 
 Where the engine comes from and what the models' licences ask: `NOTICE.md`.
 
@@ -24,8 +27,8 @@ window reaches the computer only through the calls in `app/src/shared/types.ts`.
     npm run dev
 
 It uses the engine of the checkout (`engine/.venv`), so install that first, or name another with `BYGGMOTE_ENGINE`.
-Start it from a terminal: the engine needs `ffmpeg` on the path. There is no way to add a project in the app, since
-projects are to come from Stommen: add one with the engine (below).
+Start it from a terminal: the engine needs `ffmpeg` on the path. Projects are made in the app (Projekt), or come from Stommen when the
+person signs in there; a project from Stommen is Stommen's, and its people and Roller are read, not changed, in the app.
 
     npm run check     the types, main process and views
     npm test          builds the app and drives it against a knowledge base the engine writes (no model runs)

@@ -25,6 +25,21 @@
   let present = $state('')
   let sending = $state<'' | 'ask' | 'busy'>('') // the protocol on its way to Stommen: asked about first, then sent
   let sendProblem = $state('')
+  let copied = $state(false)
+
+  /** The protocol as the Markdown file it also is: saved where the person says, or on the clipboard. */
+  async function keep(how: 'save' | 'copy'): Promise<void> {
+    try {
+      if (how === 'save') await window.api.protocolSave(dir)
+      else {
+        await window.api.protocolCopy(dir)
+        copied = true
+        setTimeout(() => (copied = false), 2000)
+      }
+    } catch (e) {
+      problem = failure(e)
+    }
+  }
 
   async function load(): Promise<void> {
     try {
@@ -191,6 +206,10 @@
       </div>
       <div class="row">
         <button class="btn" onclick={() => go({ name: 'meetings' })}><Icon name="back" /> Till möten</button>
+        {#if p}
+          <button class="btn" onclick={() => keep('save')}><Icon name="file" /> Exportera som fil</button>
+          <button class="btn" onclick={() => keep('copy')}>{copied ? 'Kopierat' : 'Kopiera texten'}</button>
+        {/if}
         {#if p && series && free}
           <button class="btn" disabled={writing} onclick={() => write()}><Icon name="refresh" /> Skriv om protokollet</button>
         {/if}
