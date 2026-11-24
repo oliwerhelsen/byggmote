@@ -45,7 +45,7 @@ test('a project is made and opens on its first meeting', async () => {
   await expect(win.getByRole('button', { name: 'Spela in mötet' })).toBeVisible()
 })
 
-test('people are added with a Roll, change Roll and are taken out', async () => {
+test('people are added with a Roll and are taken out', async () => {
   await win.getByRole('button', { name: 'Projekt', exact: true }).click()
   const form = win.getByRole('form', { name: 'Lägg till person i Kv. Björken' })
   await form.getByLabel('Namn').fill('Anna Lind')

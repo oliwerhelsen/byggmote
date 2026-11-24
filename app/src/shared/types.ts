@@ -150,11 +150,10 @@ export interface Api {
   /** A project of this computer's own, with its first mötesserie, so a meeting can be recorded at once. Returns its id. */
   projectAdd(name: string): Promise<string>
   projectRename(id: string, name: string): Promise<void>
-  /** Only a project of this computer's own: one of Stommen's is Stommen's to remove. Its meetings' folders stay. */
+  /** Refused for one of Stommen's. Its meetings' folders stay. */
   projectDelete(id: string): Promise<void>
-  /** A person at the project's meetings, with their Roll if they have one. Only in a project of this computer's own. */
+  /** A person at the project's meetings, with their Roll if they have one. Refused in one of Stommen's. */
   personAdd(projectId: string, name: string, role: string): Promise<void>
-  personSetRole(projectId: string, personId: string, role: string): Promise<void>
   personRemove(projectId: string, personId: string): Promise<void>
   /** The meeting's protocol as a Markdown file the person chooses where to keep; false when they cancelled. */
   protocolSave(dir: string): Promise<boolean>
@@ -167,4 +166,4 @@ export interface Api {
 }
 
 export const CHANNELS = ['projects', 'meetings', 'agenda', 'meeting', 'audio', 'startSeries', 'pickRecording', 'process',
-  'writeProtocol', 'nameSpeaker', 'changePoint', 'addPoint', 'removePoint', 'restorePoint', 'confirmCheck', 'attend', 'stommenState', 'stommenSignIn', 'stommenSync', 'stommenSignOut', 'stommenSend', 'projectAdd', 'projectRename', 'projectDelete', 'personAdd', 'personSetRole', 'personRemove', 'protocolSave', 'protocolCopy', 'recordingStart', 'recordingChunk', 'recordingStop', 'recordingDiscard'] as const
+  'writeProtocol', 'nameSpeaker', 'changePoint', 'addPoint', 'removePoint', 'restorePoint', 'confirmCheck', 'attend', 'stommenState', 'stommenSignIn', 'stommenSync', 'stommenSignOut', 'stommenSend', 'projectAdd', 'projectRename', 'projectDelete', 'personAdd', 'personRemove', 'protocolSave', 'protocolCopy', 'recordingStart', 'recordingChunk', 'recordingStop', 'recordingDiscard'] as const

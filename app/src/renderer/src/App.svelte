@@ -30,6 +30,8 @@
 
   const project = $derived(projects.find((p) => p.id === chosen) ?? projects[0])
   // A recording or a job in progress is not left by a click in the menu.
+  // The views that are not about the chosen project's meetings.
+  const elsewhere = $derived(view.name === 'stommen' || view.name === 'projects')
   const held = $derived(view.name === 'recording' || view.name === 'working')
 
   async function load(): Promise<void> {
@@ -85,7 +87,7 @@
 
     <nav aria-label="Huvudmeny">
       {#if projects.length}
-        <button class="item" class:current={!['stommen', 'projects'].includes(view.name)} aria-current={!['stommen', 'projects'].includes(view.name) ? 'page' : undefined}
+        <button class="item" class:current={!elsewhere} aria-current={!elsewhere ? 'page' : undefined}
           disabled={held} onclick={() => go({ name: 'meetings' })}>
           <Icon name="list" /> Möten
         </button>
@@ -112,7 +114,7 @@
   <div class="content">
     <header>
       <p class="crumbs">
-        {#if project && view.name !== 'stommen' && view.name !== 'projects'}<span class="muted">{project.name}</span><span class="muted" aria-hidden="true">/</span>{/if}
+        {#if project && !elsewhere}<span class="muted">{project.name}</span><span class="muted" aria-hidden="true">/</span>{/if}
         <span>{TITLES[view.name]}</span>
       </p>
       <p class="promise small"><Icon name="lock" size={16} /> Ljud och utskrift stannar på den här datorn</p>

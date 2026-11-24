@@ -28,10 +28,11 @@ const point = (no: string): string => {
   if (!/^\d+\.\d+\.\d+$/.test(no)) throw new Error('unknown point')
   return no
 }
-const person = (id: string): string => {
+const personKey = (id: string): string => {
   if (!/^[^\s@-][^\s@]*$/.test(id)) throw new Error('unknown person')
-  return `@${id}`
+  return id
 }
+const person = (id: string): string => `@${personKey(id)}`
 
 // A project's id goes to the engine as an argument, so it may not be read as an option either.
 const projectId = (id: string): string => {
@@ -44,11 +45,18 @@ const words = (s: unknown, what: string): string => {
   return t
 }
 
+/** A project of this computer's own. One of Stommen's is Stommen's to name, remove and staff: the window hides those
+ * buttons, and this refuses them too, so a call from the window cannot do what the window does not offer. */
+async function own(id: string): Promise<Project> {
+  const p = (await call<{ projects: Project[] }>(['projects'])).projects.find((x) => x.id === projectId(id))
+  if (!p) throw new Error('unknown project')
+  if (p.stommen) throw new Error('Projektet kommer från Stommen. Ändra det där och hämta det igen.')
+  return p
+}
+
 /** The project's people as the engine keeps them (a person and a Roll each), for a change to write back whole. */
 async function members(id: string): Promise<{ person: string; role?: string }[]> {
-  const p = (await call<{ projects: Project[] }>(['projects'])).projects.find((x) => x.id === id)
-  if (!p) throw new Error('unknown project')
-  if (p.stommen) throw new Error('Projektets personer och Roller kommer från Stommen')
+  const p = await own(id)
   return p.people.map((x) => (x.role ? { person: x.id, role: x.role } : { person: x.id }))
 }
 
@@ -142,13 +150,20 @@ function handlers(tell: (p: Progress) => void): { [K in Exclude<keyof Api, 'onPr
 
     async projectAdd(name) {
       const a = await call<{ id: string }>(['areas', 'add'], { name: words(name, 'Namn') })
-      await call(['series', 'start', a.id], { name: 'Byggmöte' })
+      try {
+        await call(['series', 'start', a.id], { name: 'Byggmöte' })
+      } catch (e) {
+        await call(['areas', 'delete', a.id]).catch(() => {}) // no half-made project, so trying again is not a second one
+        throw e
+      }
       return a.id
     },
     async projectRename(id, name) {
+      await own(id)
       await call(['areas', 'set', projectId(id)], { name: words(name, 'Namn') })
     },
     async projectDelete(id) {
+      await own(id)
       await call(['areas', 'delete', projectId(id)])
     },
     async personAdd(id, name, role) {
@@ -157,14 +172,11 @@ function handlers(tell: (p: Progress) => void): { [K in Exclude<keyof Api, 'onPr
       if (cur.some((x) => x.person === p.id)) throw new Error('Personen finns redan i projektet')
       const r = String(role ?? '').trim()
       await setMembers(id, [...cur, r ? { person: p.id, role: r } : { person: p.id }])
-    },
-    async personSetRole(id, personId, role) {
-      const r = String(role ?? '').trim()
-      const who = person(personId).slice(1)
-      await setMembers(id, (await members(id)).map((x) => (x.person === who ? (r ? { person: who, role: r } : { person: who }) : x)))
+      // The engine leaves out the person who is using the app (they are at every meeting): say so, not nothing.
+      if (!(await members(id)).some((x) => x.person === p.id)) throw new Error('Det är du själv. Du är med på alla möten och behöver inte läggas till.')
     },
     async personRemove(id, personId) {
-      const who = person(personId).slice(1)
+      const who = personKey(personId)
       await setMembers(id, (await members(id)).filter((x) => x.person !== who))
     },
 
