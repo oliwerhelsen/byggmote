@@ -48,7 +48,7 @@ is or to open and edit. Both are made from `protocol.md`, so the headings, numbe
 `app/tests/export.spec.ts` compares them. Neither needs Word: the `.docx` is written by the `docx` library and the PDF
 is printed by the app's own hidden window, so it is the same on Windows, Linux and Mac.
 
-A Projekt can give the file its look: put `header.txt` (one line) and `logo.png` or `logo.jpg` in
+A Projekt can give the file its look: put `header.txt` (one line) and `logo.png`, `logo.jpg` or `logo.jpeg` in
 `mallar/<project id>/` in the folder where Byggmöte keeps its projects (Inställningar shows it). The header and logo
 go at the top of the Word file's every page and of the PDF's first. Without them the file is plain. The consent line and
 the justering line are not kept anywhere yet: `closingLines` in `app/src/main/index.ts` is where they go, and both files

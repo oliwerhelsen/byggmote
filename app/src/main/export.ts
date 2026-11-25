@@ -1,3 +1,6 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { BorderStyle, Document, Header, HeadingLevel, ImageRun, Packer, Paragraph, TextRun } from 'docx'
 
 // protocol.md is the one text the engine writes. Word and PDF are made from it here, so they cannot differ from
@@ -34,6 +37,7 @@ export function imageSize(data: Buffer, type: 'png' | 'jpg'): { width: number; h
   for (let i = 2; i + 9 < data.length; ) {
     if (data[i] !== 0xff) return null
     const marker = data[i + 1]
+    // SOF0-SOF15 hold the size, but C4 (Huffman tables), C8 (reserved) and CC (arithmetic conditioning) share the range and do not.
     if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) return { height: data.readUInt16BE(i + 5), width: data.readUInt16BE(i + 7) }
     i += 2 + data.readUInt16BE(i + 2)
   }
@@ -125,10 +129,15 @@ export function toHtml(md: string, sheet: Sheet): string {
 export async function toPdf(md: string, sheet: Sheet = {}): Promise<Buffer> {
   const { BrowserWindow } = await import('electron') // here and not at the top, so the Word part runs in a test with no Electron
   const win = new BrowserWindow({ show: false, webPreferences: { sandbox: true, javascript: false } })
+  // From a temp file, not a data: URL: Chromium refuses a data URL over a couple of megabytes, and a logo can be that big.
+  const dir = await mkdtemp(join(tmpdir(), 'byggmote-pdf-'))
   try {
-    await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(toHtml(md, sheet)))
+    const file = join(dir, 'protocol.html')
+    await writeFile(file, toHtml(md, sheet))
+    await win.loadFile(file)
     return await win.webContents.printToPDF({ pageSize: 'A4', margins: { top: 0.8, bottom: 0.8, left: 0.8, right: 0.8 } })
   } finally {
     win.destroy()
+    await rm(dir, { recursive: true, force: true })
   }
 }
