@@ -107,18 +107,25 @@ jobs:
         run: |
           $setup = Get-ChildItem dist -Filter 'Byggmote-*-win-x64.exe' | Select-Object -First 1
           Start-Process $setup.FullName -ArgumentList '/S', '/allusers' -Wait
-          $dir = Join-Path $env:ProgramFiles 'Byggmöte'
-          if (-not (Test-Path (Join-Path $dir 'Byggmöte.exe'))) { throw "not installed in $dir" }
+          # Found by what it carries, not by its name: the name has an ö, and this script's encoding is the runner's.
+          $engine = Get-ChildItem $env:ProgramFiles -Directory | ForEach-Object { Join-Path $_.FullName 'resources\engine' } | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $engine) {
+            Get-ChildItem $env:ProgramFiles, (Join-Path $env:LOCALAPPDATA 'Programs') -Directory -ErrorAction SilentlyContinue | Out-String | Write-Host
+            throw 'not installed for all users'
+          }
+          $dir = Split-Path (Split-Path $engine)
+          "installed in $dir"
           $resources = (Join-Path $dir 'resources') -replace '\\', '/'
           bash scripts/smoke-installed.sh $resources
           if ($LASTEXITCODE) { throw 'the installed engine failed' }
-          $meetings = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Byggmöte'
+          $meetings = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Byggmote-meetings'
           New-Item -ItemType Directory -Force $meetings | Out-Null
           Set-Content (Join-Path $meetings 'keep.txt') 'a meeting'
-          Start-Process (Join-Path $dir 'Uninstall Byggmöte.exe') -ArgumentList '/S', '/allusers' -Wait
+          $uninstall = Get-ChildItem $dir -Filter 'Uninstall*.exe' | Select-Object -First 1
+          Start-Process $uninstall.FullName -ArgumentList '/S', '/allusers' -Wait
           # The uninstaller copies itself away and returns before it is done.
-          for ($i = 0; $i -lt 60 -and (Test-Path (Join-Path $dir 'Byggmöte.exe')); $i++) { Start-Sleep 2 }
-          if (Test-Path (Join-Path $dir 'Byggmöte.exe')) { throw 'not uninstalled' }
+          for ($i = 0; $i -lt 60 -and (Test-Path $engine); $i++) { Start-Sleep 2 }
+          if (Test-Path $engine) { throw 'not uninstalled' }
           if (-not (Test-Path (Join-Path $meetings 'keep.txt'))) { throw 'the uninstall took the meetings' }
           'installed, ran and uninstalled; the meetings are still there'
 

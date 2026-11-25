@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "description": "Byggmöte: the desktop app around the engine",
+  "homepage": "https://github.com/oliwerhelsen/byggmote",
+  "author": "Byggmöte <info@stommen.io>",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
