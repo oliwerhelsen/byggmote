@@ -165,7 +165,7 @@ export interface Api {
   personAdd(projectId: string, name: string, role: string): Promise<void>
   personRemove(projectId: string, personId: string): Promise<void>
   /** The meeting's protocol as a Word, PDF or Markdown file the person chooses where to keep; false when they cancelled. */
-  protocolSave(dir: string): Promise<boolean>
+  protocolSave(dir: string, format: 'docx' | 'pdf' | 'md'): Promise<boolean>
   protocolCopy(dir: string): Promise<void>
   recordingStart(): Promise<string>
   recordingChunk(id: string, bytes: Uint8Array): Promise<void>
