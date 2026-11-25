@@ -91,7 +91,8 @@ jobs:
           [[ "$GITHUB_REF" == refs/tags/v* ]] && args+=("-c.extraMetadata.version=${GITHUB_REF_NAME#v}")
           if [ "$RUNNER_OS" = macOS ] && [ -z "$CSC_LINK" ]; then args+=(-c.mac.identity=-); fi
           if [ "$RUNNER_OS" = Windows ] && [ -n "$WIN_CSC_LINK" ]; then export CSC_LINK="$WIN_CSC_LINK" CSC_KEY_PASSWORD="$WIN_CSC_KEY_PASSWORD"; fi
-          [ -n "$CSC_LINK" ] || export CSC_IDENTITY_AUTO_DISCOVERY=false
+          # An empty CSC_LINK is still defined, and electron-builder then reads it as a path (the app folder, "not a file").
+          if [ -z "$CSC_LINK" ]; then unset CSC_LINK CSC_KEY_PASSWORD; export CSC_IDENTITY_AUTO_DISCOVERY=false; fi
           npm run build
           npx electron-builder "${args[@]}"
           ls -la dist
