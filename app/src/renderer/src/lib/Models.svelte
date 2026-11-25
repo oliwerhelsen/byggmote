@@ -7,8 +7,6 @@
 
   let { changed = () => {} }: { changed?: (missing: number) => void } = $props()
 
-  const KINDS: Record<ModelRow['type'], string> = { asr: 'Skriver ut det som sägs', diarize: 'Känner igen vem som talar', llm: 'Skriver protokollet' }
-
   let rows = $state<ModelRow[]>([])
   let loaded = $state(false)
   let busy = $state(false)
@@ -20,6 +18,14 @@
   // One language model is enough: the engine lists the other builds for other computers too, and the first is this one's.
   const shown = $derived(rows.filter((m) => m.type !== 'llm' || m.id === rows.find((x) => x.type === 'llm')?.id))
   const missing = $derived(shown.filter((m) => !m.downloaded))
+
+  // Bytes on this computer plus what the running download has fetched, over all bytes: one bar for the whole set.
+  const overall = $derived.by(() => {
+    const total = shown.reduce((n, m) => n + m.size, 0)
+    if (!total) return 0
+    const have = shown.reduce((n, m) => n + m.size * (m.downloaded ? 1 : Math.min(fraction[m.model] ?? 0, 1)), 0)
+    return have / total
+  })
 
   const bytes = (n: number): string => (n >= 1e9 ? `${(n / 1e9).toFixed(1).replace('.', ',')} GB` : `${Math.round(n / 1e6)} MB`)
 
@@ -66,49 +72,30 @@
 </script>
 
 {#if !loaded}
-  <p class="muted">Läser in modellerna.</p>
+  <p class="muted">Läser in.</p>
 {:else}
   {#if problem}
     <div class="note bad" role="alert"><Icon name="alert" /><p>{problem}</p></div>
   {/if}
-  <ul class="models" aria-label="Modeller">
-    {#each shown as m (m.id)}
-      {@const f = fraction[m.model]}
-      <li>
-        <div class="grow">
-          <p><strong>{m.name}</strong> <span class="muted small">{KINDS[m.type]}{m.langs.length ? `, ${m.langs.join(' och ')}` : ''}</span></p>
-          <p class="small muted">{bytes(m.size)}. {m.license}.</p>
-          {#if busy && f !== undefined && f < 1}
-            <progress max="1" value={f} aria-label="Hämtar {m.name}"></progress>
-          {/if}
-        </div>
-        {#if m.downloaded}
-          <span class="badge ok"><Icon name="check" size={14} /> På den här datorn</span>
-        {:else if busy}
-          <span class="badge">Väntar</span>
-        {:else}
-          <button class="btn" onclick={() => fetchModels([m.id])}>Hämta</button>
-        {/if}
-      </li>
-    {/each}
-  </ul>
+  <div class="models">
+    <p><strong>{shown.length - missing.length} av {shown.length}</strong> modeller installerade</p>
+    <progress max="1" value={overall} aria-label="Installerade modeller"></progress>
+  </div>
   <div class="row" style="margin-top: 16px">
     {#if busy}
-      <button class="btn" onclick={stop}>Avbryt hämtningen</button>
-      <p role="status" class="small muted">{current ? 'Hämtar' : 'Förbereder'}. Du kan fortsätta under tiden.</p>
+      <button class="btn" onclick={stop}>Avbryt installationen</button>
+      <p role="status" class="small muted">{current ? 'Installerar' : 'Förbereder'}. Du kan fortsätta under tiden.</p>
     {:else if missing.length}
       <button class="btn primary" onclick={() => fetchModels(missing.map((m) => m.id))}>
-        Hämta det som saknas ({bytes(missing.reduce((n, m) => n + m.size, 0))})
+        Installera det som saknas ({bytes(missing.reduce((n, m) => n + m.size, 0))})
       </button>
     {:else}
-      <p class="small muted">Allt finns på den här datorn. Byggmöte fungerar utan internet.</p>
+      <p class="small muted">Allt är installerat. Byggmöte fungerar utan internet.</p>
     {/if}
   </div>
 {/if}
 
 <style>
-  .models { display: flex; flex-direction: column; }
-  .models li { display: flex; align-items: center; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
-  .models li:last-child { border-bottom: 0; }
-  progress { width: 100%; height: 6px; margin-top: 6px; accent-color: var(--coral-700); }
+  .models { padding: 12px 0; }
+  progress { width: 100%; height: 8px; margin-top: 8px; accent-color: var(--coral-700); }
 </style>
