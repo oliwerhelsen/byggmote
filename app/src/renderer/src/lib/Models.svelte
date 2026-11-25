@@ -1,7 +1,7 @@
 <script lang="ts">
   // The models the engine needs, what is on this computer and a way to fetch the rest. One list for the first run and
   // for the settings. A download goes on while the person does something else: the window is free to leave.
-  import type { ModelEvent, ModelRow } from '../../../shared/types'
+  import type { Computer, ModelEvent, ModelRow } from '../../../shared/types'
   import Icon from './Icon.svelte'
   import { failure } from './format'
 
@@ -27,11 +27,19 @@
     return have / total
   })
 
+  // Too small is said plainly, before a person fetches 7 GB to find out: memory for the language model, and room on the disk.
+  let computer = $state<Computer | null>(null)
+  const llm = $derived(shown.find((m) => m.type === 'llm'))
+  const memoryGb = $derived(computer ? Math.round(computer.memory / 2 ** 30) : 0)
+  const tooLittleMemory = $derived(Boolean(computer && llm?.min_ram_gb && computer.memory < (llm.min_ram_gb - 1) * 2 ** 30))
+  const need = $derived(missing.reduce((n, m) => n + m.size, 0))
+  const tooLittleDisk = $derived(Boolean(computer && need && computer.free < need + 2e9))
+
   const bytes = (n: number): string => (n >= 1e9 ? `${(n / 1e9).toFixed(1).replace('.', ',')} GB` : `${Math.round(n / 1e6)} MB`)
 
   async function load(): Promise<void> {
     try {
-      rows = await window.api.models()
+      ;[rows, computer] = await Promise.all([window.api.models(), window.api.computer()])
     } catch (e) {
       problem = failure(e)
     } finally {
@@ -77,6 +85,21 @@
   {#if problem}
     <div class="note bad" role="alert"><Icon name="alert" /><p>{problem}</p></div>
   {/if}
+  {#if tooLittleMemory && llm}
+    <div class="note bad" role="alert">
+      <Icon name="alert" />
+      <p>
+        Datorn har {memoryGb} GB minne och språkmodellen som skriver protokollet behöver {llm.min_ram_gb} GB. Den här datorn är
+        för liten för att skriva protokoll. Möten kan ändå spelas in och transkriberas här.
+      </p>
+    </div>
+  {/if}
+  {#if tooLittleDisk && computer}
+    <div class="note bad" role="alert">
+      <Icon name="alert" />
+      <p>Det finns {bytes(computer.free)} ledigt på disken och modellerna behöver {bytes(need)}. Gör plats innan du installerar dem.</p>
+    </div>
+  {/if}
   <div class="models">
     <p><strong>{shown.length - missing.length} av {shown.length}</strong> modeller installerade</p>
     <progress max="1" value={overall} aria-label="Installerade modeller"></progress>
@@ -87,7 +110,7 @@
       <p role="status" class="small muted">{current ? 'Installerar' : 'Förbereder'}. Du kan fortsätta under tiden.</p>
     {:else if missing.length}
       <button class="btn primary" onclick={() => fetchModels(missing.map((m) => m.id))}>
-        Installera det som saknas ({bytes(missing.reduce((n, m) => n + m.size, 0))})
+        Installera det som saknas ({bytes(need)})
       </button>
     {:else}
       <p class="small muted">Allt är installerat. Byggmöte fungerar utan internet.</p>

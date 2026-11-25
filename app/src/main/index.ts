@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
-import { appendFile, copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { appendFile, copyFile, mkdir, readFile, rm, statfs, writeFile } from 'node:fs/promises'
+import { homedir, totalmem } from 'node:os'
 import { basename, extname, join, resolve } from 'node:path'
 import { app, BrowserWindow, clipboard, dialog, ipcMain, session, shell } from 'electron'
 import type { Agenda, Api, Done, Job, MeetingDetail, MeetingRow, ModelEvent, ModelRow, NewPoint, PointFields, Progress, Project, SeriesRef } from '../shared/types'
@@ -286,6 +288,13 @@ function handlers(tell: (p: Progress) => void, tellModels: (e: ModelEvent) => vo
 
     async modelsCancel() {
       fetching?.stop()
+    },
+
+    // The models go to Hugging Face's cache in the home folder. BYGGMOTE_MEMORY_GB: the tests name a smaller computer.
+    async computer() {
+      const gb = Number(process.env['BYGGMOTE_MEMORY_GB'])
+      const disk = await statfs(process.env['HF_HUB_CACHE'] && existsSync(process.env['HF_HUB_CACHE']) ? process.env['HF_HUB_CACHE'] : homedir())
+      return { memory: gb > 0 ? gb * 2 ** 30 : totalmem(), free: disk.bavail * disk.bsize }
     },
 
     async folderShow() {

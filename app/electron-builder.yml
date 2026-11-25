@@ -1,0 +1,52 @@
+# The installers: `npm run dist` after scripts/bundle-engine.sh, in CI from a tag (.github/workflows/release.yml).
+# Signing and notarisation happen when their secrets are there, and are skipped without them (README.md, Installing).
+appId: io.stommen.byggmote
+productName: Byggmöte
+artifactName: Byggmote-${version}-${os}-${arch}.${ext}
+copyright: Byggmöte
+directories:
+  output: dist
+  buildResources: build
+files:
+  - out/**
+  - package.json
+# The engine with its own Python, ffmpeg, llama-server and the licences that come with them.
+extraResources:
+  - from: engine-bundle
+    to: engine
+    filter: ['**/*']
+  - from: ../NOTICE.md
+    to: NOTICE.md
+
+win:
+  target: [{ target: nsis, arch: [x64] }]
+# An installer that asks for whom (this person, or everyone on the computer) and where. IT installs it silently with
+# `/S /allusers`, and the uninstaller takes `/S` too. Meetings are in Documents and are never touched; the app's own
+# settings stay as well, so a reinstall finds them.
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  shortcutName: Byggmöte
+  uninstallDisplayName: Byggmöte
+
+linux:
+  target: [AppImage, deb]
+  # ASCII for the command and the package. Not on the Mac: Electron finds its helpers by the product's name.
+  executableName: byggmote
+  category: Office
+  maintainer: Byggmöte <info@stommen.io>
+  synopsis: Byggmötesprotokoll från en inspelning, på datorn
+deb:
+  # A deb's uninstall (apt remove) removes the program only; meetings and settings are in the person's home folder.
+  packageName: byggmote
+
+mac:
+  target: [{ target: dmg, arch: [arm64] }]
+  category: public.app-category.productivity
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    NSMicrophoneUsageDescription: Byggmöte spelar in mötet med mikrofonen. Ljudet stannar på datorn.

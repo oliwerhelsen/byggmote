@@ -1,16 +1,41 @@
 // The engine is a command line program (engine/). The app starts it for each thing it wants and reads JSON back:
 // one object from most commands, a line per event from `run`.
 import { spawn, type ChildProcess } from 'node:child_process'
-import { join } from 'node:path'
+import { existsSync, readdirSync } from 'node:fs'
+import { basename, delimiter, join } from 'node:path'
 import { app } from 'electron'
 
 export class EngineError extends Error {}
 
-/** BYGGMOTE_ENGINE, else the development checkout's engine next to the app. */
-export function enginePath(): string {
-  if (process.env.BYGGMOTE_ENGINE) return process.env.BYGGMOTE_ENGINE
+/** The engine an installed app carries (scripts/bundle-engine.sh): its own Python, ffmpeg and llama-server. */
+export const bundled = (): string => join(process.resourcesPath, 'engine')
+
+/** The command and its first arguments: BYGGMOTE_ENGINE, else the installed app's Python, else the development checkout's engine. */
+export function enginePath(): string[] {
+  if (process.env.BYGGMOTE_ENGINE) return [process.env.BYGGMOTE_ENGINE]
+  if (app.isPackaged) {
+    const python = process.platform === 'win32' ? ['python', 'python.exe'] : ['python', 'bin', 'python3']
+    return [join(bundled(), ...python), '-m', 'byggmote']
+  }
   const bin = process.platform === 'win32' ? ['Scripts', 'byggmote.exe'] : ['bin', 'byggmote']
-  return join(app.getAppPath(), '..', 'engine', '.venv', ...bin)
+  return [join(app.getAppPath(), '..', 'engine', '.venv', ...bin)]
+}
+
+/** An installed app's engine finds ffmpeg, llama-server and the shipped models in the app, never on the person's path. */
+export function engineEnv(): NodeJS.ProcessEnv {
+  if (!app.isPackaged || process.env.BYGGMOTE_ENGINE) return process.env
+  const root = bundled()
+  const env: NodeJS.ProcessEnv = { ...process.env, PYTHONNOUSERSITE: '1', PYTHONDONTWRITEBYTECODE: '1' }
+  const key = Object.keys(env).find((k) => k.toUpperCase() === 'PATH') ?? 'PATH'
+  env[key] = [join(root, 'bin'), env[key]].filter(Boolean).join(delimiter)
+  const server = process.platform === 'win32' ? 'llama-server.exe' : 'llama-server'
+  const llama = join(root, 'bin', 'llama')
+  if (existsSync(llama)) {
+    const found = readdirSync(llama, { recursive: true, encoding: 'utf8' }).find((f) => basename(f) === server)
+    if (found) env.BYGGMOTE_LLAMA_SERVER ??= join(llama, found)
+  }
+  if (existsSync(join(root, 'models'))) env.BYGGMOTE_MODELS ??= join(root, 'models')
+  return env
 }
 
 // The engines at work. One that writes a protocol runs a language model for minutes: it does not outlive the app.
@@ -25,7 +50,8 @@ export function stopAll(): void {
 }
 
 function start(args: string[], input?: unknown) {
-  const child = spawn(enginePath(), args, { env: process.env, windowsHide: true })
+  const [command, ...first] = enginePath()
+  const child = spawn(command, [...first, ...args], { env: engineEnv(), windowsHide: true })
   running.add(child)
   child.on('close', () => running.delete(child)).on('error', () => running.delete(child))
   let err = ''

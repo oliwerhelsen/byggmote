@@ -19,6 +19,79 @@ justering, and the phone recorder.
 
 Where the engine comes from and what the models' licences ask: `NOTICE.md`.
 
+## Installing
+
+An installer carries all the app needs: the engine with its own Python, `ffmpeg` and `ffprobe`, and llama.cpp's
+`llama-server` on Windows and Linux. Nothing is expected on the computer's path. The models are not in it: the first
+run fetches them (about 7 GB, 9 GB on the Mac, one progress bar, Modeller under Inställningar later), and from then on the app works
+without internet.
+
+Download from the repo's releases:
+
+| Computer                                 | File                                              |
+| ---------------------------------------- | ------------------------------------------------- |
+| Windows 10 or 11, x64                    | `Byggmote-<version>-win-x64.exe`                  |
+| Ubuntu 22.04, Debian 12 or later, x64    | `Byggmote-<version>-linux-amd64.deb`, or the `.AppImage` for other distributions |
+| Mac with Apple silicon, macOS 12 or later | `Byggmote-<version>-mac-arm64.dmg`               |
+
+- **Windows.** Run the file and choose for whom. For IT, silently: `Byggmote-<version>-win-x64.exe /S /allusers`
+  installs for everyone in `C:\Program Files\Byggmöte`, `/S` alone for the person running it, and `/D=<folder>` (last)
+  picks the folder. Uninstall in Settings, Apps, or silently:
+  `"C:\Program Files\Byggmöte\Uninstall Byggmöte.exe" /S /allusers`.
+- **Linux.** `sudo apt install ./Byggmote-<version>-linux-amd64.deb`, and `sudo apt remove byggmote` to uninstall. The
+  AppImage runs as it is (`chmod +x`), and is uninstalled by removing the file.
+- **Mac.** Open the `.dmg` and drag Byggmöte to Program. Uninstall by moving it to the trash.
+
+An uninstall removes the program and nothing else. The meetings stay in `Documents/Byggmöte` (or the folder chosen
+under Inställningar), the settings in the app's own folder (`%APPDATA%\Byggmöte`, `~/.config/Byggmöte`,
+`~/Library/Application Support/Byggmöte`) and the models in `~/.cache/huggingface`. Removing those is a choice made by
+hand.
+
+### What computer it needs
+
+| | Records and transcribes | Writes the protocol |
+| --- | --- | --- |
+| Memory | 8 GB | 16 GB |
+| Disk | up to 2 GB for the app and 1.4 GB for speech and speakers (3.3 GB on the Mac) | 5.7 GB more for the language model (6 GB on the Mac) |
+| Graphics card | not used on Windows and Linux, the CPU does it all | not used on Windows and Linux; on the Mac MLX uses Apple silicon's |
+
+The 16 GB is what the engine asks of Qwen3.5 9B (`min_ram_gb` in `models.py`). On a computer with less, the models step
+says plainly that the computer is too small to write a protocol, and when the disk has too little room for the models.
+**Not measured yet:** how long a protocol takes, and whether 8 GB really carries an hour's meeting. That needs a
+person to run a recorded hour, from the installed app, on a five-year-old laptop with 8 GB, on a 16 GB laptop without
+a graphics card, and on a clean Windows and a clean Linux computer, and to write the times in this table.
+
+### Building the installers
+
+`.github/workflows/release.yml` builds all three from a tag `v*` and puts them on a draft release; a pull request that
+changes how they are made builds them too. On each runner it installs the result silently, runs the installed engine
+with nothing of the runner's on its path (`app/scripts/smoke-installed.sh`: Python, the model list, `ffmpeg` and
+`ffprobe` reading a recording, `llama-server`), uninstalls it silently and checks that a meetings folder is still
+there. It does not run a meeting through the installed app: that needs the models and a person to judge the protocol.
+
+On a computer of one's own, from `app/`: `./scripts/bundle-engine.sh`, then `npm run dist` (the installer for that
+system, in `app/dist/`). The bundle script pins every build it fetches by its checksum.
+
+### Signing
+
+Without signing, a company laptop will often refuse the file, and a person's own computer warns. Neither is done yet.
+The workflow signs as soon as the secrets are in the repo:
+
+- **Mac: not signed or notarised** (ad hoc only, which Apple silicon needs to start it). The Mac then says the app
+  cannot be opened, and only right-click, Öppna gets past it. Missing: membership of the Apple Developer Program (99 USD
+  a year, for the company), a Developer ID Application certificate from it, and the secrets `MAC_CSC_LINK` (the
+  certificate as base64 `.p12`), `MAC_CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID`.
+  electron-builder then signs and notarises.
+- **Windows: not signed.** SmartScreen says "Windows skyddade datorn", and AppLocker or Smart App Control blocks it.
+  Missing: a code signing certificate. Since 2023 a certificate authority only issues them on a hardware key or in a
+  cloud HSM, so a `.pfx` in a secret (`WIN_CSC_LINK`, `WIN_CSC_KEY_PASSWORD`, which the workflow takes) only works with
+  an older one. The likely way is Microsoft's Azure Artifact Signing (from about 10 USD a month; check that it takes a
+  Swedish company first), wired in with electron-builder's `win.azureSignOptions`; an OV certificate in a cloud HSM costs
+  about 250 to 500 USD a year.
+- **The Mac's speaker model.** pyannote community-1 is gated on Hugging Face, so a Mac build carries it only when the
+  secret `HF_TOKEN` belongs to an account that has accepted its terms. Without it the Mac build cannot tell speakers
+  apart. Windows and Linux use other speaker models and need nothing.
+
 ## The app
 
 Electron with Svelte 5, in `app/`. It has no data of its own: every view is what the engine's commands answer, and the

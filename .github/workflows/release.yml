@@ -1,0 +1,167 @@
+name: Release
+
+# The installers: a setup .exe for Windows, a .deb and an AppImage for Linux and a .dmg for the Mac, each carrying the engine,
+# its Python, ffmpeg and llama-server (app/scripts/bundle-engine.sh). A tag `v*` builds them and puts them on a draft
+# release; a pull request that changes how they are made builds them too, without a release. Each one is installed the way
+# IT would (silently), its engine run from the installed app with nothing of the runner's on its path, and uninstalled,
+# and the meetings folder must still be there after.
+
+on:
+  push:
+    tags: ['v*']
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - app/electron-builder.yml
+      - app/build/**
+      - app/scripts/**
+      - app/src/main/engine.ts
+      - engine/pyproject.toml
+      - engine/uv.lock
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV: 0.11.3
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            target: --win
+          # The oldest Ubuntu runner: the engine's packages are chosen for the glibc of the computer that builds them.
+          - name: Linux
+            os: ubuntu-22.04
+            target: --linux
+          - name: Mac
+            os: macos-15
+            target: --mac
+    defaults:
+      run:
+        shell: bash
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        run: pipx install "uv==$UV"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install the app's tools
+        run: npm ci
+
+      - name: Keep the downloaded builds between runs
+        uses: actions/cache@v6
+        with:
+          path: app/engine-bundle-downloads
+          key: bundle-${{ runner.os }}-${{ hashFiles('app/scripts/bundle-engine.sh') }}
+
+      - name: Bundle the engine
+        run: ./scripts/bundle-engine.sh
+        env:
+          # The Mac's speaker model is gated: a token whose account accepted its terms fetches it (README.md, Installing).
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+
+      # Signed when the certificates are in the repo's secrets, unsigned otherwise (README.md, Installing): on the Mac
+      # then ad hoc, which Apple silicon needs to start it at all.
+      - name: Build the installer
+        run: |
+          args=(${{ matrix.target }} --publish never)
+          [[ "$GITHUB_REF" == refs/tags/v* ]] && args+=("-c.extraMetadata.version=${GITHUB_REF_NAME#v}")
+          if [ "$RUNNER_OS" = macOS ] && [ -z "$CSC_LINK" ]; then args+=(-c.mac.identity=-); fi
+          if [ "$RUNNER_OS" = Windows ] && [ -n "$WIN_CSC_LINK" ]; then export CSC_LINK="$WIN_CSC_LINK" CSC_KEY_PASSWORD="$WIN_CSC_KEY_PASSWORD"; fi
+          [ -n "$CSC_LINK" ] || export CSC_IDENTITY_AUTO_DISCOVERY=false
+          npm run build
+          npx electron-builder "${args[@]}"
+          ls -la dist
+        env:
+          CSC_LINK: ${{ runner.os == 'macOS' && secrets.MAC_CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ runner.os == 'macOS' && secrets.MAC_CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+
+      - name: Install silently, run the installed engine, uninstall silently (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist -Filter 'Byggmote-*-win-x64.exe' | Select-Object -First 1
+          Start-Process $setup.FullName -ArgumentList '/S', '/allusers' -Wait
+          $dir = Join-Path $env:ProgramFiles 'Byggmöte'
+          if (-not (Test-Path (Join-Path $dir 'Byggmöte.exe'))) { throw "not installed in $dir" }
+          $resources = (Join-Path $dir 'resources') -replace '\\', '/'
+          bash scripts/smoke-installed.sh $resources
+          if ($LASTEXITCODE) { throw 'the installed engine failed' }
+          $meetings = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Byggmöte'
+          New-Item -ItemType Directory -Force $meetings | Out-Null
+          Set-Content (Join-Path $meetings 'keep.txt') 'a meeting'
+          Start-Process (Join-Path $dir 'Uninstall Byggmöte.exe') -ArgumentList '/S', '/allusers' -Wait
+          # The uninstaller copies itself away and returns before it is done.
+          for ($i = 0; $i -lt 60 -and (Test-Path (Join-Path $dir 'Byggmöte.exe')); $i++) { Start-Sleep 2 }
+          if (Test-Path (Join-Path $dir 'Byggmöte.exe')) { throw 'not uninstalled' }
+          if (-not (Test-Path (Join-Path $meetings 'keep.txt'))) { throw 'the uninstall took the meetings' }
+          'installed, ran and uninstalled; the meetings are still there'
+
+      - name: Install the package, run the installed engine, remove it (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q ./dist/Byggmote-*-linux-amd64.deb
+          dir=$(dpkg -L byggmote | grep '/resources$' | head -1)
+          ./scripts/smoke-installed.sh "$dir"
+          mkdir -p ~/Documents/Byggmöte && echo 'a meeting' > ~/Documents/Byggmöte/keep.txt
+          sudo apt-get remove -y -q byggmote
+          [ ! -e "$dir" ] || { echo "not removed: $dir"; exit 1; }
+          [ -f ~/Documents/Byggmöte/keep.txt ] || { echo 'the removal took the meetings'; exit 1; }
+          echo 'installed, ran and removed; the meetings are still there'
+
+      - name: Run the built app's engine (Mac)
+        if: runner.os == 'macOS'
+        run: ./scripts/smoke-installed.sh dist/mac-arm64/*.app/Contents/Resources
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: installer-${{ matrix.name }}
+          path: |
+            app/dist/*.exe
+            app/dist/*.deb
+            app/dist/*.AppImage
+            app/dist/*.dmg
+          if-no-files-found: error
+
+  release:
+    name: Draft release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - name: A draft release with the installers, for a person to check and publish
+        run: gh release create "$GITHUB_REF_NAME" dist/* --draft --generate-notes --repo "$GITHUB_REPOSITORY"
+        env:
+          GH_TOKEN: ${{ github.token }}

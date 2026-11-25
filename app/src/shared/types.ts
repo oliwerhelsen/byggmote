@@ -122,7 +122,9 @@ export type StommenSync = { projects: number; people: number; vacant: number }
 /** What the person has set in the app itself, kept in the app's own folder. `setUp`: the first-run steps are done. */
 export type Settings = { setUp: boolean; name: string; voices: boolean; openAtLogin: boolean; microphone: string }
 /** A model the engine knows, as `byggmote models --json` lists it. */
-export type ModelRow = { id: string; type: 'asr' | 'diarize' | 'llm'; name: string; langs: string[]; model: string; size: number; license: string; downloaded: boolean }
+export type ModelRow = { id: string; type: 'asr' | 'diarize' | 'llm'; name: string; langs: string[]; model: string; size: number; license: string; downloaded: boolean; min_ram_gb?: number }
+/** This computer as far as the models care: its memory and the free space where the models go, in bytes. */
+export type Computer = { memory: number; free: number }
 /** What a download says as it goes: bytes of one model, one finished, one failed, and the end. */
 export type ModelEvent = { event: 'download' | 'downloaded' | 'error' | 'done'; model?: string; id?: string; done?: number; total?: number; message?: string; failed?: string[] }
 
@@ -180,6 +182,7 @@ export interface Api {
   /** Resolves when the download has ended; `ids` empty means every model the app needs. Progress comes through `onModels`. */
   modelsDownload(ids: string[]): Promise<void>
   modelsCancel(): Promise<void>
+  computer(): Promise<Computer>
   /** Where the meetings are kept now, and a way to show or change it. `folderChoose` resolves null when cancelled. */
   folderShow(): Promise<void>
   folderChoose(): Promise<string | null>
@@ -188,4 +191,4 @@ export interface Api {
 }
 
 export const CHANNELS = ['projects', 'meetings', 'agenda', 'meeting', 'audio', 'startSeries', 'pickRecording', 'process',
-  'writeProtocol', 'nameSpeaker', 'setTitle', 'changePoint', 'addPoint', 'removePoint', 'restorePoint', 'confirmCheck', 'attend', 'stommenState', 'stommenSignIn', 'stommenSync', 'stommenSignOut', 'stommenSend', 'projectAdd', 'projectRename', 'projectDelete', 'personAdd', 'personRemove', 'protocolSave', 'protocolCopy', 'recordingStart', 'recordingChunk', 'recordingStop', 'recordingDiscard', 'settings', 'settingsSet', 'setUp', 'models', 'modelsDownload', 'modelsCancel', 'folderShow', 'folderChoose'] as const
+  'writeProtocol', 'nameSpeaker', 'setTitle', 'changePoint', 'addPoint', 'removePoint', 'restorePoint', 'confirmCheck', 'attend', 'stommenState', 'stommenSignIn', 'stommenSync', 'stommenSignOut', 'stommenSend', 'projectAdd', 'projectRename', 'projectDelete', 'personAdd', 'personRemove', 'protocolSave', 'protocolCopy', 'recordingStart', 'recordingChunk', 'recordingStop', 'recordingDiscard', 'settings', 'settingsSet', 'setUp', 'models', 'modelsDownload', 'modelsCancel', 'computer', 'folderShow', 'folderChoose'] as const

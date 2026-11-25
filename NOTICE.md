@@ -32,6 +32,16 @@ CC BY 4.0 asks for attribution: the app has to name these models and their maker
 `llama-server` is from llama.cpp (The ggml authors, MIT). It is not in the repo. An app that ships a build of it ships
 its `LICENSE` too.
 
+## What the installers carry
+
+`app/scripts/bundle-engine.sh` puts these next to the engine, each a pinned build, and the installer ships their
+licences in `resources/engine/licenses/`:
+
+- Python 3.12 from python-build-standalone (through uv), under the PSF licence, with the engine's packages under theirs.
+- `ffmpeg` and `ffprobe`: on Windows and Linux BtbN's LGPL 2.1 builds, on the Mac Martin Riedl's builds, which are
+  GPL 3.0. They run as separate programs; the source is at https://ffmpeg.org.
+- `llama-server` on Windows and Linux, with llama.cpp's `LICENSE`.
+
 ## The app
 
 The app is built on Electron (MIT) and Svelte (MIT). Its fonts are in the app, so nothing is fetched: Inter, Josefin
