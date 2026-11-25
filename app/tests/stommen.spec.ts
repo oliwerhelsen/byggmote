@@ -35,6 +35,7 @@ let tooOld = false // Stommen wants a newer Byggmöte
 let adjusted: { on: string; method: string; by: string } | null = null
 const kept = new Map<string, number>() // what Stommen has taken, by Idempotency-Key: the version it answered with
 let held: { key: string; number: number; heldOn: string } | null = null // the meeting Stommen has a protocol of
+let older = false // a Stommen from before the read of a Protokoll's Justering: only the send is on that path
 
 let stommen: Server
 let address: string
@@ -66,6 +67,7 @@ function answer(method: string, path: string, headers: IncomingHttpHeaders, body
     held = { key: sent.series.key, number: sent.meeting.number, heldOn: sent.meeting.heldOn }
     return [200, { meetingId: 'm4', minutesId: 'p4', documentId: 'd4', version: kept.get(key), replaced: kept.get(key)! > 1 }]
   }
+  if (older && method === 'GET' && path.endsWith('/minutes')) return [405, { message: 'GET method not allowed' }]
   if (method === 'GET' && path === `/api/mobile/v1/projects/${EKEN}/minutes`) {
     // As Stommen answers (its #272): each Protokoll by the Mötesserie's key and number, with a field it might add one day
     const minutes = held ? [{ series: { key: held.key, name: 'Byggmöte' }, number: held.number, heldOn: held.heldOn, version: kept.size,
@@ -348,4 +350,24 @@ test('the meeting asks Stommen when it is opened, and Stommen wins', async () =>
   })
   expect(refused).toContain('justerat')
   adjusted = null
+})
+
+test('a Stommen that cannot say yet is quiet when the meeting opens, and says why when the person asks', async () => {
+  adjusted = null
+  older = true
+  try {
+    await win.getByRole('button', { name: 'Till möten' }).click()
+    await win.getByRole('button', { name: 'Byggmöte 4' }).click()
+    const card = win.getByRole('region', { name: 'Till Stommen' })
+    // what was known last stays, and nothing alarms
+    await expect(card).toContainText('Justerat 24 november 2026, signerat, av Maria Lindqvist och Elin Sjöberg.')
+    await expect(card.getByRole('button', { name: 'Se efter om det är justerat' })).toBeEnabled()
+    await expect(card.getByRole('alert')).toHaveCount(0)
+
+    await card.getByRole('button', { name: 'Se efter om det är justerat' }).click()
+    await expect(card.getByRole('alert')).toHaveText('Stommen kan inte svara på om protokollet är justerat. Den behöver en nyare version först.')
+    await expect(card).not.toContainText('Projektet finns inte')
+  } finally {
+    older = false
+  }
 })

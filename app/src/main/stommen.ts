@@ -266,7 +266,22 @@ export async function confirmation(dir: string): Promise<Confirmation | null> {
   const bearer = token(saved)
   if (!saved || !bearer) throw new StommenError('Byggmöte är inte inloggat i Stommen.')
   const at = await call<{ project: string; series: string; no: number }>(['stommen', 'where', dir])
-  const { minutes } = await get<{ minutes: Listed[] }>(saved.server, bearer, `/projects/${encodeURIComponent(at.project)}/minutes`)
+  const res = await send(saved.server, `/api/mobile/v1/projects/${encodeURIComponent(at.project)}/minutes`, { token: bearer })
+  if (res.status === 401) {
+    await forget()
+    throw new StommenError('Inloggningen i Stommen gäller inte längre. Logga in igen.')
+  }
+  // Stommen's own 404 names the Projekt (`not_found`). One from before this read has only the send on the path (405),
+  // or nothing there at all: that is not a Projekt that is gone.
+  const body = (await res.json().catch(() => null)) as { minutes?: Listed[]; error?: { code?: string } } | null
+  if (res.status === 404 && body?.error?.code === 'not_found') {
+    throw new StommenError('Projektet finns inte i Stommen längre, eller så ser du det inte där.')
+  }
+  if (res.status === 404 || res.status === 405) {
+    throw new StommenError('Stommen kan inte svara på om protokollet är justerat. Den behöver en nyare version först.')
+  }
+  if (!res.ok) throw await refusal(res)
+  const minutes = Array.isArray(body?.minutes) ? body.minutes : []
   const it = minutes.find((x) => x.series?.key === at.series && x.number === at.no)?.confirmation
   // Only the fields Byggmöte keeps: Stommen may add to its answer. The engine checks them before anything is written.
   const given = it ? { on: it.on, method: it.method, by: it.by } : null

@@ -69,20 +69,21 @@
       problem = failure(e)
     }
   }
-  // A sent protocol's Justering is asked for when the meeting is opened, and again when the person asks.
+  // A sent protocol's Justering is asked for when the meeting is opened, and again when the person asks. On opening
+  // a failure is quiet and the last known state stays; only the person's own ask says what went wrong.
   void load().then(() => {
-    if (connected && m?.stommen?.sent_at) void look()
+    if (connected && m?.stommen?.sent_at) void look(true)
   })
 
-  async function look(): Promise<void> {
+  async function look(quiet = false): Promise<void> {
     asked = 'busy'
-    sendProblem = ''
+    if (!quiet) sendProblem = ''
     try {
       await window.api.stommenConfirmation(dir)
       await load()
       asked = 'done'
     } catch (e) {
-      sendProblem = failure(e)
+      if (!quiet) sendProblem = failure(e)
       asked = ''
     }
   }
@@ -497,7 +498,7 @@
               {/if}
               {#if connected && (standing.sent_at || confirmed) && sending !== 'ask'}
                 <div class="row" style="margin-top: 12px">
-                  <button class="btn" disabled={asked === 'busy'} onclick={look}>
+                  <button class="btn" disabled={asked === 'busy'} onclick={() => look()}>
                     <Icon name="refresh" /> {asked === 'busy' ? 'Ser efter' : 'Se efter om det är justerat'}
                   </button>
                   {#if asked === 'done' && !confirmed}<span class="small muted" role="status">Inte justerat i Stommen än.</span>{/if}
