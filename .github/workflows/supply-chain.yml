@@ -1,0 +1,62 @@
+name: Supply chain
+
+# NOTICE.md must match the code (scripts/check-notice.py), and each release gets a software bill of materials
+# (scripts/sbom.py, CycloneDX) attached to it. Its own file: the tests are in test.yml.
+
+on:
+  pull_request:
+    paths:
+      - NOTICE.md
+      - scripts/**
+      - engine/pyproject.toml
+      - engine/uv.lock
+      - engine/src/byggmote/models.py
+      - app/package.json
+      - app/package-lock.json
+      - .github/workflows/supply-chain.yml
+  push:
+    branches: [main]
+    paths:
+      - NOTICE.md
+      - scripts/**
+      - engine/pyproject.toml
+      - engine/uv.lock
+      - engine/src/byggmote/models.py
+      - app/package.json
+      - app/package-lock.json
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  notice:
+    name: NOTICE.md matches the code
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 scripts/check-notice.py
+
+  sbom:
+    name: SBOM
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: notice
+    # A release is the only place it is published; the other runs show that it can be made.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Make the SBOM
+        env:
+          VERSION: ${{ github.event.release.tag_name || github.sha }}
+        run: python3 scripts/sbom.py "$VERSION" > byggmote-sbom.cdx.json
+      - name: Attach it to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" byggmote-sbom.cdx.json --clobber
