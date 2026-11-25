@@ -1,3 +1,7 @@
 node_modules/
 out/
 test-results/
+# The installers and what they carry (scripts/bundle-engine.sh, electron-builder.yml)
+engine-bundle/
+engine-bundle-downloads/
+dist/
