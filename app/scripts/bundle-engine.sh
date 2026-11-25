@@ -3,7 +3,7 @@
 #
 #   python/   a standalone Python (python-build-standalone, through uv) with the engine and its locked packages in it
 #   bin/      ffmpeg and ffprobe, and llama-server on Windows and Linux, each a pinned build checked by its checksum
-#   models/   the Mac's speaker model, when there is one to ship (README.md: it is gated where it is published)
+#   models/   the Mac's speaker model, from this repo's models release (checksummed)
 #
 # Nothing is expected on the user's path: the app starts this Python and puts bin/ first on the engine's PATH.
 # Run from app/ with uv on the path, in CI (.github/workflows/release.yml) or on a developer's computer.
@@ -99,15 +99,19 @@ if [ "$OS" != mac ]; then
   curl -sSfL -o "$OUT/licenses/llama.cpp.txt" "https://raw.githubusercontent.com/ggml-org/llama.cpp/$LLAMA/LICENSE"
 fi
 
-# The Mac's speaker model: from the development checkout, or fetched with a Hugging Face token that has accepted its terms.
+# The Mac's speaker model: from the development checkout, else the copy on this repo's own release (CC BY 4.0, redistributed
+# unmodified, with its attribution inside), checked against its checksum. No Hugging Face account or token is needed.
+SPEAKER_MODEL=https://github.com/oliwerhelsen/byggmote/releases/download/models-pyannote-community-1/pyannote-community-1.tar.gz
+SPEAKER_MODEL_SHA=bc675caec6b731125fab6d07b25bbbabc8365be845377049bfa236121347acaf
 if [ "$OS" = mac ]; then
+  mkdir -p "$OUT/models"
   if [ -d "$ENGINE/models/pyannote-community-1" ]; then
-    mkdir -p "$OUT/models" && cp -R "$ENGINE/models/pyannote-community-1" "$OUT/models/"
-  elif [ -n "${HF_TOKEN:-}" ]; then
-    "$PY" -c 'import sys; from huggingface_hub import snapshot_download; snapshot_download("pyannote/speaker-diarization-community-1", revision="3533c8cf8e369892e6b79ff1bf80f7b0286a54ee", local_dir=sys.argv[1])' "$OUT/models/pyannote-community-1"
+    cp -R "$ENGINE/models/pyannote-community-1" "$OUT/models/"
   else
-    echo "warning: no speaker model for the Mac (engine/models/pyannote-community-1 or HF_TOKEN): this build cannot tell speakers apart" >&2
+    fetch "$SPEAKER_MODEL" pyannote-community-1.tar.gz "$SPEAKER_MODEL_SHA"
+    tar -xzf "$DL/pyannote-community-1.tar.gz" -C "$OUT/models"
   fi
+  [ -f "$OUT/models/pyannote-community-1/config.yaml" ] || { echo "the Mac's speaker model is missing" >&2; exit 1; }
 fi
 
 "$OUT/bin/ffmpeg" -version | head -1

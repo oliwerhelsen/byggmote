@@ -103,9 +103,9 @@ The workflow signs as soon as the secrets are in the repo:
   an older one. The likely way is Microsoft's Azure Artifact Signing (from about 10 USD a month; check that it takes a
   Swedish company first), wired in with electron-builder's `win.azureSignOptions`; an OV certificate in a cloud HSM costs
   about 250 to 500 USD a year.
-- **The Mac's speaker model.** pyannote community-1 is gated on Hugging Face, so a Mac build carries it only when the
-  secret `HF_TOKEN` belongs to an account that has accepted its terms. Without it the Mac build cannot tell speakers
-  apart. Windows and Linux use other speaker models and need nothing.
+- **The Mac's speaker model.** pyannote community-1 is gated on Hugging Face but CC BY 4.0, so a copy sits unmodified
+  on this repo's release `models-pyannote-community-1`, with its attribution. The Mac build fetches it from there and
+  checks its SHA-256 (`bundle-engine.sh`); no token is needed. Windows and Linux use other speaker models.
 
 ## The app
 
@@ -191,7 +191,8 @@ Python, installed with [uv](https://docs.astral.sh/uv/). It needs `ffmpeg` on th
     uv run byggmote models
 
 Speech recognition and the language model download from Hugging Face on first use (`byggmote models download`). The
-speaker model on the Mac, pyannote community-1, is gated there: put it in `engine/models/pyannote-community-1/` once.
+speaker model on the Mac, pyannote community-1, is gated there: take it from this repo's release `models-pyannote-community-1`
+and unpack it into `engine/models/` once.
 A development checkout finds it there; an app sets `BYGGMOTE_MODELS`.
 
 `BYGGMOTE_CONFIG=<folder>` gives the engine a knowledge base of its own in that folder, for trying things out without
