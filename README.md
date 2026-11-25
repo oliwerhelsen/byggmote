@@ -11,7 +11,8 @@ and sound, records a meeting or takes a recording, names the speakers, and lets 
 signs in to Stommen as a person, fetches the person's Projekt with their Roller and Kontakter, and sends a protocol
 there when the person asks. When the meeting is opened, and when the person asks, it reads from Stommen whether a sent
 protocol is justerat there, and shows when, how and by whom; a justerat protocol is no longer corrected or sent from
-the app. A correction is not tied to who is signed in, and the app is not packaged for installing.
+the app. A correction is not tied to who is signed in. It installs on Windows, Linux and the Mac without developer
+tools (Installing, below), not yet signed.
 It also works with no Stommen at all: a project is made in the window (Projekt in the menu), with the people at its
 meetings and their Roller, and its first mötesserie is started with it. A protocol is kept as `protocol.md` in the
 meeting's folder, and the window can save it as a file or copy its text. Stommen is the thing to add later, from the
@@ -38,12 +39,20 @@ Download from the repo's releases:
 
 - **Windows.** Run the file and choose for whom. For IT, silently: `Byggmote-<version>-win-x64.exe /S /allusers`
   installs for everyone in `C:\Program Files\Byggmote`, `/S` alone for the person running it, and `/D=<folder>` (last)
-  picks the folder. Files and folders are named `Byggmote`, without the ö, so a script need not quote it; the
+  picks the folder: give it a folder of its own, since the uninstaller removes that whole folder with everything in
+  it. Files and folders are named `Byggmote`, without the ö, so a script need not quote it; the
   name a person reads is Byggmöte. Uninstall in Settings, Apps, or silently:
   `"C:\Program Files\Byggmote\Uninstall Byggmote.exe" /S /allusers`.
 - **Linux.** `sudo apt install ./Byggmote-<version>-linux-amd64.deb`, and `sudo apt remove byggmote` to uninstall. The
   AppImage runs as it is (`chmod +x`), and is uninstalled by removing the file.
-- **Mac.** Open the `.dmg` and drag Byggmöte to Program. Uninstall by moving it to the trash.
+- **Mac.** Open the `.dmg` and drag Byggmöte to Program. Uninstall by moving it to the trash. There is no `.pkg`, so
+  a script installs it from the disk image:
+
+      hdiutil attach -nobrowse -quiet -mountpoint /Volumes/Byggmote Byggmote-<version>-mac-arm64.dmg
+      sudo cp -R /Volumes/Byggmote/Byggmote.app /Applications/
+      hdiutil detach -quiet /Volumes/Byggmote
+
+  and removes it with `sudo rm -rf /Applications/Byggmote.app`.
 
 An uninstall removes the program and nothing else. The meetings stay in `Documents/Byggmöte` (or the folder chosen
 under Inställningar), the settings in the app's own folder (`%APPDATA%\Byggmote`, `~/.config/Byggmote`,
@@ -67,10 +76,13 @@ a graphics card, and on a clean Windows and a clean Linux computer, and to write
 ### Building the installers
 
 `.github/workflows/release.yml` builds all three from a tag `v*` and puts them on a draft release; a pull request that
-changes how they are made builds them too. On each runner it installs the result silently, runs the installed engine
-with nothing of the runner's on its path (`app/scripts/smoke-installed.sh`: Python, the model list, `ffmpeg` and
-`ffprobe` reading a recording, `llama-server`), uninstalls it silently and checks that a meetings folder is still
-there. It does not run a meeting through the installed app: that needs the models and a person to judge the protocol.
+changes how they are made builds them too, unsigned and without any of the repo's secrets. On each runner it installs
+the result silently, runs the installed engine with nothing of the runner's on its path
+(`app/scripts/smoke-installed.sh`: Python, the model list, `ffmpeg` and `ffprobe` reading a recording,
+`llama-server`), uninstalls it silently and checks that the meetings folder the installed engine uses by default
+(`Documents/Byggmöte`), with a project it made there, is as it was (`app/scripts/meetings-kept.sh`). On the Mac it
+installs from the disk image with the script above. It does not run a meeting through the installed app: that
+needs the models and a person to judge the protocol.
 
 On a computer of one's own, from `app/`: `./scripts/bundle-engine.sh`, then `npm run dist` (the installer for that
 system, in `app/dist/`). The bundle script pins every build it fetches by its checksum.
