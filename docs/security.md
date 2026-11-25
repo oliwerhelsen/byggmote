@@ -30,18 +30,24 @@ Ljudet och hela transkriptet lämnar aldrig datorn. Tal, talare och protokoll g�
 | Stommen, `GET /api/mobile/v1/projects/<id>/minutes` | När ett skickat protokoll öppnas, och på begäran | Ingenting skickas utom token. Svaret säger om protokollet är justerat där, när och av vem. |
 | Stommen, `POST /api/mobile/v1/projects/<id>/minutes` | Bara när personen trycker Skicka och godkänner listan, och inga kontroller återstår | Möteserie och möte (nummer, datum, längd), deltagare (namn, roll), rubriker, protokolltexten, och per punkt: nummer, rubrik, typ, text, roll, datum, öppen, hur många sekunder in i inspelningen den sades, **raden som sades där** och **vem som sa den**, om den skrevs av modellen, ändrades eller lades till av en person, bekräftade belopp. |
 | `huggingface.co` (och Hugging Faces egna nedladdningsadresser, som de byter vid behov) | Bara när modeller hämtas: "Modeller" i första start och Inställningar, eller när ett möte körs och en tal- eller talarmodell saknas. Protokollmodellen hämtas aldrig av en körning. | Förfrågan om en fast commit av ett repo, och filerna. Inget om personen eller mötet. Använder operativsystemets certifikatlager, så en TLS-inspektion i företaget fungerar. |
-| `otel.pyannote.ai` | **Bara på Mac, när talarmodellen körs, om inget stänger det** (se Luckor) | Bibliotekets version, ett slumpat sessions-id, pipelinens ursprung och namn, ljudets längd i sekunder, antal talare. Inte ljud, inte text. |
 | Systemets webbläsare | Personen klickar en https-länk i fönstret | Ingenting från appen. |
 
 Inget annat går ut från Byggmötes egen kod. Fönstret kan inte kalla ut (`Content-Security-Policy: connect-src 'self'`), laddar inga teckensnitt eller
 skript utifrån, och appen har ingen uppdateringsfunktion, ingen kraschrapportering och ingen analys (sökt i koden).
 Språkmodellens server lyssnar bara på `127.0.0.1`, med en nyckel per körning, `--offline`, och förbigår datorns proxy.
 
-**Telemetri.** I Byggmötes egen kod finns ingen. Undantaget är pyannote-audio 4.0.7 på Mac: **den är påslagen som
-standard i dag**, Byggmöte stänger inte av den, och den slås av med `PYANNOTE_METRICS_ENABLED=false` (kontrollerat: med den satt slås inget upp, utan den slås
-`otel.pyannote.ai` upp). På Windows och Linux används inte pyannote. En nätverksfångst av hela appen är **inte gjord**:
-Electrons och Chromiums egen trafik är okontrollerad, så påståendet "ingen telemetri" är bara delvis styrkt (koden är
-granskad, och uppslagningen av `otel.pyannote.ai` är sedd); se Luckor.
+**Telemetri.** Ingen. Byggmöte skickar ingen användningsstatistik någonstans. pyannote-audio 4.0.7 (Mac) skulle
+skicka sin egen till `otel.pyannote.ai` om inget stängde det; motorn sätter `PYANNOTE_METRICS_ENABLED=false` när den startar
+(i `byggmote/__init__.py`, så det gäller `run`, `serve` och alla andra kommandon, och appen sätter det i motorns miljö),
+och ett test fallerar om det saknas. Kontrollerat: med den satt slås inget upp, utan den slås `otel.pyannote.ai` upp.
+Windows och Linux använder inte pyannote.
+
+**Nätverksfångst, 2026-11-25 (macOS, utvecklingskörning, delvis).** Appen startades utan modeller och med
+`HF_HUB_OFFLINE=1`, och lämnades gå i 40 sekunder med Chromiums nätverksloggning på (`--log-net-log`, allt) och `lsof -i`
+av appens och motorns processer varannan sekund. Sett: **inga fjärrvärdar**, inga namnuppslagningar, inga öppna
+uttag, inga begäranden från Chromium. Inte fångat: ett möte som körs (talarmodellen finns inte i den datorns cache),
+den paketerade appen, och paketfångst med `tcpdump` (kräver root). Påståendet "ingen telemetri" bygger alltså på koden,
+på att den enda kända källan är avstängd och kontrollerad, och på denna fångst av en app i vila; se Luckor.
 
 ## Processer appen startar
 
@@ -90,10 +96,9 @@ skals variabler: sätt dem i systemet (MDM, `launchctl setenv`, systemvariabel).
 
 Funna när detta skrevs. Inget av det här lovas som rättat.
 
-1. **pyannote-telemetri på Mac är på.** Byggmöte stänger inte av den. Åtgärd tills vidare: `PYANNOTE_METRICS_ENABLED=false` i miljön, eller blockera `otel.pyannote.ai`.
-2. **Ingen avstängning av Stommen för alla.** Inloggningsformuläret finns alltid; ingen policy eller konfigurationsfil stänger det.
-3. **Ingen nätverksfångst av hela appen.** Kontrollerat: koden, och uppslagningen av `otel.pyannote.ai` när motorns bibliotek körs. Inte kontrollerat: Chromiums och Electrons egen trafik, eller en körning av hela appen med fångst.
-4. **Okrypterad kunskapsbas.** Ljud, transkript, namn och röstavtryck ligger som vanliga filer. Skyddet är datorns diskkryptering och filrättigheter.
-5. **Utvecklingskörningar** (inte installerade) använder datorns `ffmpeg` och `llama-server`, så deras version och licens beror på datorn.
-6. **Installerarna är inte signerade.** Mac: bara ad hoc (inte notariserad), så Gatekeeper varnar. Windows: ingen kodsignering, så SmartScreen varnar och AppLocker kan blockera. Linux: inga signaturer. Signering görs bara när certifikaten finns som hemligheter i repot (`release.yml`); så ser det ut i dag enligt `README.md`.
-7. **Hugging Faces nedladdningsadresser** (CDN) är inte fastlåsta av oss och kan byta; listan över dem är inte kontrollerad.
+1. **Ingen avstängning av Stommen för alla.** Inloggningsformuläret finns alltid; ingen policy eller konfigurationsfil stänger det.
+2. **Nätverksfångsten av hela appen är bara delvis.** Se Telemetri: appen i vila är fångad, inte ett möte under körning och inte den paketerade appen.
+3. **Okrypterad kunskapsbas.** Ljud, transkript, namn och röstavtryck ligger som vanliga filer. Skyddet är datorns diskkryptering och filrättigheter.
+4. **Utvecklingskörningar** (inte installerade) använder datorns `ffmpeg` och `llama-server`, så deras version och licens beror på datorn.
+5. **Installerarna är inte signerade.** Mac: bara ad hoc (inte notariserad), så Gatekeeper varnar. Windows: ingen kodsignering, så SmartScreen varnar och AppLocker kan blockera. Linux: inga signaturer. Signering görs bara när certifikaten finns som hemligheter i repot (`release.yml`); så ser det ut i dag enligt `README.md`.
+6. **Hugging Faces nedladdningsadresser** (CDN) är inte fastlåsta av oss och kan byta; listan över dem är inte kontrollerad.

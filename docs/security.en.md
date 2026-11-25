@@ -31,18 +31,24 @@ protocol's points.
 | Stommen, `GET /api/mobile/v1/projects/<id>/minutes` | When a sent protocol is opened, and on request | Nothing is sent but the token. The answer says whether the protocol is justerat there, when and by whom. |
 | Stommen, `POST /api/mobile/v1/projects/<id>/minutes` | Only when the person presses Send and approves the list, and no check is left | Meeting series and meeting (number, date, length), attendees (name, role), headings, the protocol text, and per point: number, heading, kind, text, role, date, open, how many seconds into the recording it was said, **the line said there** and **who said it**, whether the model wrote it, a person changed it or added it, confirmed amounts. |
 | `huggingface.co` (and Hugging Face's own download addresses, which they change as needed) | Only when models are fetched: "Modeller" in first run and Settings, or when a meeting is run and a speech or speaker model is missing. A run never fetches the protocol model. | A request for a fixed commit of a repo, and its files. Nothing about the person or the meeting. Uses the operating system's certificate store, so a company's TLS inspection works. |
-| `otel.pyannote.ai` | **On the Mac only, when the speaker model runs, unless something stops it** (see Gaps) | The library's version, a random session id, the pipeline's origin and name, the audio's length in seconds, the number of speakers. Not sound, not text. |
 | The system browser | The person clicks an https link in the window | Nothing from the app. |
 
 Nothing else goes out from Byggmöte's own code. The window cannot call out (`Content-Security-Policy: connect-src 'self'`), loads no fonts or scripts
 from outside, and the app has no updater, no crash reporting and no analytics (searched in the code). The language
 model's server listens on `127.0.0.1` only, with a key made per run, `--offline`, and bypasses the computer's proxy.
 
-**Telemetry.** None in Byggmöte's own code. The exception is pyannote-audio 4.0.7 on the Mac: **it is on by default
-today**, Byggmöte does not switch it off, and it is switched off with `PYANNOTE_METRICS_ENABLED=false` (checked: with it set nothing is looked up, without it
-`otel.pyannote.ai` is). Windows and Linux do not use pyannote. A network capture of the whole app has **not been made**:
-Electron's and Chromium's own traffic is unchecked, so "no telemetry" is only partly established (the code is read, and
-the lookup of `otel.pyannote.ai` was seen); see Gaps.
+**Telemetry.** None. Byggmöte sends no usage statistics anywhere. pyannote-audio 4.0.7 (Mac) would send its own to
+`otel.pyannote.ai` if nothing stopped it; the engine sets `PYANNOTE_METRICS_ENABLED=false` when it starts (in
+`byggmote/__init__.py`, so it holds for `run`, `serve` and every other command, and the app sets it in the engine's
+environment), and a test fails if it is missing. Checked: with it set nothing is looked up, without it
+`otel.pyannote.ai` is. Windows and Linux do not use pyannote.
+
+**Network capture, 2026-11-25 (macOS, development run, partial).** The app was started with no models and
+`HF_HUB_OFFLINE=1`, and left running for 40 seconds with Chromium's network log on (`--log-net-log`, everything) and
+`lsof -i` of the app's and the engine's processes every two seconds. Seen: **no remote hosts**, no name lookups, no
+open sockets, no requests from Chromium. Not captured: a meeting running (the speaker model is not in that computer's
+cache), the packaged app, and a packet capture with `tcpdump` (needs root). So "no telemetry" rests on the code, on the
+one known source being switched off and checked, and on this capture of an idle app; see Gaps.
 
 ## Processes the app starts
 
@@ -91,10 +97,9 @@ Start menu does not see a shell's variables: set them in the system (MDM, `launc
 
 Found when this was written. None of it is promised as fixed.
 
-1. **pyannote telemetry on the Mac is on.** Byggmöte does not switch it off. Until then: `PYANNOTE_METRICS_ENABLED=false` in the environment, or block `otel.pyannote.ai`.
-2. **No switch to turn Stommen off for everyone.** The sign-in form is always there; no policy or configuration file closes it.
-3. **No network capture of the whole app.** Checked: the code, and the lookup of `otel.pyannote.ai` when the engine's library runs. Not checked: Chromium's and Electron's own traffic, or a run of the whole app under capture.
-4. **The knowledge base is not encrypted.** Sound, transcripts, names and voice prints are plain files. The protection is the computer's disk encryption and file permissions.
-5. **Development runs** (not installed) use the computer's `ffmpeg` and `llama-server`, so their version and licence depend on the computer.
-6. **The installers are not signed.** Mac: ad hoc only (not notarised), so Gatekeeper warns. Windows: no code signing, so SmartScreen warns and AppLocker may block. Linux: no signatures. Signing happens only when the certificates are in the repo's secrets (`release.yml`); as of `README.md` today they are not.
-7. **Hugging Face's download addresses** (CDN) are not pinned by us and may change; the list of them has not been checked.
+1. **No switch to turn Stommen off for everyone.** The sign-in form is always there; no policy or configuration file closes it.
+2. **The network capture of the whole app is only partial.** See Telemetry: the app idle is captured, not a meeting running and not the packaged app.
+3. **The knowledge base is not encrypted.** Sound, transcripts, names and voice prints are plain files. The protection is the computer's disk encryption and file permissions.
+4. **Development runs** (not installed) use the computer's `ffmpeg` and `llama-server`, so their version and licence depend on the computer.
+5. **The installers are not signed.** Mac: ad hoc only (not notarised), so Gatekeeper warns. Windows: no code signing, so SmartScreen warns and AppLocker may block. Linux: no signatures. Signing happens only when the certificates are in the repo's secrets (`release.yml`); as of `README.md` today they are not.
+6. **Hugging Face's download addresses** (CDN) are not pinned by us and may change; the list of them has not been checked.
