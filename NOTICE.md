@@ -98,7 +98,9 @@ none, so it is not checked, but the version is. `scripts/check-notice.py` fails 
 | `@types/node` | 24.19.2 | MIT | app |
 | `docx` | 9.16.0 | MIT | app |
 | `electron` | 45.4.1 | MIT | app |
+| `electron-builder` | 26.18.0 | MIT | app |
 | `electron-vite` | 6.0.0 | MIT | app |
+| `fflate` | 0.8.3 | MIT | app |
 | `svelte` | 5.59.1 | MIT | app |
 | `svelte-check` | 4.7.8 | MIT | app |
 | `typescript` | 5.9.3 | Apache-2.0 | app |

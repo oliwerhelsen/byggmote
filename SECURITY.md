@@ -5,7 +5,7 @@ Vad Byggmöte gör på en dator, för den som ska godkänna en installation: [do
 
 ## Kontakt för en säkerhetsfråga
 
-Oliwer Helsén, Stommen: **SECURITY-ADDRESS-TO-FILL**.
+Oliwer Helsén, Stommen: [info@stommen.io](mailto:info@stommen.io).
 
 ## Rapportera en sårbarhet
 
