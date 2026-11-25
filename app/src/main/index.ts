@@ -186,6 +186,7 @@ function handlers(tell: (p: Progress) => void, tellModels: (e: ModelEvent) => vo
     stommenSync: () => stommen.sync(),
     stommenSignOut: () => stommen.signOut(),
     stommenSend: (dir) => stommen.sendMinutes(known(dir)),
+    stommenConfirmation: (dir) => stommen.confirmation(known(dir)),
 
     async projectAdd(name) {
       const a = await call<{ id: string }>(['areas', 'add'], { name: words(name, 'Namn') })

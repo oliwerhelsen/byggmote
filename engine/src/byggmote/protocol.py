@@ -393,6 +393,8 @@ def answer(d: Path, sid: str, text: str, no: int | None = None, model: str | Non
             raise ArgError(f"bad meeting number: {n}")
         if (k := later(area, s, n)) is not None:
             raise ArgError(f"{s['name']} {k} builds on this protocol")
+        if ((load(d) or {}).get("stommen") or {}).get("confirmed"):
+            raise ArgError("the protocol is justerat in Stommen: a change is a new version asked for there")
         if not discard and (had := corrections(load(d) or {})):
             raise ArgError(f"the protocol has {had} corrections by a person: --discard writes over them")
         n = series.file(area, sid, d, n)

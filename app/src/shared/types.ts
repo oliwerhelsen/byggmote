@@ -89,18 +89,23 @@ export type MeetingDetail = Omit<MeetingRow, 'protocol'> & {
 }
 
 /**
- * Whether a protocol can go to Stommen and what stops it: `local`, the project is not Stommen's; `checks`, so many
- * (`about`) are left for a person; `role`, a point is for a Roll (`about`) Stommen no longer has. And when it was last
- * sent, as which version, and whether it has changed since.
+ * Whether a protocol can go to Stommen and what stops it: `local`, the project is not Stommen's; `confirmed`, it is
+ * justerat there; `checks`, so many (`about`) are left for a person; `role`, a point is for a Roll (`about`) Stommen no
+ * longer has. And when it was last sent, as which version, whether it has changed since, and its Justering as Stommen
+ * said it when last asked.
  */
 export type Standing = {
   possible: boolean
-  why: 'local' | 'checks' | 'role' | null
+  why: 'local' | 'confirmed' | 'checks' | 'role' | null
   about: number | string | null
   sent_at: string | null
   version: number | null
   changed: boolean
+  confirmed: Confirmation | null
 }
+
+/** A Justering the projektledare registered in Stommen: the day, how and who justerade (as written there). */
+export type Confirmation = { on: string; method: 'next_meeting' | 'email' | 'signed'; by: string }
 
 export type OpenPoint = { no: string; heading: number; kind: Kind; text: string; role: string | null; due: string | null }
 export type Agenda = { series: string; name: string; no: number; headings: (Heading & { open: OpenPoint[] })[] }
@@ -156,6 +161,8 @@ export interface Api {
   stommenSignOut(): Promise<StommenState>
   /** The meeting's protocol to Stommen: its points, and for each the time, the line said there and who said it. */
   stommenSend(dir: string): Promise<{ version: number; replaced: boolean }>
+  /** Whether Stommen has the meeting's sent protocol as justerat, kept with the protocol. Null while it is not. */
+  stommenConfirmation(dir: string): Promise<Confirmation | null>
   /** A project of this computer's own, with its first mötesserie, so a meeting can be recorded at once. Returns its id. */
   projectAdd(name: string): Promise<string>
   projectRename(id: string, name: string): Promise<void>
@@ -188,4 +195,4 @@ export interface Api {
 }
 
 export const CHANNELS = ['projects', 'meetings', 'agenda', 'meeting', 'audio', 'startSeries', 'pickRecording', 'process',
-  'writeProtocol', 'nameSpeaker', 'setTitle', 'changePoint', 'addPoint', 'removePoint', 'restorePoint', 'confirmCheck', 'attend', 'stommenState', 'stommenSignIn', 'stommenSync', 'stommenSignOut', 'stommenSend', 'projectAdd', 'projectRename', 'projectDelete', 'personAdd', 'personRemove', 'protocolSave', 'protocolCopy', 'recordingStart', 'recordingChunk', 'recordingStop', 'recordingDiscard', 'settings', 'settingsSet', 'setUp', 'models', 'modelsDownload', 'modelsCancel', 'folderShow', 'folderChoose'] as const
+  'writeProtocol', 'nameSpeaker', 'setTitle', 'changePoint', 'addPoint', 'removePoint', 'restorePoint', 'confirmCheck', 'attend', 'stommenState', 'stommenSignIn', 'stommenSync', 'stommenSignOut', 'stommenSend', 'stommenConfirmation', 'projectAdd', 'projectRename', 'projectDelete', 'personAdd', 'personRemove', 'protocolSave', 'protocolCopy', 'recordingStart', 'recordingChunk', 'recordingStop', 'recordingDiscard', 'settings', 'settingsSet', 'setUp', 'models', 'modelsDownload', 'modelsCancel', 'folderShow', 'folderChoose'] as const

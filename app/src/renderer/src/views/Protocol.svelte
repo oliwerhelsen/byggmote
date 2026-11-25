@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte'
-  import type { Kind, MeetingDetail, NewPoint, Point, PointFields, Project } from '../../../shared/types'
+  import type { Confirmation, Kind, MeetingDetail, NewPoint, Point, PointFields, Project } from '../../../shared/types'
   import Icon from '../lib/Icon.svelte'
   import PointForm from '../lib/PointForm.svelte'
   import { clock, day, failure, KINDS, minutes, overdue } from '../lib/format'
@@ -27,6 +27,7 @@
   let present = $state('')
   let sending = $state<'' | 'ask' | 'busy'>('') // the protocol on its way to Stommen: asked about first, then sent
   let sendProblem = $state('')
+  let asked = $state<'' | 'busy' | 'done'>('') // Stommen asked whether the sent protocol is justerat
   let copied = $state(false)
   let renaming = $state<string | null>(null) // the title while it is being written
 
@@ -68,7 +69,24 @@
       problem = failure(e)
     }
   }
-  void load()
+  // A sent protocol's Justering is asked for when the meeting is opened, and again when the person asks.
+  void load().then(() => {
+    if (connected && m?.stommen?.sent_at) void look()
+  })
+
+  async function look(): Promise<void> {
+    asked = 'busy'
+    sendProblem = ''
+    try {
+      await window.api.stommenConfirmation(dir)
+      await load()
+      asked = 'done'
+    } catch (e) {
+      sendProblem = failure(e)
+      asked = ''
+    }
+  }
+
   $effect(() => () => {
     if (sound) URL.revokeObjectURL(sound)
   })
@@ -85,7 +103,8 @@
   const checks = $derived(p ? p.points.reduce((n, x) => n + x.checks.filter((c) => c.code === 'role' || !c.confirmed).length, 0) : 0)
   // A protocol is corrected while it is a draft and no later meeting builds on it: the engine refuses anything else.
   const draft = $derived(p?.status === 'draft')
-  const free = $derived(draft && m?.later === null)
+  const confirmed = $derived(m?.stommen?.confirmed ?? null) // justerat in Stommen: final, a change is a new version there
+  const free = $derived(draft && m?.later === null && !confirmed)
   const roles = $derived(project.roles)
   const pointable = $derived(p ? p.headings.filter((h) => !h.fill) : [])
   const pointer = $derived(m && active !== null ? (m.lines.find((l) => l.id === active) ?? null) : null)
@@ -215,6 +234,9 @@
   }
 
   const WHEN = new Intl.DateTimeFormat('sv-SE', { dateStyle: 'long', timeStyle: 'short' })
+  const ON = new Intl.DateTimeFormat('sv-SE', { dateStyle: 'long', timeZone: 'UTC' })
+  // As Stommen words them.
+  const HOW: Record<Confirmation['method'], string> = { next_meeting: 'på nästa byggmöte', email: 'per e-post', signed: 'signerat' }
   const standing = $derived(m?.stommen ?? null)
 
   async function send(): Promise<void> {
@@ -225,6 +247,7 @@
       await load()
     } catch (e) {
       sendProblem = failure(e)
+      await load() // justerat meanwhile: the main process has asked Stommen by whom and when
     } finally {
       sending = ''
     }
@@ -262,7 +285,8 @@
             <h1>{p && !renamed ? `Protokoll, ${p.name.toLowerCase()} ${p.no}` : m.title}</h1>
           {/if}
           {#if renaming === null}<button class="btn" onclick={() => (renaming = m?.title ?? '')}><Icon name="edit" /> Byt namn</button>{/if}
-          {#if p?.status === 'draft'}<span class="badge"><Icon name="file" size={14} /> Utkast</span>{/if}
+          {#if confirmed}<span class="badge"><Icon name="lock" size={14} /> Justerat</span>
+          {:else if p?.status === 'draft'}<span class="badge"><Icon name="file" size={14} /> Utkast</span>{/if}
         </div>
         <p class="muted">{day(m.recorded_at)}. {minutes(m.duration)}, {m.speakers.length === 1 ? 'en talare' : `${m.speakers.length} talare`}.</p>
       </div>
@@ -401,6 +425,8 @@
               modellen har skrivit pekar på stället där det sades.
               {#if free}
                 Läs igenom det mot inspelningen och rätta det som är fel innan det går vidare.
+              {:else if confirmed}
+                Det är justerat i Stommen, så punkterna går inte att ändra här längre.
               {:else if m.later !== null}
                 {p.name} {m.later} bygger på det här protokollet, så punkterna går inte att ändra längre.
               {/if}
@@ -419,18 +445,27 @@
           {#if standing && standing.why !== 'local'}
             <section class="card" aria-labelledby="to-stommen">
               <h2 id="to-stommen">Till Stommen</h2>
+              {#if confirmed}
+                <p>
+                  <strong>Justerat {ON.format(new Date(`${confirmed.on}T00:00:00Z`))}</strong>, {HOW[confirmed.method] ?? confirmed.method}, av {confirmed.by}.
+                </p>
+              {/if}
               <p class="muted">
                 {#if standing.sent_at}
                   Skickat {WHEN.format(new Date(standing.sent_at))}, version {standing.version}.
                   {#if standing.changed}Protokollet har ändrats sedan dess.{/if}
-                {:else}
+                {:else if !confirmed}
                   Protokollet är inte skickat.
                 {/if}
               </p>
               {#if sendProblem}
                 <div class="note bad" role="alert" style="margin-top: 12px"><Icon name="alert" /><p>{sendProblem}</p></div>
               {/if}
-              {#if standing.why === 'checks'}
+              {#if confirmed}
+                <p style="margin-top: 12px">
+                  Ett justerat protokoll rättas inte och skickas inte igen härifrån. Behöver det ändras, be om en ny version i Stommen.
+                </p>
+              {:else if standing.why === 'checks'}
                 <p style="margin-top: 12px">
                   {standing.about === 1 ? 'En sak ska kontrolleras' : `${standing.about} saker ska kontrolleras`} innan protokollet kan skickas.
                 </p>
@@ -459,6 +494,14 @@
                 <button class="btn primary" style="margin-top: 12px" disabled={sending === 'busy'} onclick={() => (sending = 'ask')}>
                   {sending === 'busy' ? 'Skickar' : standing.sent_at ? 'Skicka igen' : 'Skicka till Stommen'}
                 </button>
+              {/if}
+              {#if connected && (standing.sent_at || confirmed) && sending !== 'ask'}
+                <div class="row" style="margin-top: 12px">
+                  <button class="btn" disabled={asked === 'busy'} onclick={look}>
+                    <Icon name="refresh" /> {asked === 'busy' ? 'Ser efter' : 'Se efter om det är justerat'}
+                  </button>
+                  {#if asked === 'done' && !confirmed}<span class="small muted" role="status">Inte justerat i Stommen än.</span>{/if}
+                </div>
               {/if}
             </section>
           {/if}

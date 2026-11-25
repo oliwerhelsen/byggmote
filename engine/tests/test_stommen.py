@@ -179,7 +179,8 @@ def test_the_protocol_remembers_what_stommen_was_sent_and_says_when_it_has_chang
     def stands() -> dict:
         return overview.detail(d)["stommen"]
 
-    assert stands() == {"possible": False, "why": "checks", "about": 1, "sent_at": None, "version": None, "changed": False}
+    assert stands() == {"possible": False, "why": "checks", "about": 1, "sent_at": None, "version": None, "changed": False,
+                      "confirmed": None}
     correct.check(d, "1.4.1", 1)
     assert (stands()["possible"], stands()["why"], stands()["changed"]) == (True, None, False)
 
@@ -204,10 +205,57 @@ def test_the_protocol_remembers_what_stommen_was_sent_and_says_when_it_has_chang
             stommen.sent(d, bad)
 
 
+def test_a_protocol_justerat_in_stommen_is_neither_corrected_nor_written_again_nor_sent(config):
+    areas.load()
+    stommen.take(given())
+    sid = series.start(eken()["id"], {"name": "Byggmöte"})["id"]
+    d = hold("Byggmöte 1", SAID)
+    answer = json.dumps({"points": [point(heading=5, kind="todo", text="Underlag skickas.", role="Platschef")]})
+    protocol.answer(d, sid, answer)
+    assert stommen.where(d) == {"project": PROJECT["id"], "series": sid, "no": 1}
+    stommen.sent(d, {"version": 1, "digest": stommen.minutes(d)["digest"]})
+
+    def stands() -> dict:
+        return overview.detail(d)["stommen"]
+
+    assert stommen.confirmed(d, {"confirmation": None}) is None  # not justerat: nothing changes
+    assert (stands()["confirmed"], stands()["possible"], stands()["version"]) == (None, True, 1)
+
+    said = {"on": "2026-11-21", "method": "email", "by": "Båda parter"}
+    assert stommen.confirmed(d, {"confirmation": said}) == said
+    assert (stands()["confirmed"], stands()["possible"], stands()["why"]) == (said, False, "confirmed")
+    assert (stands()["version"], stands()["changed"]) == (1, False)  # what was sent stays as it was
+    for refused in (lambda: correct.change(d, "1.5.1", {"due": "2026-11-26"}), lambda: correct.remove(d, "1.5.1"),
+                    lambda: stommen.minutes(d), lambda: protocol.answer(d, sid, answer, discard=True)):
+        with pytest.raises(ArgError, match="justerat"):
+            refused()
+
+    # Stommen is asked again and has it differently: Stommen wins, also when it no longer has a Justering
+    stommen.confirmed(d, {"confirmation": said | {"method": "signed"}})
+    assert stands()["confirmed"]["method"] == "signed"
+    stommen.confirmed(d, {"confirmation": None})
+    assert (stands()["confirmed"], stands()["possible"]) == (None, True)
+    correct.change(d, "1.5.1", {"due": "2026-11-26"})
+    assert stands()["changed"] is True
+
+    for bad in ({}, {"confirmation": {"on": "2026-11-21", "method": "email"}}, {"confirmation": said | {"on": "21/11"}},
+                {"confirmation": said | {"x": 1}}, {"confirmation": "justerat"}):
+        with pytest.raises(ArgError):
+            stommen.confirmed(d, bad)
+
+
+def test_a_protocol_of_our_own_is_not_asked_about_in_stommen(project, held):
+    d = held("Byggmöte 3", SAID)
+    protocol.answer(d, project[1], json.dumps({"points": [point(kind="note")]}), 3)
+    with pytest.raises(ArgError, match="not one of Stommen's"):
+        stommen.where(d)
+
+
 def test_a_project_of_our_own_says_so(project, held):
     d = held("Byggmöte 3", SAID)
     protocol.answer(d, project[1], json.dumps({"points": [point(kind="note")]}), 3)
-    assert overview.detail(d)["stommen"] == {"possible": False, "why": "local", "about": None, "sent_at": None, "version": None, "changed": False}
+    assert overview.detail(d)["stommen"] == {"possible": False, "why": "local", "about": None, "sent_at": None, "version": None, "changed": False,
+                                             "confirmed": None}
     assert overview.detail(held("Byggmöte 4", SAID))["stommen"] is None  # no protocol, nothing to send
 
 
