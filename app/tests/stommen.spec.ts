@@ -306,7 +306,7 @@ test('a protocol goes to Stommen when the person sends it, with its points and w
   // changed after it was sent, it says so and goes again as a later version
   await win.getByRole('button', { name: 'Ändra punkt 4.3.1' }).click()
   await win.getByRole('form', { name: 'Ändra punkt 4.3.1' }).getByLabel('Punkten', { exact: true }).fill('Stommen på plan tre är klar och avsynad.')
-  await win.getByRole('button', { name: 'Spara' }).click()
+  await win.getByRole('button', { name: 'Spara', exact: true }).click()
   await expect(card).toContainText('Protokollet har ändrats sedan dess.')
   await card.getByRole('button', { name: 'Skicka igen' }).click()
   await card.getByRole('button', { name: 'Skicka', exact: true }).click()
@@ -318,7 +318,7 @@ test('a protocol justerat in Stommen meanwhile is not replaced, and the meeting 
   const card = win.getByRole('region', { name: 'Till Stommen' })
   await win.getByRole('button', { name: 'Ändra punkt 4.3.1' }).click()
   await win.getByRole('form', { name: 'Ändra punkt 4.3.1' }).getByLabel('Punkten', { exact: true }).fill('Stommen på plan tre är klar.')
-  await win.getByRole('button', { name: 'Spara' }).click()
+  await win.getByRole('button', { name: 'Spara', exact: true }).click()
   adjusted = { on: '2026-11-21', method: 'email', by: 'Båda parter' }
   await card.getByRole('button', { name: 'Skicka igen' }).click()
   await card.getByRole('button', { name: 'Skicka', exact: true }).click()
