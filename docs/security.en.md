@@ -14,9 +14,11 @@ protocol's points.
 
 | What | Where | Contents |
 | --- | --- | --- |
-| The app's settings | The app's own folder (`userData`, for an installed app `Byggmote`): macOS `~/Library/Application Support/Byggmote`, Windows `%APPDATA%\Byggmote`, Linux `~/.config/Byggmote` | `settings.json`: name, microphone, Recognise Voices on/off, open at login, whether first run is done. No secret. |
+| The app's settings | The app's own folder (`userData`, for an installed app `Byggmote`): macOS `~/Library/Application Support/Byggmote`, Windows `%APPDATA%\Byggmote`, Linux `~/.config/Byggmote` | `settings.json`: name, microphone, Recognise Voices on/off, open at login, whether first run is done. No secret. If the person turns on "open at login", an installed app registers itself as a login item with the operating system (Windows and Mac; on Linux the app does nothing). |
 | The Stommen connection | Same folder, `stommen.json` (mode 0600) | Stommen's address, the person's and the organization's name, time of the last fetch, and the session token. The token is encrypted with the operating system's keychain (macOS Keychain, Windows DPAPI, Linux libsecret). Where there is no keychain, or only Linux's fixed-key fallback, no token is saved: it lives until the app quits. The password is never kept. |
-| The knowledge base | `Documents/Byggmöte` (or the folder the person chooses; the pointer is `~/.config/byggmote/byggmote.json`, Linux `$XDG_CONFIG_HOME/byggmote`) | `areas.json` (projects), `people.json` (names, e-mail, links to Stommen), `learning.json`, and a folder per meeting: `meeting.json` (speakers, transcript, and voice prints when Recognise Voices is on), `transcript.txt`, `audio.m4a`, `protocol.json`, `protocol.md`. Not encrypted, protected by the file system's permissions. Can be a shared folder (OneDrive, Teams) if the person chooses so. |
+| The knowledge base | `Documents/Byggmöte` (or the folder the person chooses; the pointer is `~/.config/byggmote/byggmote.json`, Linux `$XDG_CONFIG_HOME/byggmote`) | `areas.json` (projects), `people.json` (names, e-mail, links to Stommen), `learning.json`, and a folder per meeting: `meeting.json` (speakers, transcript, and voice prints when Recognise Voices is on), `transcript.txt`, `audio.m4a`, `protocol.json`, `protocol.md`, `marks.json` (what was marked during recording). Not encrypted, protected by the file system's permissions. Can be a shared folder (OneDrive, Teams) if the person chooses so. |
+| A saved Word or PDF file | The path the person chooses in the dialog | The protocol, with the project's logo and header. Written only when the person saves; the app keeps no copy. |
+| A PDF being made | Temp folder, `byggmote-pdf-*` | The protocol text as HTML, to print it; removed right afterwards. |
 | A recording in progress | Temp folder, `byggmote-recordings/<id>.webm` | Written a second at a time, removed once the meeting has its own copy. |
 | Models | Hugging Face's cache: `~/.cache/huggingface/hub` (or `HF_HOME` / `HF_HUB_CACHE`) | See `NOTICE.md`: five models, 30 MB to 6 GB each, fetched at a fixed commit. |
 | The window's own files | `userData` | Chromium's usual cache and storage. The window reads only the app's local files. |
@@ -26,19 +28,21 @@ protocol's points.
 | To | When | What |
 | --- | --- | --- |
 | Stommen, `https://app.stommen.io` (the person can give another address; https only, or http for the computer itself) | Sign-in, "Hämta från Stommen", app start when signed in, sign-out | `POST /api/auth/sign-in/email` (e-mail, password), `GET /api/mobile/v1/me`, `/projects`, `/projects/<id>/roles`, `POST /api/auth/sign-out`. Headers `X-App: byggmote` and `X-App-Version`. No redirect is followed. |
+| Stommen, `GET /api/mobile/v1/projects/<id>/minutes` | When a sent protocol is opened, and on request | Nothing is sent but the token. The answer says whether the protocol is justerat there, when and by whom. |
 | Stommen, `POST /api/mobile/v1/projects/<id>/minutes` | Only when the person presses Send and approves the list, and no check is left | Meeting series and meeting (number, date, length), attendees (name, role), headings, the protocol text, and per point: number, heading, kind, text, role, date, open, how many seconds into the recording it was said, **the line said there** and **who said it**, whether the model wrote it, a person changed it or added it, confirmed amounts. |
 | `huggingface.co` (and Hugging Face's own download addresses, which they change as needed) | Only when models are fetched: "Modeller" in first run and Settings, or when a meeting is run and a speech or speaker model is missing. A run never fetches the protocol model. | A request for a fixed commit of a repo, and its files. Nothing about the person or the meeting. Uses the operating system's certificate store, so a company's TLS inspection works. |
-| `otel.pyannote.ai` | **On the Mac only, when the speaker model runs, unless something stops it** (see Gaps) | The library's version, a random session id, the audio's length in seconds, the number of speakers. Not sound, not text. |
+| `otel.pyannote.ai` | **On the Mac only, when the speaker model runs, unless something stops it** (see Gaps) | The library's version, a random session id, the pipeline's origin and name, the audio's length in seconds, the number of speakers. Not sound, not text. |
 | The system browser | The person clicks an https link in the window | Nothing from the app. |
 
-Nothing else. The window cannot call out (`Content-Security-Policy: connect-src 'self'`), loads no fonts or scripts
+Nothing else goes out from Byggmöte's own code. The window cannot call out (`Content-Security-Policy: connect-src 'self'`), loads no fonts or scripts
 from outside, and the app has no updater, no crash reporting and no analytics (searched in the code). The language
 model's server listens on `127.0.0.1` only, with a key made per run, `--offline`, and bypasses the computer's proxy.
 
 **Telemetry.** None in Byggmöte's own code. The exception is pyannote-audio 4.0.7 on the Mac: **it is on by default
 today**, Byggmöte does not switch it off, and it is switched off with `PYANNOTE_METRICS_ENABLED=false` (checked: with it set nothing is looked up, without it
-`otel.pyannote.ai` is). Windows and Linux do not use pyannote. We have not captured the traffic of Chromium in Electron;
-see Gaps.
+`otel.pyannote.ai` is). Windows and Linux do not use pyannote. A network capture of the whole app has **not been made**:
+Electron's and Chromium's own traffic is unchecked, so "no telemetry" is only partly established (the code is read, and
+the lookup of `otel.pyannote.ai` was seen); see Gaps.
 
 ## Processes the app starts
 

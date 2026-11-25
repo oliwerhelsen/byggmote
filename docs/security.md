@@ -13,9 +13,11 @@ Ljudet och hela transkriptet lämnar aldrig datorn. Tal, talare och protokoll g�
 
 | Vad | Var | Innehåll |
 | --- | --- | --- |
-| Appens inställningar | Appens egen mapp (`userData`, för en installerad app `Byggmote`): macOS `~/Library/Application Support/Byggmote`, Windows `%APPDATA%\Byggmote`, Linux `~/.config/Byggmote` | `settings.json`: namn, mikrofon, Känn igen röster av/på, starta vid inloggning, om första start är gjord. Ingen hemlighet. |
+| Appens inställningar | Appens egen mapp (`userData`, för en installerad app `Byggmote`): macOS `~/Library/Application Support/Byggmote`, Windows `%APPDATA%\Byggmote`, Linux `~/.config/Byggmote` | `settings.json`: namn, mikrofon, Känn igen röster av/på, starta vid inloggning, om första start är gjord. Ingen hemlighet. Slår personen på "starta vid inloggning" registrerar en installerad app sig som inloggningsobjekt i operativsystemet (Windows och Mac; på Linux gör appen inget). |
 | Stommen-anslutningen | Samma mapp, `stommen.json` (rättighet 0600) | Stommens adress, personens namn och organisationens namn, tid för senaste hämtning och sessionstoken. Token är krypterad med operativsystemets nyckelring (macOS Nyckelring, Windows DPAPI, Linux libsecret). Finns ingen nyckelring, eller är den Linux-reservens fasta nyckel, sparas ingen token: den lever tills appen stängs. Lösenordet sparas aldrig. |
-| Kunskapsbasen | `Dokument/Byggmöte` (eller mappen personen väljer; pekaren ligger i `~/.config/byggmote/byggmote.json`, Linux `$XDG_CONFIG_HOME/byggmote`) | `areas.json` (projekt), `people.json` (namn, e-post, kopplingar till Stommen), `learning.json`, och en mapp per möte: `meeting.json` (talare, transkript, och röstavtryck när Känn igen röster är på), `transcript.txt`, `audio.m4a`, `protocol.json`, `protocol.md`. Okrypterat, med filsystemets rättigheter. Kan ligga i en delad mapp (OneDrive, Teams) om personen väljer det. |
+| Kunskapsbasen | `Dokument/Byggmöte` (eller mappen personen väljer; pekaren ligger i `~/.config/byggmote/byggmote.json`, Linux `$XDG_CONFIG_HOME/byggmote`) | `areas.json` (projekt), `people.json` (namn, e-post, kopplingar till Stommen), `learning.json`, och en mapp per möte: `meeting.json` (talare, transkript, och röstavtryck när Känn igen röster är på), `transcript.txt`, `audio.m4a`, `protocol.json`, `protocol.md`, `marks.json` (vad som markerades under inspelningen). Okrypterat, med filsystemets rättigheter. Kan ligga i en delad mapp (OneDrive, Teams) om personen väljer det. |
+| Sparad Word- eller PDF-fil | Den sökväg personen väljer i dialogen | Protokollet, med projektets logotyp och sidhuvud. Skrivs bara när personen sparar; appen håller ingen kopia. |
+| PDF under tillverkning | Tillfällig mapp, `byggmote-pdf-*` | Protokolltexten som HTML, för att skriva ut den; tas bort direkt efteråt. |
 | Inspelning under pågående möte | Tillfällig mapp, `byggmote-recordings/<id>.webm` | Skrivs en sekund i taget, tas bort när mötet har sin egen kopia. |
 | Modeller | Hugging Faces cache: `~/.cache/huggingface/hub` (eller `HF_HOME` / `HF_HUB_CACHE`) | Se `NOTICE.md`: fem modeller, 30 MB till 6 GB styck, hämtade på en fast commit. |
 | Fönstrets egna filer | `userData` | Chromiums vanliga cache och lagring. Fönstret läser bara appens lokala filer. |
@@ -25,19 +27,21 @@ Ljudet och hela transkriptet lämnar aldrig datorn. Tal, talare och protokoll g�
 | Till | När | Vad |
 | --- | --- | --- |
 | Stommen, `https://app.stommen.io` (personen kan ange en annan adress; bara https, eller http för den egna datorn) | Inloggning, "Hämta från Stommen", appstart när personen är inloggad, utloggning | `POST /api/auth/sign-in/email` (e-post, lösenord), `GET /api/mobile/v1/me`, `/projects`, `/projects/<id>/roles`, `POST /api/auth/sign-out`. Rubrikerna `X-App: byggmote` och `X-App-Version`. Ingen omdirigering följs. |
+| Stommen, `GET /api/mobile/v1/projects/<id>/minutes` | När ett skickat protokoll öppnas, och på begäran | Ingenting skickas utom token. Svaret säger om protokollet är justerat där, när och av vem. |
 | Stommen, `POST /api/mobile/v1/projects/<id>/minutes` | Bara när personen trycker Skicka och godkänner listan, och inga kontroller återstår | Möteserie och möte (nummer, datum, längd), deltagare (namn, roll), rubriker, protokolltexten, och per punkt: nummer, rubrik, typ, text, roll, datum, öppen, hur många sekunder in i inspelningen den sades, **raden som sades där** och **vem som sa den**, om den skrevs av modellen, ändrades eller lades till av en person, bekräftade belopp. |
 | `huggingface.co` (och Hugging Faces egna nedladdningsadresser, som de byter vid behov) | Bara när modeller hämtas: "Modeller" i första start och Inställningar, eller när ett möte körs och en tal- eller talarmodell saknas. Protokollmodellen hämtas aldrig av en körning. | Förfrågan om en fast commit av ett repo, och filerna. Inget om personen eller mötet. Använder operativsystemets certifikatlager, så en TLS-inspektion i företaget fungerar. |
-| `otel.pyannote.ai` | **Bara på Mac, när talarmodellen körs, om inget stänger det** (se Luckor) | Bibliotekets version, ett slumpat sessions-id, ljudets längd i sekunder, antal talare. Inte ljud, inte text. |
+| `otel.pyannote.ai` | **Bara på Mac, när talarmodellen körs, om inget stänger det** (se Luckor) | Bibliotekets version, ett slumpat sessions-id, pipelinens ursprung och namn, ljudets längd i sekunder, antal talare. Inte ljud, inte text. |
 | Systemets webbläsare | Personen klickar en https-länk i fönstret | Ingenting från appen. |
 
-Inget annat. Fönstret kan inte kalla ut (`Content-Security-Policy: connect-src 'self'`), laddar inga teckensnitt eller
+Inget annat går ut från Byggmötes egen kod. Fönstret kan inte kalla ut (`Content-Security-Policy: connect-src 'self'`), laddar inga teckensnitt eller
 skript utifrån, och appen har ingen uppdateringsfunktion, ingen kraschrapportering och ingen analys (sökt i koden).
 Språkmodellens server lyssnar bara på `127.0.0.1`, med en nyckel per körning, `--offline`, och förbigår datorns proxy.
 
 **Telemetri.** I Byggmötes egen kod finns ingen. Undantaget är pyannote-audio 4.0.7 på Mac: **den är påslagen som
 standard i dag**, Byggmöte stänger inte av den, och den slås av med `PYANNOTE_METRICS_ENABLED=false` (kontrollerat: med den satt slås inget upp, utan den slås
-`otel.pyannote.ai` upp). På Windows och Linux används inte pyannote. Chromium i Electron har vi inte fångat trafiken
-från; se Luckor.
+`otel.pyannote.ai` upp). På Windows och Linux används inte pyannote. En nätverksfångst av hela appen är **inte gjord**:
+Electrons och Chromiums egen trafik är okontrollerad, så påståendet "ingen telemetri" är bara delvis styrkt (koden är
+granskad, och uppslagningen av `otel.pyannote.ai` är sedd); se Luckor.
 
 ## Processer appen startar
 

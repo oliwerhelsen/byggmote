@@ -45,18 +45,28 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs: notice
-    # A release is the only place it is published; the other runs show that it can be made.
-    permissions:
-      contents: write
+    # The other runs only show that it can be made; a release is where it is published, in the job below.
     steps:
       - uses: actions/checkout@v7
       - name: Make the SBOM
         env:
           VERSION: ${{ github.event.release.tag_name || github.sha }}
         run: python3 scripts/sbom.py "$VERSION" > byggmote-sbom.cdx.json
-      - name: Attach it to the release
-        if: github.event_name == 'release'
+
+  attach:
+    name: SBOM on the release
+    if: github.event_name == 'release'
+    needs: notice
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Make it and attach it
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name }}
-        run: gh release upload "$TAG" byggmote-sbom.cdx.json --clobber
+        run: |
+          python3 scripts/sbom.py "$TAG" > byggmote-sbom.cdx.json
+          gh release upload "$TAG" byggmote-sbom.cdx.json --clobber
