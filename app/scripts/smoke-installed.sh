@@ -8,7 +8,8 @@ set -euo pipefail
 R="$1/engine"
 case "$(uname -s)" in
   # Git Bash's /usr/bin for this script's own tools; it has no ffmpeg or Python
-  MINGW* | MSYS* | CYGWIN*) PY="$R/python/python.exe"; SYSTEM=/usr/bin:/c/Windows/System32; EXE=.exe ;;
+  # and /c/… for C:/…, whose colon would split PATH
+  MINGW* | MSYS* | CYGWIN*) R=$(cygpath -u "$R"); PY="$R/python/python.exe"; SYSTEM=/usr/bin:/c/Windows/System32; EXE=.exe ;;
   *) PY="$R/python/bin/python3"; SYSTEM=/usr/bin:/bin; EXE= ;;
 esac
 # The installed app's own bin and the operating system's, nothing a developer installed.
