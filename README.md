@@ -41,6 +41,24 @@ for a protocol to be written, by mistake or because an earlier test failed and t
 and not minutes of a language model. Recording from a microphone to a written protocol is not in them: it needs the
 models and several minutes, and has been run by hand with a sound clip played into the app as its microphone.
 
+### Word and PDF
+
+A protocol is saved as Word (`.docx`), PDF or Markdown from its page ("Spara som Word", "Spara som PDF"), to send as it
+is or to open and edit. Both are made from `protocol.md`, so the headings, numbers and points are the window's own, and
+`app/tests/export.spec.ts` compares them. Neither needs Word: the `.docx` is written by the `docx` library and the PDF
+is printed by the app's own hidden window, so it is the same on Windows, Linux and Mac.
+
+A Projekt can give the file its look: put `header.txt` (one line) and `logo.png`, `logo.jpg` or `logo.jpeg` in
+`mallar/<project id>/` in the folder where Byggmöte keeps its projects (Inställningar shows it). The header and logo
+go at the top of the Word file's every page and of the PDF's first. Without them the file is plain. The consent line and
+the justering line are not kept anywhere yet: `closingLines` in `app/src/main/index.ts` is where they go, and both files
+then end with them.
+
+Teams meeting notes (and Copilot's recap) summarise a call for the people in it. A Byggmöte protocol is numbered by
+heading, gives each point a Roll and a date, carries open points over from the earlier meeting, and every point points
+at the sentence in the recording. Sent on to Stommen, a point becomes an ÄTA, a risk or a decision there with that trail.
+The file is for those who work in Word and Outlook; the lines to Stommen are why to record here.
+
 ### Stommen
 
 The app signs in to Stommen the way Stommen's phone app does (ADR-0018 there): `POST /api/auth/sign-in/email` gives a

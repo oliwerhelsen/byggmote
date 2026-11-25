@@ -43,9 +43,9 @@
   }
 
   /** The protocol as the Markdown file it also is: saved where the person says, or on the clipboard. */
-  async function keep(how: 'save' | 'copy'): Promise<void> {
+  async function keep(how: 'docx' | 'pdf' | 'md' | 'copy'): Promise<void> {
     try {
-      if (how === 'save') await window.api.protocolSave(dir)
+      if (how !== 'copy') await window.api.protocolSave(dir, how)
       else {
         await window.api.protocolCopy(dir)
         copied = true
@@ -269,7 +269,9 @@
       <div class="row">
         <button class="btn" onclick={() => go({ name: 'meetings' })}><Icon name="back" /> Till möten</button>
         {#if p}
-          <button class="btn" onclick={() => keep('save')}><Icon name="file" /> Exportera som fil</button>
+          <button class="btn" onclick={() => keep('docx')}><Icon name="file" /> Spara som Word</button>
+          <button class="btn" onclick={() => keep('pdf')}><Icon name="file" /> Spara som PDF</button>
+          <button class="btn" onclick={() => keep('md')}>Spara som Markdown</button>
           <button class="btn" onclick={() => keep('copy')}>{copied ? 'Kopierat' : 'Kopiera texten'}</button>
         {/if}
         {#if p && series && free}
