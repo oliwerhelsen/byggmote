@@ -20,7 +20,9 @@ trap 'rm -rf "$BYGGMOTE_CONFIG"' EXIT
 engine() { "$PY" -m byggmote "$@"; }
 
 engine version
-engine models --json | head -c 400 && echo
+# Whole, then cut: `| head` would close the pipe on the engine, which fails it under pipefail.
+models=$(engine models --json)
+echo "${models:0:400}"
 command -v ffmpeg ffprobe
 ffmpeg -nostdin -v error -f lavfi -i "sine=frequency=440:duration=3" -ac 1 -ar 16000 "$BYGGMOTE_CONFIG/tone.m4a"
 engine probe "$BYGGMOTE_CONFIG/tone.m4a" --json
