@@ -1,7 +1,9 @@
 # The installers: `npm run dist` after scripts/bundle-engine.sh, in CI from a tag (.github/workflows/release.yml).
 # Signing and notarisation happen when their secrets are there, and are skipped without them (README.md, Installing).
 appId: io.stommen.byggmote
-productName: Byggmöte
+# ASCII in every file and folder name: Electron on the Mac stops at start (SIGTRAP) in a bundle named Byggmöte.app, and
+# a path with an ö is one more thing for IT's scripts to quote. The name a person reads is Byggmöte everywhere it shows.
+productName: Byggmote
 artifactName: Byggmote-${version}-${os}-${arch}.${ext}
 copyright: Byggmöte
 directories:
@@ -33,8 +35,10 @@ nsis:
 
 linux:
   target: [AppImage, deb]
-  # ASCII for the command and the package. Not on the Mac: Electron finds its helpers by the product's name.
   executableName: byggmote
+  desktop:
+    entry:
+      Name: Byggmöte
   category: Office
   maintainer: Byggmöte <info@stommen.io>
   synopsis: Byggmötesprotokoll från en inspelning, på datorn
@@ -49,4 +53,5 @@ mac:
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
+    CFBundleDisplayName: Byggmöte
     NSMicrophoneUsageDescription: Byggmöte spelar in mötet med mikrofonen. Ljudet stannar på datorn.

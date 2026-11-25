@@ -35,16 +35,17 @@ Download from the repo's releases:
 | Mac with Apple silicon, macOS 12 or later | `Byggmote-<version>-mac-arm64.dmg`               |
 
 - **Windows.** Run the file and choose for whom. For IT, silently: `Byggmote-<version>-win-x64.exe /S /allusers`
-  installs for everyone in `C:\Program Files\Byggmöte`, `/S` alone for the person running it, and `/D=<folder>` (last)
-  picks the folder. Uninstall in Settings, Apps, or silently:
-  `"C:\Program Files\Byggmöte\Uninstall Byggmöte.exe" /S /allusers`.
+  installs for everyone in `C:\Program Files\Byggmote`, `/S` alone for the person running it, and `/D=<folder>` (last)
+  picks the folder. Files and folders are named `Byggmote`, without the ö, so a script need not quote it; the
+  name a person reads is Byggmöte. Uninstall in Settings, Apps, or silently:
+  `"C:\Program Files\Byggmote\Uninstall Byggmote.exe" /S /allusers`.
 - **Linux.** `sudo apt install ./Byggmote-<version>-linux-amd64.deb`, and `sudo apt remove byggmote` to uninstall. The
   AppImage runs as it is (`chmod +x`), and is uninstalled by removing the file.
 - **Mac.** Open the `.dmg` and drag Byggmöte to Program. Uninstall by moving it to the trash.
 
 An uninstall removes the program and nothing else. The meetings stay in `Documents/Byggmöte` (or the folder chosen
-under Inställningar), the settings in the app's own folder (`%APPDATA%\Byggmöte`, `~/.config/Byggmöte`,
-`~/Library/Application Support/Byggmöte`) and the models in `~/.cache/huggingface`. Removing those is a choice made by
+under Inställningar), the settings in the app's own folder (`%APPDATA%\Byggmote`, `~/.config/Byggmote`,
+`~/Library/Application Support/Byggmote`) and the models in `~/.cache/huggingface`. Removing those is a choice made by
 hand.
 
 ### What computer it needs
