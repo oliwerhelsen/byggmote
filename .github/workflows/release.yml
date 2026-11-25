@@ -87,6 +87,8 @@ jobs:
       # APPLE_APP_SPECIFIC_PASSWORD and APPLE_TEAM_ID are set, unless mac.notarize is false (MacTargetHelper.notarizeIfProvided).
       - name: Build the installer
         run: |
+          # The Mac runner's default limit is too low for the engine's many small files (EMFILE while packing).
+          if [ "$RUNNER_OS" = macOS ]; then ulimit -n 65536 || ulimit -n 10240; fi
           args=(${{ matrix.target }} --publish never)
           [[ "$GITHUB_REF" == refs/tags/v* ]] && args+=("-c.extraMetadata.version=${GITHUB_REF_NAME#v}")
           if [ "$RUNNER_OS" = macOS ] && [ -z "$CSC_LINK" ]; then args+=(-c.mac.identity=-); fi
