@@ -5,7 +5,8 @@ goes to the protocol's `removed`, from where it can be put back: nothing a model
 person's can be told from what is a model's. A point's number is its name, so it stays: a removed point leaves its
 number unused, and a point that is added, or moved to another heading, takes the next number there.
 
-A protocol a later meeting builds on is not corrected, as it is not written again, and only a draft is."""
+A protocol a later meeting builds on is not corrected, as it is not written again, nor is one justerat in Stommen;
+only a draft is."""
 import json
 from contextlib import contextmanager
 from datetime import date
@@ -33,6 +34,8 @@ def _editing(d: Path, points: bool = True):
             raise ArgError("the meeting has no protocol")
         if p.get("status") != "draft":
             raise ArgError("the protocol is not a draft")
+        if (p.get("stommen") or {}).get("confirmed"):
+            raise ArgError("the protocol is justerat in Stommen: a change is a new version asked for there")
         m = meeting.load(d)
         area = areas.get(areas.load(), m["area"])
         s = series.get(series.load(area), p["series"])

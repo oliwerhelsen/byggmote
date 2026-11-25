@@ -89,18 +89,23 @@ export type MeetingDetail = Omit<MeetingRow, 'protocol'> & {
 }
 
 /**
- * Whether a protocol can go to Stommen and what stops it: `local`, the project is not Stommen's; `checks`, so many
- * (`about`) are left for a person; `role`, a point is for a Roll (`about`) Stommen no longer has. And when it was last
- * sent, as which version, and whether it has changed since.
+ * Whether a protocol can go to Stommen and what stops it: `local`, the project is not Stommen's; `confirmed`, it is
+ * justerat there; `checks`, so many (`about`) are left for a person; `role`, a point is for a Roll (`about`) Stommen no
+ * longer has. And when it was last sent, as which version, whether it has changed since, and its Justering as Stommen
+ * said it when last asked.
  */
 export type Standing = {
   possible: boolean
-  why: 'local' | 'checks' | 'role' | null
+  why: 'local' | 'confirmed' | 'checks' | 'role' | null
   about: number | string | null
   sent_at: string | null
   version: number | null
   changed: boolean
+  confirmed: Confirmation | null
 }
+
+/** A Justering the projektledare registered in Stommen: the day, how and who justerade (as written there). */
+export type Confirmation = { on: string; method: 'next_meeting' | 'email' | 'signed'; by: string }
 
 export type OpenPoint = { no: string; heading: number; kind: Kind; text: string; role: string | null; due: string | null }
 export type Agenda = { series: string; name: string; no: number; headings: (Heading & { open: OpenPoint[] })[] }
@@ -122,7 +127,9 @@ export type StommenSync = { projects: number; people: number; vacant: number }
 /** What the person has set in the app itself, kept in the app's own folder. `setUp`: the first-run steps are done. */
 export type Settings = { setUp: boolean; name: string; voices: boolean; openAtLogin: boolean; microphone: string }
 /** A model the engine knows, as `byggmote models --json` lists it. */
-export type ModelRow = { id: string; type: 'asr' | 'diarize' | 'llm'; name: string; langs: string[]; model: string; size: number; license: string; downloaded: boolean }
+export type ModelRow = { id: string; type: 'asr' | 'diarize' | 'llm'; name: string; langs: string[]; model: string; size: number; license: string; downloaded: boolean; min_ram_gb?: number }
+/** This computer as far as the models care: its memory and the free space where the models go, in bytes. */
+export type Computer = { memory: number; free: number }
 /** What a download says as it goes: bytes of one model, one finished, one failed, and the end. */
 export type ModelEvent = { event: 'download' | 'downloaded' | 'error' | 'done'; model?: string; id?: string; done?: number; total?: number; message?: string; failed?: string[] }
 
@@ -156,6 +163,8 @@ export interface Api {
   stommenSignOut(): Promise<StommenState>
   /** The meeting's protocol to Stommen: its points, and for each the time, the line said there and who said it. */
   stommenSend(dir: string): Promise<{ version: number; replaced: boolean }>
+  /** Whether Stommen has the meeting's sent protocol as justerat, kept with the protocol. Null while it is not. */
+  stommenConfirmation(dir: string): Promise<Confirmation | null>
   /** A project of this computer's own, with its first mötesserie, so a meeting can be recorded at once. Returns its id. */
   projectAdd(name: string): Promise<string>
   projectRename(id: string, name: string): Promise<void>
@@ -165,7 +174,7 @@ export interface Api {
   personAdd(projectId: string, name: string, role: string): Promise<void>
   personRemove(projectId: string, personId: string): Promise<void>
   /** The meeting's protocol as a Word, PDF or Markdown file the person chooses where to keep; false when they cancelled. */
-  protocolSave(dir: string): Promise<boolean>
+  protocolSave(dir: string, format: 'docx' | 'pdf' | 'md'): Promise<boolean>
   protocolCopy(dir: string): Promise<void>
   recordingStart(): Promise<string>
   recordingChunk(id: string, bytes: Uint8Array): Promise<void>
@@ -180,6 +189,7 @@ export interface Api {
   /** Resolves when the download has ended; `ids` empty means every model the app needs. Progress comes through `onModels`. */
   modelsDownload(ids: string[]): Promise<void>
   modelsCancel(): Promise<void>
+  computer(): Promise<Computer>
   /** Where the meetings are kept now, and a way to show or change it. `folderChoose` resolves null when cancelled. */
   folderShow(): Promise<void>
   folderChoose(): Promise<string | null>
@@ -188,4 +198,4 @@ export interface Api {
 }
 
 export const CHANNELS = ['projects', 'meetings', 'agenda', 'meeting', 'audio', 'startSeries', 'pickRecording', 'process',
-  'writeProtocol', 'nameSpeaker', 'setTitle', 'changePoint', 'addPoint', 'removePoint', 'restorePoint', 'confirmCheck', 'attend', 'stommenState', 'stommenSignIn', 'stommenSync', 'stommenSignOut', 'stommenSend', 'projectAdd', 'projectRename', 'projectDelete', 'personAdd', 'personRemove', 'protocolSave', 'protocolCopy', 'recordingStart', 'recordingChunk', 'recordingStop', 'recordingDiscard', 'settings', 'settingsSet', 'setUp', 'models', 'modelsDownload', 'modelsCancel', 'folderShow', 'folderChoose'] as const
+  'writeProtocol', 'nameSpeaker', 'setTitle', 'changePoint', 'addPoint', 'removePoint', 'restorePoint', 'confirmCheck', 'attend', 'stommenState', 'stommenSignIn', 'stommenSync', 'stommenSignOut', 'stommenSend', 'stommenConfirmation', 'projectAdd', 'projectRename', 'projectDelete', 'personAdd', 'personRemove', 'protocolSave', 'protocolCopy', 'recordingStart', 'recordingChunk', 'recordingStop', 'recordingDiscard', 'settings', 'settingsSet', 'setUp', 'models', 'modelsDownload', 'modelsCancel', 'computer', 'folderShow', 'folderChoose'] as const

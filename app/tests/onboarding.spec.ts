@@ -17,7 +17,8 @@ test.beforeAll(async () => {
   config = mkdtempSync(join(tmpdir(), 'byggmote-first-'))
   userData = mkdtempSync(join(tmpdir(), 'byggmote-first-user-'))
   const args = process.env.CI && process.platform === 'linux' ? ['--no-sandbox', '.'] : ['.']
-  const none = { BYGGMOTE_MODELS: join(config, 'no-models'), HF_HUB_CACHE: join(config, 'no-models'), HF_HUB_OFFLINE: '1' }
+  // A computer with 8 GB of memory, as a five-year-old laptop: too small for the language model, and the models step says so.
+  const none = { BYGGMOTE_MODELS: join(config, 'no-models'), HF_HUB_CACHE: join(config, 'no-models'), HF_HUB_OFFLINE: '1', BYGGMOTE_MEMORY_GB: '8' }
   app = await electron.launch({
     args,
     cwd: here,
@@ -45,6 +46,7 @@ test('the models can be left for later, and Stommen can be skipped', async () =>
   await win.getByRole('button', { name: 'Fortsätt' }).click()
   await expect(win.getByRole('heading', { name: 'Förbereder Byggmöte' })).toBeVisible()
   await expect(win.getByText(/av \d+ modeller installerade/)).toBeVisible()
+  await expect(win.getByText(/Datorn har 8 GB minne och språkmodellen som skriver protokollet behöver 16 GB/)).toBeVisible()
   await win.getByRole('button', { name: 'Fortsätt, installera senare' }).click()
   await expect(win.getByRole('heading', { name: 'Stommen', exact: true })).toBeVisible()
   await win.getByRole('button', { name: 'Hoppa över' }).click()

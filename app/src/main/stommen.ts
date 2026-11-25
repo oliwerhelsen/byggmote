@@ -5,13 +5,13 @@
 //
 // What goes to Stommen is the sign-in and, when the person sends it, a meeting's protocol: its points, and for each
 // how far into the recording it was said, the line said there and who said it. Sound and the rest of the transcript
-// never do.
+// never do. What comes back of a sent protocol is its Justering, once the projektledare has registered it there.
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { request as overHttp } from 'node:http'
 import { request as overHttps } from 'node:https'
 import { dirname, join } from 'node:path'
 import { app, safeStorage } from 'electron'
-import type { StommenState, StommenSync } from '../shared/types'
+import type { Confirmation, StommenState, StommenSync } from '../shared/types'
 import { call } from './engine'
 
 type Saved = { server: string; token?: string; user?: string; organization?: string; syncedAt?: string }
@@ -243,10 +243,47 @@ export async function sendMinutes(dir: string): Promise<{ version: number; repla
     throw new StommenError('Inloggningen i Stommen gäller inte längre. Logga in igen.')
   }
   if (res.status === 404) throw new StommenError('Projektet finns inte i Stommen längre, eller så ser du det inte där.')
-  if (res.status === 409) throw new StommenError('Protokollet är justerat i Stommen och kan inte ersättas.')
+  if (res.status === 409) {
+    await confirmation(dir).catch(() => null) // so the meeting shows by whom and when
+    throw new StommenError('Protokollet är justerat i Stommen och kan inte ersättas.')
+  }
   if (!res.ok) throw await refusal(res)
   const took = (await res.json()) as { version?: number; replaced?: boolean }
   if (typeof took.version !== 'number') throw new StommenError('Stommen svarade inte som väntat. Protokollet kan ha kommit fram: öppna Stommen och se efter.')
   await call(['stommen', 'sent', dir], { version: took.version, digest: out.digest })
   return { version: took.version, replaced: Boolean(took.replaced) }
+}
+
+type Listed = { series?: { key?: string }; number?: number; confirmation?: Confirmation | null }
+
+/**
+ * The Justering of the meeting's protocol as Stommen has it (`GET /projects/{id}/minutes`, found by the Mötesserie's
+ * key and the meeting's number), kept with the protocol by the engine (`byggmote stommen confirmed`). A justerat
+ * protocol is then neither corrected nor sent from here. Not justerat, or not in Stommen at all, is null.
+ */
+export async function confirmation(dir: string): Promise<Confirmation | null> {
+  const saved = await read()
+  const bearer = token(saved)
+  if (!saved || !bearer) throw new StommenError('Byggmöte är inte inloggat i Stommen.')
+  const at = await call<{ project: string; series: string; no: number }>(['stommen', 'where', dir])
+  const res = await send(saved.server, `/api/mobile/v1/projects/${encodeURIComponent(at.project)}/minutes`, { token: bearer })
+  if (res.status === 401) {
+    await forget()
+    throw new StommenError('Inloggningen i Stommen gäller inte längre. Logga in igen.')
+  }
+  // Stommen's own 404 names the Projekt (`not_found`). One from before this read has only the send on the path (405),
+  // or nothing there at all: that is not a Projekt that is gone.
+  const body = (await res.json().catch(() => null)) as { minutes?: Listed[]; error?: { code?: string } } | null
+  if (res.status === 404 && body?.error?.code === 'not_found') {
+    throw new StommenError('Projektet finns inte i Stommen längre, eller så ser du det inte där.')
+  }
+  if (res.status === 404 || res.status === 405) {
+    throw new StommenError('Stommen kan inte svara på om protokollet är justerat. Den behöver en nyare version först.')
+  }
+  if (!res.ok) throw await refusal(res)
+  const minutes = Array.isArray(body?.minutes) ? body.minutes : []
+  const it = minutes.find((x) => x.series?.key === at.series && x.number === at.no)?.confirmation
+  // Only the fields Byggmöte keeps: Stommen may add to its answer. The engine checks them before anything is written.
+  const given = it ? { on: it.on, method: it.method, by: it.by } : null
+  return call<Confirmation | null>(['stommen', 'confirmed', dir], { confirmation: given })
 }

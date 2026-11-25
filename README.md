@@ -9,15 +9,103 @@ models. Its tests and llama.cpp's server run on Windows and Linux on GitHub; a w
 on the Mac. The app is a first version: it shows a project's meetings, the agenda and a protocol with its transcript
 and sound, records a meeting or takes a recording, names the speakers, and lets a person correct the protocol. It
 signs in to Stommen as a person, fetches the person's Projekt with their Roller and Kontakter, and sends a protocol
-there when the person asks. A correction is not tied to who is signed in, and the app is not packaged for installing.
+there when the person asks. When the meeting is opened, and when the person asks, it reads from Stommen whether a sent
+protocol is justerat there, and shows when, how and by whom; a justerat protocol is no longer corrected or sent from
+the app. A correction is not tied to who is signed in. It installs on Windows, Linux and the Mac without developer
+tools (Installing, below), not yet signed.
 It also works with no Stommen at all: a project is made in the window (Projekt in the menu), with the people at its
 meetings and their Roller, and its first mötesserie is started with it. A protocol is kept as `protocol.md` in the
 meeting's folder, and the window can save it as a file or copy its text. Stommen is the thing to add later, from the
 Stommen view. A first run (name, microphone, models, Stommen) and Inställningar (name, where meetings are kept, microphone, Recognise Voices,
 open at login, models, licences) are in the app; the app keeps them in its own folder (`settings.json`). Still to build:
-justering, and the phone recorder.
+the phone recorder.
 
 Where the engine comes from and what the models' licences ask: `NOTICE.md`.
+
+## Installing
+
+An installer carries all the app needs: the engine with its own Python, `ffmpeg` and `ffprobe`, and llama.cpp's
+`llama-server` on Windows and Linux. Nothing is expected on the computer's path. The models are not in it: the first
+run fetches them (about 7 GB, 9 GB on the Mac, one progress bar, Modeller under Inställningar later), and from then on the app works
+without internet.
+
+Download from the repo's releases:
+
+| Computer                                 | File                                              |
+| ---------------------------------------- | ------------------------------------------------- |
+| Windows 10 or 11, x64                    | `Byggmote-<version>-win-x64.exe`                  |
+| Ubuntu 22.04, Debian 12 or later, x64    | `Byggmote-<version>-linux-amd64.deb`, or the `.AppImage` for other distributions |
+| Mac with Apple silicon, macOS 12 or later | `Byggmote-<version>-mac-arm64.dmg`               |
+
+- **Windows.** Run the file and choose for whom. For IT, silently: `Byggmote-<version>-win-x64.exe /S /allusers`
+  installs for everyone in `C:\Program Files\Byggmote`, `/S` alone for the person running it, and `/D=<folder>` (last)
+  picks the folder: give it a folder of its own, since the uninstaller removes that whole folder with everything in
+  it. Files and folders are named `Byggmote`, without the ö, so a script need not quote it; the
+  name a person reads is Byggmöte. Uninstall in Settings, Apps, or silently:
+  `"C:\Program Files\Byggmote\Uninstall Byggmote.exe" /S /allusers`.
+- **Linux.** `sudo apt install ./Byggmote-<version>-linux-amd64.deb`, and `sudo apt remove byggmote` to uninstall. The
+  AppImage runs as it is (`chmod +x`), and is uninstalled by removing the file.
+- **Mac.** Open the `.dmg` and drag Byggmöte to Program. Uninstall by moving it to the trash. There is no `.pkg`, so
+  a script installs it from the disk image:
+
+      hdiutil attach -nobrowse -quiet -mountpoint /Volumes/Byggmote Byggmote-<version>-mac-arm64.dmg
+      sudo cp -R /Volumes/Byggmote/Byggmote.app /Applications/
+      hdiutil detach -quiet /Volumes/Byggmote
+
+  and removes it with `sudo rm -rf /Applications/Byggmote.app`.
+
+An uninstall removes the program and nothing else. The meetings stay in `Documents/Byggmöte` (or the folder chosen
+under Inställningar), the settings in the app's own folder (`%APPDATA%\Byggmote`, `~/.config/Byggmote`,
+`~/Library/Application Support/Byggmote`) and the models in `~/.cache/huggingface`. Removing those is a choice made by
+hand.
+
+### What computer it needs
+
+| | Records and transcribes | Writes the protocol |
+| --- | --- | --- |
+| Memory | 8 GB | 16 GB |
+| Disk | up to 2 GB for the app and 1.4 GB for speech and speakers (3.3 GB on the Mac) | 5.7 GB more for the language model (6 GB on the Mac) |
+| Graphics card | not used on Windows and Linux, the CPU does it all | not used on Windows and Linux; on the Mac MLX uses Apple silicon's |
+
+The 16 GB is what the engine asks of Qwen3.5 9B (`min_ram_gb` in `models.py`). On a computer with less, the models step
+says plainly that the computer is too small to write a protocol, and when the disk has too little room for the models.
+**Not measured yet:** how long a protocol takes, and whether 8 GB really carries an hour's meeting. That needs a
+person to run a recorded hour, from the installed app, on a five-year-old laptop with 8 GB, on a 16 GB laptop without
+a graphics card, and on a clean Windows and a clean Linux computer, and to write the times in this table.
+
+### Building the installers
+
+`.github/workflows/release.yml` builds all three from a tag `v*` and puts them on a draft release; a pull request that
+changes how they are made builds them too, unsigned and without any of the repo's secrets. On each runner it installs
+the result silently, runs the installed engine with nothing of the runner's on its path
+(`app/scripts/smoke-installed.sh`: Python, the model list, `ffmpeg` and `ffprobe` reading a recording,
+`llama-server`), uninstalls it silently and checks that the meetings folder the installed engine uses by default
+(`Documents/Byggmöte`), with a project it made there, is as it was (`app/scripts/meetings-kept.sh`). On the Mac it
+installs from the disk image with the script above. It does not run a meeting through the installed app: that
+needs the models and a person to judge the protocol.
+
+On a computer of one's own, from `app/`: `./scripts/bundle-engine.sh`, then `npm run dist` (the installer for that
+system, in `app/dist/`). The bundle script pins every build it fetches by its checksum.
+
+### Signing
+
+Without signing, a company laptop will often refuse the file, and a person's own computer warns. Neither is done yet.
+The workflow signs as soon as the secrets are in the repo:
+
+- **Mac: not signed or notarised** (ad hoc only, which Apple silicon needs to start it). The Mac then says the app
+  cannot be opened, and only right-click, Öppna gets past it. Missing: membership of the Apple Developer Program (99 USD
+  a year, for the company), a Developer ID Application certificate from it, and the secrets `MAC_CSC_LINK` (the
+  certificate as base64 `.p12`), `MAC_CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID`.
+  electron-builder then signs and notarises.
+- **Windows: not signed.** SmartScreen says "Windows skyddade datorn", and AppLocker or Smart App Control blocks it.
+  Missing: a code signing certificate. Since 2023 a certificate authority only issues them on a hardware key or in a
+  cloud HSM, so a `.pfx` in a secret (`WIN_CSC_LINK`, `WIN_CSC_KEY_PASSWORD`, which the workflow takes) only works with
+  an older one. The likely way is Microsoft's Azure Artifact Signing (from about 10 USD a month; check that it takes a
+  Swedish company first), wired in with electron-builder's `win.azureSignOptions`; an OV certificate in a cloud HSM costs
+  about 250 to 500 USD a year.
+- **The Mac's speaker model.** pyannote community-1 is gated on Hugging Face, so a Mac build carries it only when the
+  secret `HF_TOKEN` belongs to an account that has accepted its terms. Without it the Mac build cannot tell speakers
+  apart. Windows and Linux use other speaker models and need nothing.
 
 ## The app
 
@@ -40,6 +128,24 @@ sits at the computer cannot land in it. They also show the engine folders with n
 for a protocol to be written, by mistake or because an earlier test failed and the app started over, gets an error
 and not minutes of a language model. Recording from a microphone to a written protocol is not in them: it needs the
 models and several minutes, and has been run by hand with a sound clip played into the app as its microphone.
+
+### Word and PDF
+
+A protocol is saved as Word (`.docx`), PDF or Markdown from its page ("Spara som Word", "Spara som PDF"), to send as it
+is or to open and edit. Both are made from `protocol.md`, so the headings, numbers and points are the window's own, and
+`app/tests/export.spec.ts` compares them. Neither needs Word: the `.docx` is written by the `docx` library and the PDF
+is printed by the app's own hidden window, so it is the same on Windows, Linux and Mac.
+
+A Projekt can give the file its look: put `header.txt` (one line) and `logo.png`, `logo.jpg` or `logo.jpeg` in
+`mallar/<project id>/` in the folder where Byggmöte keeps its projects (Inställningar shows it). The header and logo
+go at the top of the Word file's every page and of the PDF's first. Without them the file is plain. The consent line and
+the justering line are not kept anywhere yet: `closingLines` in `app/src/main/index.ts` is where they go, and both files
+then end with them.
+
+Teams meeting notes (and Copilot's recap) summarise a call for the people in it. A Byggmöte protocol is numbered by
+heading, gives each point a Roll and a date, carries open points over from the earlier meeting, and every point points
+at the sentence in the recording. Sent on to Stommen, a point becomes an ÄTA, a risk or a decision there with that trail.
+The file is for those who work in Word and Outlook; the lines to Stommen are why to record here.
 
 ### Stommen
 

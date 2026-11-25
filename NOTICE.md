@@ -54,6 +54,16 @@ release b12590. An app that ships a build of it ships its `LICENSE` too.
 `ffmpeg` and `ffprobe` are on the computer's path and are not in the repo or pinned. Their licence (LGPL or GPL) is the
 one of the build the computer has.
 
+## What the installers carry
+
+`app/scripts/bundle-engine.sh` puts these next to the engine, each a pinned build, and the installer ships their
+licences in `resources/engine/licenses/`:
+
+- Python 3.12 from python-build-standalone (through uv), under the PSF licence, with the engine's packages under theirs.
+- `ffmpeg` and `ffprobe`: on Windows and Linux BtbN's LGPL 2.1 builds, on the Mac Martin Riedl's builds, which are
+  GPL 3.0. They run as separate programs; the source is at https://ffmpeg.org.
+- `llama-server` on Windows and Linux, with llama.cpp's `LICENSE`.
+
 ## The app
 
 The app is built on Electron (MIT) and Svelte (MIT). Its fonts are in the app, so nothing is fetched: Inter, Josefin
