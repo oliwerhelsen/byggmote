@@ -38,6 +38,13 @@ test('with no project it asks for one, and says nothing about needing Stommen', 
   await expect(win.getByText('Projekt och Roller hämtas från Stommen')).toHaveCount(0)
 })
 
+test('with no project, Inställningar has a way back to making one', async () => {
+  await win.getByRole('button', { name: 'Inställningar' }).click()
+  await expect(win.getByRole('heading', { name: 'Inställningar', level: 1 })).toBeVisible()
+  await win.getByRole('button', { name: 'Nytt projekt' }).click()
+  await expect(win.getByRole('heading', { name: 'Skapa ditt första projekt' })).toBeVisible()
+})
+
 test('a project is made and opens on its overview, from which the meetings are one click away', async () => {
   await win.getByLabel('Projektets namn').fill('Kv. Björken')
   await win.getByRole('button', { name: 'Skapa projekt' }).click()
