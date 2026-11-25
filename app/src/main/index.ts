@@ -7,7 +7,7 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, session, shell } from '
 import type { Agenda, Api, Done, Job, MeetingDetail, MeetingRow, ModelEvent, ModelRow, NewPoint, PointFields, Progress, Project, SeriesRef } from '../shared/types'
 import { call, run, stopAll, stream } from './engine'
 import * as kept from './settings'
-import { toDocx, toPdf } from './export'
+import { toDocx, toPdf, type Sheet } from './export'
 import * as stommen from './stommen'
 
 // The tests give the app a folder of its own for what it keeps, so a run never reads or writes the person's.
@@ -49,6 +49,35 @@ const words = (s: unknown, what: string): string => {
   const t = String(s ?? '').split(/\s+/).filter(Boolean).join(' ')
   if (!t) throw new Error(`${what} saknas`)
   return t
+}
+
+/** The lines after a protocol's last heading in Word and PDF. The consent line (stommen#268, #271) and the justering
+ * line (stommen#272) are not kept anywhere yet: when they are, return them here, and both files carry them. */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function closingLines(_meeting: string): Promise<string[]> {
+  return []
+}
+
+/** A project's own look for its protocols, if it has one: `mallar/<project>/header.txt` (one line) and `logo.png` or
+ * `logo.jpg`, in the folder where Byggmöte keeps its projects. Missing or unreadable files are left out. */
+async function sheetFor(meeting: string): Promise<Sheet> {
+  const sheet: Sheet = { closing: await closingLines(meeting) }
+  try {
+    const { area } = JSON.parse(await readFile(join(meeting, 'meeting.json'), 'utf8')) as { area: string }
+    const dir = join((await call<{ folder: string }>(['projects'])).folder, 'mallar', projectId(area))
+    const header = (await readFile(join(dir, 'header.txt'), 'utf8').catch(() => '')).split('\n')[0].trim()
+    if (header) sheet.header = header
+    for (const [name, type] of [['logo.png', 'png'], ['logo.jpg', 'jpg'], ['logo.jpeg', 'jpg']] as const) {
+      const data = await readFile(join(dir, name)).catch(() => null)
+      if (data) {
+        sheet.logo = { data, type }
+        break
+      }
+    }
+  } catch {
+    // no meeting.json or no project folder: the plain file
+  }
+  return sheet
 }
 
 /** A project of this computer's own. One of Stommen's is Stommen's to name, remove and staff: the window hides those
@@ -159,6 +188,7 @@ function handlers(tell: (p: Progress) => void, tellModels: (e: ModelEvent) => vo
     stommenSync: () => stommen.sync(),
     stommenSignOut: () => stommen.signOut(),
     stommenSend: (dir) => stommen.sendMinutes(known(dir)),
+    stommenConfirmation: (dir) => stommen.confirmation(known(dir)),
 
     async projectAdd(name) {
       const a = await call<{ id: string }>(['areas', 'add'], { name: words(name, 'Namn') })
@@ -192,25 +222,24 @@ function handlers(tell: (p: Progress) => void, tellModels: (e: ModelEvent) => vo
       await setMembers(id, (await members(id)).filter((x) => x.person !== who))
     },
 
-    async protocolSave(dir) {
+    async protocolSave(dir, format) {
       const d = known(dir)
       const win = BrowserWindow.getFocusedWindow()
+      const ext = format === 'docx' ? 'docx' : format === 'pdf' ? 'pdf' : 'md'
       const options: Electron.SaveDialogOptions = {
         title: 'Spara protokollet',
-        defaultPath: `${basename(d)}.docx`,
-        filters: [
-          { name: 'Word', extensions: ['docx'] },
-          { name: 'PDF', extensions: ['pdf'] },
-          { name: 'Markdown', extensions: ['md'] }
-        ]
+        defaultPath: `${basename(d)}.${ext}`,
+        filters: [{ name: { docx: 'Word', pdf: 'PDF', md: 'Markdown' }[ext], extensions: [ext] }]
       }
       const got = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
       if (got.canceled || !got.filePath) return false
       const file = join(d, 'protocol.md')
-      const ext = extname(got.filePath).toLowerCase()
-      if (ext === '.docx') await writeFile(got.filePath, await toDocx(await readFile(file, 'utf8')))
-      else if (ext === '.pdf') await writeFile(got.filePath, await toPdf(await readFile(file, 'utf8')))
-      else await copyFile(file, got.filePath)
+      if (ext === 'md') await copyFile(file, got.filePath)
+      else {
+        const md = await readFile(file, 'utf8')
+        const sheet = await sheetFor(d)
+        await writeFile(got.filePath, ext === 'docx' ? await toDocx(md, sheet) : await toPdf(md, sheet))
+      }
       return true
     },
     async protocolCopy(dir) {

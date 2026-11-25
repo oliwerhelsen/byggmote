@@ -282,6 +282,10 @@ def main(argv=None) -> int:
     x.add_argument("dir")
     x = pp.add_parser("sent", help="Stommen took the protocol: {\"version\", \"digest\"} on stdin, kept with the protocol")
     x.add_argument("dir")
+    x = pp.add_parser("where", help="the Projekt, Mötesserie key and number Stommen keeps the meeting's protocol under")
+    x.add_argument("dir")
+    x = pp.add_parser("confirmed", help="the protocol's Justering in Stommen: {\"confirmation\": {\"on\", \"method\", \"by\"} or null} on stdin")
+    x.add_argument("dir")
     sub.add_parser("version", help="engine and protocol version (JSON)")
     s = sub.add_parser("models", help="list models, download them ahead of first use (JSON lines), or discard a stopped download")
     s.add_argument("--json", action="store_true")
@@ -469,7 +473,8 @@ def main(argv=None) -> int:
         elif a.cmd == "stommen":
             from . import stommen
             _print(stommen.take(_stdin()) if a.op == "project" else stommen.minutes(Path(a.dir)) if a.op == "minutes"
-                   else stommen.sent(Path(a.dir), _stdin()))
+                   else stommen.where(Path(a.dir)) if a.op == "where"
+                   else stommen.confirmed(Path(a.dir), _stdin()) if a.op == "confirmed" else stommen.sent(Path(a.dir), _stdin()))
         elif a.cmd == "move":
             d = Path(a.dir).expanduser()
             with _locked():

@@ -9,13 +9,15 @@ models. Its tests and llama.cpp's server run on Windows and Linux on GitHub; a w
 on the Mac. The app is a first version: it shows a project's meetings, the agenda and a protocol with its transcript
 and sound, records a meeting or takes a recording, names the speakers, and lets a person correct the protocol. It
 signs in to Stommen as a person, fetches the person's Projekt with their Roller and Kontakter, and sends a protocol
-there when the person asks. A correction is not tied to who is signed in, and the app is not packaged for installing.
+there when the person asks. When the meeting is opened, and when the person asks, it reads from Stommen whether a sent
+protocol is justerat there, and shows when, how and by whom; a justerat protocol is no longer corrected or sent from
+the app. A correction is not tied to who is signed in, and the app is not packaged for installing.
 It also works with no Stommen at all: a project is made in the window (Projekt in the menu), with the people at its
 meetings and their Roller, and its first mötesserie is started with it. A protocol is kept as `protocol.md` in the
 meeting's folder, and the window can save it as a file or copy its text. Stommen is the thing to add later, from the
 Stommen view. A first run (name, microphone, models, Stommen) and Inställningar (name, where meetings are kept, microphone, Recognise Voices,
 open at login, models, licences) are in the app; the app keeps them in its own folder (`settings.json`). Still to build:
-justering, and the phone recorder.
+the phone recorder.
 
 Where the engine comes from and what the models' licences ask: `NOTICE.md`.
 
@@ -114,6 +116,24 @@ sits at the computer cannot land in it. They also show the engine folders with n
 for a protocol to be written, by mistake or because an earlier test failed and the app started over, gets an error
 and not minutes of a language model. Recording from a microphone to a written protocol is not in them: it needs the
 models and several minutes, and has been run by hand with a sound clip played into the app as its microphone.
+
+### Word and PDF
+
+A protocol is saved as Word (`.docx`), PDF or Markdown from its page ("Spara som Word", "Spara som PDF"), to send as it
+is or to open and edit. Both are made from `protocol.md`, so the headings, numbers and points are the window's own, and
+`app/tests/export.spec.ts` compares them. Neither needs Word: the `.docx` is written by the `docx` library and the PDF
+is printed by the app's own hidden window, so it is the same on Windows, Linux and Mac.
+
+A Projekt can give the file its look: put `header.txt` (one line) and `logo.png`, `logo.jpg` or `logo.jpeg` in
+`mallar/<project id>/` in the folder where Byggmöte keeps its projects (Inställningar shows it). The header and logo
+go at the top of the Word file's every page and of the PDF's first. Without them the file is plain. The consent line and
+the justering line are not kept anywhere yet: `closingLines` in `app/src/main/index.ts` is where they go, and both files
+then end with them.
+
+Teams meeting notes (and Copilot's recap) summarise a call for the people in it. A Byggmöte protocol is numbered by
+heading, gives each point a Roll and a date, carries open points over from the earlier meeting, and every point points
+at the sentence in the recording. Sent on to Stommen, a point becomes an ÄTA, a risk or a decision there with that trail.
+The file is for those who work in Word and Outlook; the lines to Stommen are why to record here.
 
 ### Stommen
 
