@@ -23,9 +23,11 @@ export function enginePath(): string[] {
 
 /** An installed app's engine finds ffmpeg, llama-server and the shipped models in the app, never on the person's path. */
 export function engineEnv(): NodeJS.ProcessEnv {
-  if (!app.isPackaged || process.env.BYGGMOTE_ENGINE) return process.env
+  // pyannote sends usage metrics to otel.pyannote.ai unless this is false; the engine sets it too (engine/src/byggmote/__init__.py).
+  const base: NodeJS.ProcessEnv = { ...process.env, PYANNOTE_METRICS_ENABLED: 'false' }
+  if (!app.isPackaged || process.env.BYGGMOTE_ENGINE) return base
   const root = bundled()
-  const env: NodeJS.ProcessEnv = { ...process.env, PYTHONNOUSERSITE: '1', PYTHONDONTWRITEBYTECODE: '1' }
+  const env: NodeJS.ProcessEnv = { ...base, PYTHONNOUSERSITE: '1', PYTHONDONTWRITEBYTECODE: '1' }
   const key = Object.keys(env).find((k) => k.toUpperCase() === 'PATH') ?? 'PATH'
   env[key] = [join(root, 'bin'), env[key]].filter(Boolean).join(delimiter)
   const server = process.platform === 'win32' ? 'llama-server.exe' : 'llama-server'

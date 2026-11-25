@@ -8,6 +8,10 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
+# pyannote-audio sends usage metrics to otel.pyannote.ai unless told not to (docs/security.md). Set before anything imports it,
+# and forced, not defaulted: `run`, `serve`, every other command and the tests all come through this module.
+os.environ["PYANNOTE_METRICS_ENABLED"] = "false"
+
 __version__ = "0.1.0"
 # Bumped when the app–engine contract (docs/SPEC.md) changes incompatibly; the app refuses other protocols.
 PROTOCOL = 29
