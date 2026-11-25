@@ -31,8 +31,11 @@ const seen: Seen[] = []
 let ended = false // Stommen has ended the session
 let slow = 0 // how long Stommen takes over a Projekt's roles, in milliseconds
 let tooOld = false // Stommen wants a newer Byggmöte
-let adjusted = false // the protocol is justerat in Stommen: it takes no later send
+// The protocol's Justering, once the projektledare has registered it in Stommen: then it takes no later send.
+let adjusted: { on: string; method: string; by: string } | null = null
 const kept = new Map<string, number>() // what Stommen has taken, by Idempotency-Key: the version it answered with
+let held: { key: string; number: number; heldOn: string } | null = null // the meeting Stommen has a protocol of
+let older = false // a Stommen from before the read of a Protokoll's Justering: only the send is on that path
 
 let stommen: Server
 let address: string
@@ -60,7 +63,16 @@ function answer(method: string, path: string, headers: IncomingHttpHeaders, body
     if (adjusted) return [409, { error: { code: 'confirmed', message: 'Protokollet är justerat och kan inte ersättas.' } }]
     const key = String(headers['idempotency-key'] ?? '')
     if (!kept.has(key)) kept.set(key, kept.size + 1) // the same key again is the same send
+    const sent = JSON.parse(body) as { series: { key: string }; meeting: { number: number; heldOn: string } }
+    held = { key: sent.series.key, number: sent.meeting.number, heldOn: sent.meeting.heldOn }
     return [200, { meetingId: 'm4', minutesId: 'p4', documentId: 'd4', version: kept.get(key), replaced: kept.get(key)! > 1 }]
+  }
+  if (older && method === 'GET' && path.endsWith('/minutes')) return [405, { message: 'GET method not allowed' }]
+  if (method === 'GET' && path === `/api/mobile/v1/projects/${EKEN}/minutes`) {
+    // As Stommen answers (its #272): each Protokoll by the Mötesserie's key and number, with a field it might add one day
+    const minutes = held ? [{ series: { key: held.key, name: 'Byggmöte' }, number: held.number, heldOn: held.heldOn, version: kept.size,
+      confirmation: adjusted && { ...adjusted, registeredBy: 'u1' } }] : []
+    return [200, { minutes }]
   }
   if (path === '/api/mobile/v1/me') {
     return [200, { user: { id: 'u1', name: 'Maria Lindqvist', email: EMAIL }, organization: { id: 'o1', name: 'Norrstaden Fastigheter AB', readOnly: false }, roles: ['member'] }]
@@ -272,7 +284,13 @@ test('a protocol goes to Stommen when the person sends it, with its points and w
   expect(seen.filter((r) => r.path.endsWith('/minutes'))).toHaveLength(0) // asked first, not sent yet
   await card.getByRole('button', { name: 'Skicka', exact: true }).click()
   await expect(card).toContainText(/Skickat .* version 1\./)
-  await expect(card.getByRole('button')).toHaveCount(0)
+  await expect(card.getByRole('button', { name: /Skicka/ })).toHaveCount(0)
+  // sent, the person can ask whether it is justerat yet
+  await card.getByRole('button', { name: 'Se efter om det är justerat' }).click()
+  await expect(card.getByRole('status')).toHaveText('Inte justerat i Stommen än.')
+  const asked = seen.filter((r) => r.method === 'GET' && r.path === `/api/mobile/v1/projects/${EKEN}/minutes`)
+  expect(asked).toHaveLength(1)
+  expect(asked[0].headers.authorization).toBe(`Bearer ${TOKEN}`)
 
   const [sent] = seen.filter((r) => r.path === `/api/mobile/v1/projects/${EKEN}/minutes`)
   expect(sent.method).toBe('POST')
@@ -290,26 +308,66 @@ test('a protocol goes to Stommen when the person sends it, with its points and w
   // changed after it was sent, it says so and goes again as a later version
   await win.getByRole('button', { name: 'Ändra punkt 4.3.1' }).click()
   await win.getByRole('form', { name: 'Ändra punkt 4.3.1' }).getByLabel('Punkten', { exact: true }).fill('Stommen på plan tre är klar och avsynad.')
-  await win.getByRole('button', { name: 'Spara' }).click()
+  await win.getByRole('button', { name: 'Spara', exact: true }).click()
   await expect(card).toContainText('Protokollet har ändrats sedan dess.')
   await card.getByRole('button', { name: 'Skicka igen' }).click()
   await card.getByRole('button', { name: 'Skicka', exact: true }).click()
   await expect(card).toContainText(/Skickat .* version 2\./)
-  expect(new Set(seen.filter((r) => r.path.endsWith('/minutes')).map((r) => r.headers['idempotency-key'])).size).toBe(2)
+  expect(new Set(seen.filter((r) => r.method === 'POST' && r.path.endsWith('/minutes')).map((r) => r.headers['idempotency-key'])).size).toBe(2)
 })
 
-test('a protocol that is justerat in Stommen is not replaced, and the app says why', async () => {
+test('a protocol justerat in Stommen meanwhile is not replaced, and the meeting says by whom and when', async () => {
   const card = win.getByRole('region', { name: 'Till Stommen' })
   await win.getByRole('button', { name: 'Ändra punkt 4.3.1' }).click()
   await win.getByRole('form', { name: 'Ändra punkt 4.3.1' }).getByLabel('Punkten', { exact: true }).fill('Stommen på plan tre är klar.')
-  await win.getByRole('button', { name: 'Spara' }).click()
-  adjusted = true
+  await win.getByRole('button', { name: 'Spara', exact: true }).click()
+  adjusted = { on: '2026-11-21', method: 'email', by: 'Båda parter' }
+  await card.getByRole('button', { name: 'Skicka igen' }).click()
+  await card.getByRole('button', { name: 'Skicka', exact: true }).click()
+  await expect(card.getByRole('alert')).toHaveText('Protokollet är justerat i Stommen och kan inte ersättas.')
+  await expect(card).toContainText('Justerat 21 november 2026, per e-post, av Båda parter.')
+  await expect(card).toContainText(/version 2\. Protokollet har ändrats sedan dess\./) // what Stommen has is still version 2
+  await expect(card).toContainText('be om en ny version i Stommen')
+  await expect(card.getByRole('button', { name: /Skicka/ })).toHaveCount(0)
+  await expect(win.getByRole('button', { name: /^Ändra punkt/ })).toHaveCount(0)
+  await expect(win.getByRole('button', { name: /Skriv om protokollet|Lägg till punkt/ })).toHaveCount(0)
+})
+
+test('the meeting asks Stommen when it is opened, and Stommen wins', async () => {
+  adjusted = { on: '2026-11-24', method: 'signed', by: 'Maria Lindqvist och Elin Sjöberg' } // registered again in Stommen
+  await win.getByRole('button', { name: 'Till möten' }).click()
+  const before = seen.length
+  await win.getByRole('button', { name: 'Byggmöte 4' }).click()
+  const card = win.getByRole('region', { name: 'Till Stommen' })
+  await expect(card).toContainText('Justerat 24 november 2026, signerat, av Maria Lindqvist och Elin Sjöberg.')
+  expect(seen.slice(before).map((r) => `${r.method} ${r.path}`)).toEqual([`GET /api/mobile/v1/projects/${EKEN}/minutes`])
+
+  // a justerat protocol is not changed behind the window's back either: the engine refuses
+  const refused = await win.evaluate(async () => {
+    const eken = (await window.api.projects()).projects.find((x) => x.name === 'Kv. Eken kontorshus')!
+    const dir = (await window.api.meetings(eken.id)).find((x) => x.no === 4)!.dir
+    return window.api.changePoint(dir, '4.3.1', { text: 'Ändrad i efterhand.' } as never).then(() => 'changed', (e: unknown) => String(e))
+  })
+  expect(refused).toContain('justerat')
+  adjusted = null
+})
+
+test('a Stommen that cannot say yet is quiet when the meeting opens, and says why when the person asks', async () => {
+  adjusted = null
+  older = true
   try {
-    await card.getByRole('button', { name: 'Skicka igen' }).click()
-    await card.getByRole('button', { name: 'Skicka', exact: true }).click()
-    await expect(card.getByRole('alert')).toHaveText('Protokollet är justerat i Stommen och kan inte ersättas.')
-    await expect(card).toContainText(/version 2\. Protokollet har ändrats sedan dess\./) // what Stommen has is still version 2
+    await win.getByRole('button', { name: 'Till möten' }).click()
+    await win.getByRole('button', { name: 'Byggmöte 4' }).click()
+    const card = win.getByRole('region', { name: 'Till Stommen' })
+    // what was known last stays, and nothing alarms
+    await expect(card).toContainText('Justerat 24 november 2026, signerat, av Maria Lindqvist och Elin Sjöberg.')
+    await expect(card.getByRole('button', { name: 'Se efter om det är justerat' })).toBeEnabled()
+    await expect(card.getByRole('alert')).toHaveCount(0)
+
+    await card.getByRole('button', { name: 'Se efter om det är justerat' }).click()
+    await expect(card.getByRole('alert')).toHaveText('Stommen kan inte svara på om protokollet är justerat. Den behöver en nyare version först.')
+    await expect(card).not.toContainText('Projektet finns inte')
   } finally {
-    adjusted = false
+    older = false
   }
 })

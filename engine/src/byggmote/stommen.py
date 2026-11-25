@@ -8,9 +8,14 @@ Kontakt in Stommen belongs to one Projekt, so a Kontakt is matched to a person: 
 e-mail, else by name.
 
 `minutes` is the other way: a meeting's protocol as Stommen takes it, for the app to send. Nothing of the recording
-goes with it but, for each point, how far in it was said, the line that was said there and who said it."""
+goes with it but, for each point, how far in it was said, the line that was said there and who said it.
+
+`confirmed` keeps what Stommen says of a sent protocol's Justering (ADR-0028 there): the projektledare registers in
+Stommen that it is justerat, when, how and by whom. A justerat protocol is final: it is not corrected, written again or
+sent from here, and a change is a new version asked for in Stommen."""
 import hashlib
 import json
+import re
 from pathlib import Path
 
 from . import ArgError, areas, atomic_write, knowledge, meeting, people, protocol
@@ -104,7 +109,7 @@ def take(given) -> dict:
             "vacant": sum(not r["holder"] for r in a["roles"]), "left": left}
 
 
-def minutes(d: Path) -> dict:
+def minutes(d: Path, settled: bool = False) -> dict:
     """The protocol of the meeting in `d` as Stommen takes it: {"project": the Projekt's id in Stommen, "minutes": what
     is sent}. A point comes with the Roll's id in Stommen, how many seconds into the recording it was said, the whole
     line said there and who said it (the Kontakt, when the speaker is one), and whether it stands as the model wrote
@@ -112,7 +117,8 @@ def minutes(d: Path) -> dict:
     not in it.
 
     Refused while something is left for a person: an amount to read against the recording, or a Roll to choose.
-    `digest` names what is sent: the same protocol gives the same one, so sending it twice is one send."""
+    `digest` names what is sent: the same protocol gives the same one, so sending it twice is one send. `settled` builds
+    it for a protocol justerat in Stommen too, which is not sent, to tell whether it changed after it was."""
     d = Path(d).expanduser()
     p = protocol.load(d)
     if p is None:
@@ -120,7 +126,7 @@ def minutes(d: Path) -> dict:
     m = meeting.load(d)
     area = areas.get(areas.load(), m["area"])
     pid = area.get("stommen")
-    if stops := _stops(p, area):
+    if (stops := _stops(p, area)) and not (settled and stops[0] == "confirmed"):
         raise ArgError(stops[2])
 
     ps = people.load()
@@ -166,6 +172,8 @@ def _stops(p: dict, area: dict) -> tuple | None:
     has."""
     if not area.get("stommen"):
         return "local", None, "the project is not one of Stommen's"
+    if (p.get("stommen") or {}).get("confirmed"):
+        return "confirmed", None, "the protocol is justerat in Stommen: a change is a new version asked for there"
     if left := sum(len(protocol.unchecked(x)) for x in p["points"]):
         return "checks", left, f"{left} checks are left in the protocol: an amount to confirm or a Roll to choose"
     rolls = {key(r["name"]) for r in area.get("roles", [])}
@@ -184,15 +192,55 @@ def sent(d: Path, given) -> dict:
         p = protocol.load(d)
         if p is None:
             raise ArgError("the meeting has no protocol")
-        p["stommen"] = {"sent_at": meeting.now(), "version": f["version"], "digest": f["digest"]}
+        p["stommen"] = (p.get("stommen") or {}) | {"sent_at": meeting.now(), "version": f["version"], "digest": f["digest"]}
         atomic_write(d / protocol.FILE, json.dumps(p, ensure_ascii=False, indent=1) + "\n")
     return p["stommen"]
 
 
+def where(d: Path) -> dict:
+    """Where Stommen keeps the meeting's protocol: {"project": the Projekt's id, "series": the Mötesserie's key, "no"}."""
+    d = Path(d).expanduser()
+    p = protocol.load(d)
+    if p is None:
+        raise ArgError("the meeting has no protocol")
+    pid = areas.get(areas.load(), meeting.load(d)["area"]).get("stommen")
+    if not pid:
+        raise ArgError("the project is not one of Stommen's")
+    return {"project": pid, "series": p["series"], "no": p["no"]}
+
+
+METHODS = ("next_meeting", "email", "signed")
+
+
+def confirmed(d: Path, given) -> dict | None:
+    """Stommen's answer for the protocol's Justering: {"confirmation": {"on", "method", "by"}}, or {"confirmation": null}
+    while it is not justerat. Kept with the protocol as Stommen says it, which wins over what was kept before."""
+    if not isinstance(given, dict) or set(given) != {"confirmation"}:
+        raise ArgError('expected {"confirmation": ...}')
+    c = given["confirmation"]
+    if c is not None:
+        c = dict(areas.fields(c, {"on": str, "method": str, "by": str}, ("on", "method", "by")))
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", c["on"]):
+            raise ArgError(f"bad date: {c['on']}")
+        if c["method"] not in METHODS:
+            raise ArgError(f"unknown way of justering: {c['method']}")
+    d = Path(d).expanduser()
+    with knowledge.locked(knowledge.folder()):
+        p = protocol.load(d)
+        if p is None:
+            raise ArgError("the meeting has no protocol")
+        was = p.get("stommen") or {}
+        if was.get("confirmed") != c:
+            p["stommen"] = {k: v for k, v in was.items() if k != "confirmed"} | ({"confirmed": c} if c else {})
+            atomic_write(d / protocol.FILE, json.dumps(p, ensure_ascii=False, indent=1) + "\n")
+    return c
+
+
 def sending(d: Path, p: dict, area: dict) -> dict:
     """Where the protocol stands with Stommen, for the app: whether it can be sent and what stops it (`_stops`), when
-    it was last sent and as which version, and whether it has been changed since."""
+    it was last sent and as which version, whether it has been changed since, and its Justering (`confirmed`)."""
     stops, was = _stops(p, area), p.get("stommen") or {}
-    now = None if stops else minutes(d)["digest"]
+    now = minutes(d, settled=True)["digest"] if not stops or stops[0] == "confirmed" else None
     return {"possible": stops is None, "why": stops and stops[0], "about": stops and stops[1], "sent_at": was.get("sent_at"),
-            "version": was.get("version"), "changed": bool(was) and now != was.get("digest")}
+            "version": was.get("version"), "changed": bool(was.get("digest")) and now != was.get("digest"),
+            "confirmed": was.get("confirmed")}
