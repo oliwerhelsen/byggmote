@@ -88,7 +88,12 @@ jobs:
       - name: Build the installer
         run: |
           # The Mac runner's default limit is too low for the engine's many small files (EMFILE while packing).
-          if [ "$RUNNER_OS" = macOS ]; then ulimit -n 65536 || ulimit -n 10240; fi
+          # ulimit alone stayed at the system's per-process cap, so that is raised first.
+          if [ "$RUNNER_OS" = macOS ]; then
+            sudo sysctl -w kern.maxfiles=1048576 kern.maxfilesperproc=1048576 || true
+            ulimit -n 1048576 || ulimit -n 65536 || ulimit -n 10240 || true
+            echo "open-file limit: $(ulimit -n)"
+          fi
           args=(${{ matrix.target }} --publish never)
           [[ "$GITHUB_REF" == refs/tags/v* ]] && args+=("-c.extraMetadata.version=${GITHUB_REF_NAME#v}")
           if [ "$RUNNER_OS" = macOS ] && [ -z "$CSC_LINK" ]; then args+=(-c.mac.identity=-); fi
@@ -99,6 +104,8 @@ jobs:
           npx electron-builder "${args[@]}"
           ls -la dist
         env:
+          # A pull request's build signs too (ad hoc, no secrets), so it exercises the step a tag build fails on.
+          CSC_FOR_PULL_REQUEST: 'true'
           CSC_LINK: ${{ runner.os == 'macOS' && startsWith(github.ref, 'refs/tags/v') && secrets.MAC_CSC_LINK || '' }}
           CSC_KEY_PASSWORD: ${{ runner.os == 'macOS' && startsWith(github.ref, 'refs/tags/v') && secrets.MAC_CSC_KEY_PASSWORD || '' }}
           APPLE_ID: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.APPLE_ID || '' }}
