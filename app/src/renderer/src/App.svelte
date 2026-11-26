@@ -10,8 +10,7 @@
   import Overview from './views/Overview.svelte'
   import Protocol from './views/Protocol.svelte'
   import Onboarding from './views/Onboarding.svelte'
-  import Settings from './views/Settings.svelte'
-  import Stommen from './views/Stommen.svelte'
+  import Palette, { type Entry } from './lib/Palette.svelte'
   import Working, { STEPS, type Run } from './views/Working.svelte'
 
   const TITLES: Record<View['name'], string> = {
@@ -19,9 +18,7 @@
     agenda: 'Dagordning',
     working: 'Mötet bearbetas',
     protocol: 'Protokoll',
-    overview: 'Översikt',
-    stommen: 'Stommen',
-    settings: 'Inställningar'
+    overview: 'Översikt'
   }
 
   // The select's last option opens a dialog where a project is named and made.
@@ -52,7 +49,6 @@
 
   const project = $derived(projects.find((p) => p.id === chosen) ?? projects[0])
   // The views that are not about the chosen project's meetings.
-  const elsewhere = $derived(view.name === 'stommen' || view.name === 'settings')
   // The meeting being recorded in its own window, as that window says it stands. One at a time.
   let live = $state<RecordStatus | null>(null)
   $effect(() => window.api.onRecording((r) => (live = r)))
@@ -181,6 +177,12 @@
     if (i === run.at) run.fraction = p.state === 'done' ? 1 : p.state === 'progress' ? (p.fraction ?? 0) : run.fraction
   }
   $effect(() => window.api.onProgress(heard))
+  // Inställningar is a window of its own: what is changed there is read again here.
+  $effect(() => window.api.onChanged(() => {
+    void window.api.settings().then((x) => (settings = x))
+    void window.api.stommenState().then((x) => (stommen = x)).catch(() => {})
+    void load()
+  }))
   // A meeting recorded in its own window comes here to be written out.
   $effect(() => window.api.onJob(start))
 
@@ -214,7 +216,8 @@
     if (!settings?.setUp) return
     if (PROTOCOL.includes(c)) return view.name === 'protocol' ? protocol?.command(c) : undefined
     const first = project?.series[0]
-    if (c === 'settings') go({ name: 'settings' })
+    if (c === 'settings') void window.api.settingsOpen()
+    else if (c === 'palette') palette?.show()
     else if (c === 'newProject') openNew()
     else if (c === 'sync') void connect()
     else if (c === 'intro') void window.api.setUp(false).then((s) => (settings = s))
@@ -227,6 +230,35 @@
     else if (c === 'addRecording') void addRecording(first)
   }
   $effect(() => window.api.onCommand(command))
+
+  // The palette lists what the window can do now, the project's meetings and open points, and the other projects.
+  let palette = $state<{ show: () => void }>()
+  const mac = window.api.platform === 'darwin'
+  const k = (onMac: string, elsewhere: string): string => (mac ? onMac : elsewhere)
+  const entries = $derived.by((): Entry[] => {
+    const cmd = (label: string, c: Command, keys?: string): Entry => ({ group: 'Kommandon', label, keys, run: () => command(c) })
+    const list: Entry[] = []
+    if (project) {
+      list.push(cmd('Översikt', 'overview', k('⌘1', 'Ctrl+1')), cmd('Öppna punkter', 'points', k('⌘2', 'Ctrl+2')))
+      if (project.series.length) list.push(cmd('Dagordning', 'agenda', k('⌘3', 'Ctrl+3')), cmd(live ? 'Visa inspelningsfönstret' : 'Spela in möte…', 'record', k('⌘R', 'Ctrl+R')), cmd('Lägg till en inspelning…', 'addRecording', k('⌘O', 'Ctrl+O')))
+    }
+    if (view.name === 'protocol') {
+      list.push(cmd('Sök i utskriften', 'find', k('⌘F', 'Ctrl+F')), cmd(doc.inspector ? 'Dölj utskriften' : 'Visa utskriften', 'inspector', k('⌥⌘I', 'Ctrl+I')))
+      if (doc.protocol) list.push(cmd('Nästa att kontrollera', 'nextCheck', k('⌘J', 'Ctrl+J')), cmd('Spara som Word…', 'saveDocx', k('⇧⌘S', 'Ctrl+Skift+S')), cmd('Spara som PDF…', 'savePdf'), cmd('Spara som Markdown…', 'saveMd'),
+        cmd('Kopiera texten', 'copyText', k('⇧⌘C', 'Ctrl+Skift+C')), cmd('Byt namn på mötet…', 'rename'))
+      if (doc.free) list.push(cmd('Ny punkt', 'newPoint', k('⌘N', 'Ctrl+N')), cmd('Skriv om protokollet…', 'rewrite'))
+      if (doc.sendable) list.push(cmd('Skicka till Stommen…', 'send', k('⌘⏎', 'Ctrl+Enter')))
+    }
+    list.push(cmd('Nytt projekt…', 'newProject', k('⇧⌘N', 'Ctrl+Skift+N')), cmd('Inställningar…', 'settings', k('⌘,', 'Ctrl+,')), cmd(sidebar ? 'Dölj sidopanelen' : 'Visa sidopanelen', 'sidebar', k('⌃⌘S', 'Ctrl+B')))
+    if (stommen?.connected) list.push(cmd('Hämta från Stommen', 'sync', k('⇧⌘U', 'F5')))
+    for (const r of rows) list.push({ group: 'Möten', label: r.title, detail: `${shortDate(r.recorded_at)} · ${standing(r).text}`, run: () => go({ name: 'protocol', dir: r.dir }) })
+    for (const a of agendas ?? []) for (const h of a.headings) for (const pt of h.open) {
+      const from = rows.find((r) => r.series === a.series && r.no === Number(pt.no.split('.')[0]))
+      list.push({ group: 'Öppna punkter', label: `${pt.no} ${pt.text}`, detail: [pt.role, pt.due].filter(Boolean).join(' · '), run: () => go(from ? { name: 'protocol', dir: from.dir } : { name: 'points' }) })
+    }
+    for (const x of projects) if (x.id !== project?.id) list.push({ group: 'Projekt', label: x.name, run: () => choose(x.id) })
+    return list
+  })
   $effect(() => {
     void window.api.menuState({
       ready: loaded && Boolean(settings?.setUp), held: false, project: Boolean(project), series: Boolean(project?.series.length),
@@ -314,7 +346,7 @@
         </div>
       {:else if loaded && !problem}
         <!-- Without a project the menu is otherwise empty, and this is the way back from Inställningar. -->
-        <button class="item" class:current={!elsewhere} aria-current={!elsewhere ? 'page' : undefined}
+        <button class="item current" aria-current="page"
           onclick={() => go({ name: 'overview' })}>
           <Icon name="plus" size={16} /> Nytt projekt
         </button>
@@ -331,8 +363,7 @@
         {/if}
       </p>
       <p class="status"><Icon name="lock" size={13} /> Ljud och utskrift stannar på den här datorn</p>
-      <button class="item" class:current={elsewhere} aria-current={elsewhere ? 'page' : undefined}
-        onclick={() => go({ name: 'settings' })}>
+      <button class="item" onclick={() => window.api.settingsOpen()}>
         <Icon name="gear" size={16} /> Inställningar
       </button>
     </div>
@@ -350,7 +381,7 @@
           <p class="sub">{meeting.sub}</p>
         {:else}
           <p class="title">{TITLES[view.name]}</p>
-          {#if project && !elsewhere}<p class="sub">{project.name}</p>{/if}
+          {#if project}<p class="sub">{project.name}</p>{/if}
         {/if}
       </div>
       <span class="grow"></span>
@@ -358,7 +389,7 @@
       <div id="tools"></div>
       {#if live}
         <button class="btn rec" onclick={() => window.api.recordShow()}>{live.phase === 'paused' ? 'Pausad' : 'Spelar in'} {clock(live.seconds)}</button>
-      {:else if project?.series.length && !elsewhere}
+      {:else if project?.series.length}
         <button class="btn rec" onclick={() => recorder?.show(project.series[0])}>Spela in</button>
       {/if}
     </header>
@@ -377,17 +408,6 @@
             </div>
           </div>
         </div>
-      {:else if view.name === 'settings'}
-        {#if settings}
-          <Settings {settings} {stommen} {folder} {go} changed={(s) => (settings = s)} moved={load}
-            intro={async () => (settings = await window.api.setUp(false))} />
-        {/if}
-      {:else if view.name === 'stommen'}
-        {#if stommen}
-          <Stommen {stommen} changed={(s) => (stommen = s)} refresh={load} />
-        {:else}
-          <div class="page"><p class="muted">Läser in kopplingen till Stommen.</p></div>
-        {/if}
       {:else if !project}
         <div class="page">
           <div class="page-head"><div><h1>Skapa ditt första projekt</h1></div></div>
@@ -395,7 +415,7 @@
             <p class="muted" style="margin-bottom: 12px">Ett projekt samlar mötena för ett bygge. Du kan spela in det första mötet direkt efteråt.</p>
             <NewProject created={made} />
           </section>
-          <p class="small muted" style="margin-top: 16px">Har du Stommen? <button class="link" onclick={() => go({ name: 'stommen' })}>Koppla dit</button> så hämtas dina Projekt, Roller och Kontakter hit.</p>
+          <p class="small muted" style="margin-top: 16px">Har du Stommen? <button class="link" onclick={() => window.api.settingsOpen('stommen')}>Koppla dit</button> så hämtas dina Projekt, Roller och Kontakter hit.</p>
         </div>
       {:else}
         {#key project.id}
@@ -423,6 +443,7 @@
 {/if}
 
 {#if project}<RecordDialog bind:this={recorder} {project} />{/if}
+<Palette bind:this={palette} {entries} />
 
 <dialog bind:this={dialog} aria-labelledby="new-title" onclose={() => (naming = false)}>
   <h2 id="new-title">Nytt projekt</h2>

@@ -5,6 +5,7 @@ import { mount } from 'svelte'
 import './app.css'
 import App from './App.svelte'
 import RecordWindow from './views/RecordWindow.svelte'
+import SettingsWindow from './views/SettingsWindow.svelte'
 import type { RecordSpec } from '../../shared/types'
 
 // The Mac's measures or Windows' (Linux takes Windows'): app.css reads it.
@@ -14,4 +15,7 @@ document.documentElement.dataset.platform = window.api.platform === 'darwin' ? '
 const record = location.hash.startsWith('#record=') ? (JSON.parse(decodeURIComponent(location.hash.slice(8))) as RecordSpec) : null
 const target = document.getElementById('app')!
 
-export default record ? mount(RecordWindow, { target, props: { spec: record } }) : mount(App, { target })
+// Inställningar is a window of its own too, opened on one of its tabs.
+const settings = location.hash.startsWith('#settings') ? location.hash.slice(10) : null
+
+export default record ? mount(RecordWindow, { target, props: { spec: record } }) : settings !== null ? mount(SettingsWindow, { target, props: { first: settings } }) : mount(App, { target })

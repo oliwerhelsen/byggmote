@@ -108,7 +108,7 @@ const correct = async (args: string[], fields?: PointFields | NewPoint): Promise
   await call(['correct', ...args], fields)
 }
 
-function handlers(tell: (p: Progress) => void, tellModels: (e: ModelEvent) => void): { [K in Exclude<keyof Api, 'onProgress' | 'onModels' | 'onCommand' | 'onRecording' | 'onJob' | 'onRecordCommand' | 'platform'>]: (...args: Parameters<Api[K]>) => ReturnType<Api[K]> } {
+function handlers(tell: (p: Progress) => void, tellModels: (e: ModelEvent) => void): { [K in Exclude<keyof Api, 'onProgress' | 'onModels' | 'onCommand' | 'onRecording' | 'onJob' | 'onChanged' | 'onRecordCommand' | 'platform'>]: (...args: Parameters<Api[K]>) => ReturnType<Api[K]> } {
   return {
     projects: () => call<{ folder: string; projects: Project[] }>(['projects']),
 
@@ -369,7 +369,7 @@ function handlers(tell: (p: Progress) => void, tellModels: (e: ModelEvent) => vo
     async recordDone(job) {
       rec.close()
       const send = (w: BrowserWindow): void => w.webContents.send('job', job)
-      const main = BrowserWindow.getAllWindows().find((w) => w !== rec.recordingWindow())
+      const main = mainWindows()[0]
       if (main) send(main)
       else open().webContents.once('did-finish-load', function (this: Electron.WebContents) { setTimeout(() => this.send('job', job), 1500) })
     },
@@ -378,8 +378,53 @@ function handlers(tell: (p: Progress) => void, tellModels: (e: ModelEvent) => vo
     },
     async recordShow() {
       rec.show()
+    },
+
+    async settingsOpen(tab) {
+      openSettings(/^[a-z]+$/.test(String(tab ?? '')) ? String(tab) : 'general')
+    },
+    async changed() {
+      for (const w of mainWindows()) w.webContents.send('changed')
     }
   }
+}
+
+let settingsWindow: BrowserWindow | null = null
+/** The windows that are the app itself: not the recording's, not Inställningar. */
+const mainWindows = (): BrowserWindow[] => BrowserWindow.getAllWindows().filter((w) => w !== rec.recordingWindow() && w !== settingsWindow)
+
+/** Inställningar is a window of its own, as on any desktop: one of them, brought forward if it is open. */
+function openSettings(tab: string): void {
+  if (settingsWindow) {
+    if (settingsWindow.isMinimized()) settingsWindow.restore()
+    settingsWindow.focus()
+    return
+  }
+  const hidden = process.env['BYGGMOTE_HIDDEN'] === '1'
+  const win = (settingsWindow = new BrowserWindow({
+    width: 860,
+    height: 640,
+    minWidth: 720,
+    minHeight: 480,
+    show: false,
+    title: 'Inställningar',
+    backgroundColor: '#faf9fb',
+    fullscreenable: false,
+    maximizable: false,
+    autoHideMenuBar: true, // Windows and Linux: a settings window has no menu bar
+    webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: !hidden }
+  }))
+  win.once('ready-to-show', () => {
+    if (!hidden) win.show()
+  })
+  win.on('closed', () => (settingsWindow = null))
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('https://')) void shell.openExternal(url)
+    return { action: 'deny' }
+  })
+  win.webContents.on('will-navigate', (e) => e.preventDefault())
+  if (process.env['ELECTRON_RENDERER_URL']) void win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#settings=${tab}`)
+  else void win.loadFile(join(__dirname, '../renderer/index.html'), { hash: `settings=${tab}` })
 }
 
 function open(): BrowserWindow {
@@ -427,13 +472,13 @@ void app.whenReady().then(() => {
   for (const [name, fn] of Object.entries(handlers(tell, tellModels))) {
     ipcMain.handle(name, (_e, ...args: unknown[]) => (fn as (...a: unknown[]) => unknown)(...args))
   }
-  buildMenu(open)
+  buildMenu(open, mainWindows, () => openSettings('general'))
   rec.setUp((s) => {
-    for (const w of BrowserWindow.getAllWindows()) if (w !== rec.recordingWindow()) w.webContents.send('recording', s)
+    for (const w of mainWindows()) w.webContents.send('recording', s)
   }, () => buildMenu())
   open()
   app.on('activate', () => {
-    if (!BrowserWindow.getAllWindows().some((w) => w !== rec.recordingWindow())) open()
+    if (!mainWindows().length) open()
   })
 })
 

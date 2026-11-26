@@ -126,7 +126,9 @@ window as a `Command`; what cannot run now is greyed out. On the Mac the window 
 sidebar and the toolbar reach its top. The sidebar is the project's library: its overview (the next meeting, what is
 open, the meetings, who is in it), the open points as a list of their own, each mötesserie's agenda, and the meetings.
 Text, controls and rows have the Mac's measures or Windows' (`data-platform` in `app.css`); `BYGGMOTE_PLATFORM=win32`
-shows Windows' on a Mac. A meeting is recorded in a small window of its own that stays over other programs
+shows Windows' on a Mac. Inställningar is a window of its own (⌘, / Ctrl+,), with the connection to Stommen as one of its tabs; what is
+changed there the main window reads again. The palette (⌘K / Ctrl+K) runs a command or opens a meeting, an open point
+or another project from a few letters. A meeting is recorded in a small window of its own that stays over other programs
 (`app/src/main/recording.ts`, `views/RecordWindow.svelte`), with an icon beside the clock that has its commands, and
 shortcuts that work in any program (⌃⌥N for the next heading, ⌃⌥1 to 4 for a mark, ⌃⌥P to pause; Alt+Shift with the
 same keys on Windows and Linux). The main window is free meanwhile, and writes the recording out when the meeting is

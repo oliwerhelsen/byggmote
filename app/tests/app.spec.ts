@@ -109,7 +109,8 @@ async function recordingWindow(): Promise<Page> {
 }
 async function closeRecording(rec: Page): Promise<void> {
   rec.on('dialog', (d) => void d.accept()) // "Avbryta inspelningen?"
-  await Promise.all([rec.waitForEvent('close'), rec.getByRole('button', { name: /Stäng|Avbryt inspelningen/ }).click()])
+  // The window can be gone before the click has been told it landed: that is the click doing its work, not failing.
+  await Promise.all([rec.waitForEvent('close'), rec.getByRole('button', { name: /Stäng|Avbryt inspelningen/ }).click().catch(() => {})])
 }
 
 test('nothing is recorded before everyone knows, and the meeting is recorded in a window of its own', async () => {
@@ -131,7 +132,7 @@ test('nothing is recorded before everyone knows, and the meeting is recorded in 
   const taken = (): Promise<boolean> => app.evaluate(({ globalShortcut }) => globalShortcut.isRegistered('Control+Alt+N'))
   if (process.platform === 'darwin') expect(await taken()).toBe(true)
   await closeRecording(rec)
-  if (process.platform === 'darwin') expect(await taken()).toBe(false)
+  if (process.platform === 'darwin') await expect.poll(taken).toBe(false) // given back once the window is gone
   await expect(side.getByText('Spelas in', { exact: true })).toHaveCount(0)
   expect(await enabled('record')).toBe(true)
 })
@@ -265,8 +266,9 @@ test('the application menu opens the views, and greys out what cannot run', asyn
   await menu('record')
   await expect(win.getByRole('heading', { name: 'Nytt möte' })).toBeVisible()
   await win.getByRole('button', { name: 'Avbryt', exact: true }).click()
-  await menu('settings')
-  await expect(win.getByRole('heading', { name: 'Inställningar', level: 1 })).toBeVisible()
+  const [sw] = await Promise.all([app.waitForEvent('window'), menu('settings')]) // Inställningar is a window of its own
+  await expect(sw.getByRole('heading', { name: 'Inställningar', level: 1 })).toBeVisible()
+  await sw.close()
   expect(await enabled('sync')).toBe(false) // nothing to fetch from: Stommen is not connected
   expect(await enabled('record')).toBe(true)
   await menu('points')
@@ -317,6 +319,25 @@ test('the open points of the project are a list of their own, and one opens in i
   await expect(win.getByRole('heading', { name: 'Protokoll, byggmöte 3' })).toBeVisible()
   await side.getByRole('button', { name: /Dagordning inför byggmöte 5/ }).click()
   await expect(win.getByRole('heading', { name: 'Dagordning, byggmöte 5' })).toBeVisible()
+})
+
+test('the palette runs a command and opens a meeting or a point from a few letters', async () => {
+  await menu('palette')
+  const ask = win.getByRole('combobox', { name: 'Sök kommando, möte eller punkt' })
+  await expect(ask).toBeFocused()
+  await ask.fill('öppna p')
+  await expect(win.getByRole('listbox', { name: 'Träffar' }).getByRole('option').first()).toContainText('Öppna punkter')
+  await ask.press('Enter')
+  await expect(win.getByRole('button', { name: 'Öppna i protokollet' })).toBeVisible()
+  await menu('palette')
+  await ask.fill('byggmöte 4')
+  await ask.press('Enter')
+  await expect(win.getByRole('heading', { name: 'Protokoll, byggmöte 4' })).toBeVisible()
+  await menu('palette')
+  await ask.fill('finns inte alls')
+  await expect(win.getByText('Inget stämmer med det du skrev.')).toBeVisible()
+  await ask.press('Escape')
+  await expect(ask).toBeHidden()
 })
 
 // Last: it leaves a recording that could not be written out among the project's meetings.

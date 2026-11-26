@@ -27,6 +27,11 @@ const api = {
     ipcRenderer.on('recording', heard)
     return () => ipcRenderer.removeListener('recording', heard)
   },
+  onChanged(listener: () => void) {
+    const heard = (): void => listener()
+    ipcRenderer.on('changed', heard)
+    return () => ipcRenderer.removeListener('changed', heard)
+  },
   onJob(listener: (job: Job) => void) {
     const heard = (_e: unknown, job: Job): void => listener(job)
     ipcRenderer.on('job', heard)
