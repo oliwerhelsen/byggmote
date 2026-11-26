@@ -9,3 +9,7 @@ export type View =
   | { name: 'overview' }
 
 export type Go = (to: View) => void
+
+/** What the toolbar says of the meeting in the window: its title, whether a person has corrected its protocol, and
+ * whether that is a draft or justerat (nothing without a protocol). */
+export type About = { title: string; edited: boolean; standing: '' | 'draft' | 'done' }

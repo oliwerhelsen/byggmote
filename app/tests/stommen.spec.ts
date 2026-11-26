@@ -9,7 +9,7 @@ import { createServer, type IncomingHttpHeaders, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test'
+import { _electron as electron, expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 
 // What the functions handed to `evaluate` see: they run in the app's window, not here.
 declare const window: { api: import('../src/shared/types').Api }
@@ -141,6 +141,23 @@ test.afterAll(async () => {
   await new Promise((done) => stommen.close(done))
   for (const d of [config, userData]) rmSync(d, { recursive: true, force: true })
 })
+
+// Where a protocol stands with Stommen is the inspector's Stommen tab, and in a few words on the status line; the
+// toolbar's one prominent button sends it.
+async function stommenTab(): Promise<Locator> {
+  await win.getByRole('tab', { name: 'Stommen' }).click()
+  return win.getByRole('tabpanel', { name: 'Stommen' })
+}
+const status = (): Locator => win.locator('footer.status')
+const toolbarSend = (): Locator => win.locator('.tools').getByRole('button', { name: 'Skicka till Stommen' })
+/** A point's text is corrected where it stands on the page. */
+async function retext(no: string, text: string): Promise<void> {
+  await win.locator('.point').filter({ hasText: no }).locator('.txt').click()
+  const field = win.getByRole('textbox', { name: `Punkt ${no}` })
+  await field.fill(text)
+  await field.press('Enter')
+  await expect(win.locator('.point').filter({ hasText: no })).toContainText(text)
+}
 
 /** Stommen is reached from Inställningar, where the connection is kept. */
 async function openStommen(): Promise<void> {
@@ -294,18 +311,22 @@ test('a protocol goes to Stommen when the person sends it, with its points and w
   await expect(sw.getByRole('heading', { name: 'Inloggad som Maria Lindqvist' })).toBeVisible()
   await win.getByLabel('Projekt', { exact: true }).selectOption({ label: 'Kv. Eken kontorshus' })
   await win.getByRole('button', { name: 'Byggmöte 4', exact: true }).click()
-  const card = win.getByRole('region', { name: 'Till Stommen' })
+  await expect(status()).toContainText('Inte skickat till Stommen')
+  await expect(toolbarSend()).toBeDisabled() // nothing unread goes
+  const card = await stommenTab()
   await expect(card).toContainText('Protokollet är inte skickat.')
   await expect(card).toContainText('En sak ska kontrolleras innan protokollet kan skickas.')
   await expect(card.getByRole('button')).toHaveCount(0) // nothing unread goes
 
   await win.getByRole('button', { name: 'Beloppet 86 500 kr i punkt 4.4.1 stämmer' }).click()
-  await card.getByRole('button', { name: 'Skicka till Stommen' }).click()
+  await toolbarSend().click() // the one prominent button opens the question in the inspector
   await expect(card).toContainText('Ljudet och resten av utskriften stannar på den här datorn.')
   expect(seen.filter((r) => r.path.endsWith('/minutes'))).toHaveLength(0) // asked first, not sent yet
   await card.getByRole('button', { name: 'Skicka', exact: true }).click()
   await expect(card).toContainText(/Skickat .* version 1\./)
   await expect(card.getByRole('button', { name: /Skicka/ })).toHaveCount(0)
+  await expect(toolbarSend()).toBeDisabled()
+  await expect(status()).toContainText('Skickat till Stommen, version 1')
   // sent, the person can ask whether it is justerat yet
   await card.getByRole('button', { name: 'Se efter om det är justerat' }).click()
   await expect(card.getByRole('status')).toHaveText('Inte justerat i Stommen än.')
@@ -327,9 +348,8 @@ test('a protocol goes to Stommen when the person sends it, with its points and w
   expect(sent.body).not.toContain('Välkomna till byggmötet')
 
   // changed after it was sent, it says so and goes again as a later version
-  await win.getByRole('button', { name: 'Ändra punkt 4.3.1' }).click()
-  await win.getByRole('form', { name: 'Ändra punkt 4.3.1' }).getByLabel('Punkten', { exact: true }).fill('Stommen på plan tre är klar och avsynad.')
-  await win.getByRole('button', { name: 'Spara', exact: true }).click()
+  await retext('4.3.1', 'Stommen på plan tre är klar och avsynad.')
+  await stommenTab()
   await expect(card).toContainText('Protokollet har ändrats sedan dess.')
   await card.getByRole('button', { name: 'Skicka igen' }).click()
   await card.getByRole('button', { name: 'Skicka', exact: true }).click()
@@ -338,10 +358,8 @@ test('a protocol goes to Stommen when the person sends it, with its points and w
 })
 
 test('a protocol justerat in Stommen meanwhile is not replaced, and the meeting says by whom and when', async () => {
-  const card = win.getByRole('region', { name: 'Till Stommen' })
-  await win.getByRole('button', { name: 'Ändra punkt 4.3.1' }).click()
-  await win.getByRole('form', { name: 'Ändra punkt 4.3.1' }).getByLabel('Punkten', { exact: true }).fill('Stommen på plan tre är klar.')
-  await win.getByRole('button', { name: 'Spara', exact: true }).click()
+  await retext('4.3.1', 'Stommen på plan tre är klar.')
+  const card = await stommenTab()
   adjusted = { on: '2026-11-21', method: 'email', by: 'Båda parter' }
   await card.getByRole('button', { name: 'Skicka igen' }).click()
   await card.getByRole('button', { name: 'Skicka', exact: true }).click()
@@ -350,8 +368,16 @@ test('a protocol justerat in Stommen meanwhile is not replaced, and the meeting 
   await expect(card).toContainText(/version 2\. Protokollet har ändrats sedan dess\./) // what Stommen has is still version 2
   await expect(card).toContainText('be om en ny version i Stommen')
   await expect(card.getByRole('button', { name: /Skicka/ })).toHaveCount(0)
-  await expect(win.getByRole('button', { name: /^Ändra punkt/ })).toHaveCount(0)
-  await expect(win.getByRole('button', { name: /Skriv om protokollet|Lägg till punkt/ })).toHaveCount(0)
+  // nothing in it is changed any more: a click chooses a point and opens no field, and the menu has greyed out the rest
+  await win.locator('.point').filter({ hasText: '4.3.1' }).locator('.txt').click()
+  await expect(win.getByRole('textbox', { name: /^Punkt / })).toHaveCount(0)
+  await expect(win.getByRole('tabpanel', { name: 'Punkt' }).getByLabel('Typ')).toBeDisabled()
+  await expect(win.getByRole('button', { name: /^Ny punkt under/ })).toHaveCount(0)
+  await expect(win.getByText('Protokollet är justerat i Stommen, så punkterna går inte att ändra här längre.')).toBeVisible()
+  await expect(status()).toContainText('Justerat i Stommen')
+  for (const c of ['newPoint', 'editPoint', 'rewrite', 'send']) {
+    expect(await app.evaluate(({ Menu }, id) => Menu.getApplicationMenu()!.getMenuItemById(id)!.enabled, c)).toBe(false)
+  }
 })
 
 test('the meeting asks Stommen when it is opened, and Stommen wins', async () => {
@@ -359,7 +385,7 @@ test('the meeting asks Stommen when it is opened, and Stommen wins', async () =>
   await win.getByRole('navigation', { name: 'Huvudmeny' }).getByRole('button', { name: 'Översikt' }).click()
   const before = seen.length
   await win.getByRole('button', { name: 'Byggmöte 4', exact: true }).click()
-  const card = win.getByRole('region', { name: 'Till Stommen' })
+  const card = await stommenTab()
   await expect(card).toContainText('Justerat 24 november 2026, signerat, av Maria Lindqvist och Elin Sjöberg.')
   expect(seen.slice(before).map((r) => `${r.method} ${r.path}`)).toEqual([`GET /api/mobile/v1/projects/${EKEN}/minutes`])
 
@@ -379,7 +405,7 @@ test('a Stommen that cannot say yet is quiet when the meeting opens, and says wh
   try {
     await win.getByRole('navigation', { name: 'Huvudmeny' }).getByRole('button', { name: 'Översikt' }).click()
     await win.getByRole('button', { name: 'Byggmöte 4', exact: true }).click()
-    const card = win.getByRole('region', { name: 'Till Stommen' })
+    const card = await stommenTab()
     // what was known last stays, and nothing alarms
     await expect(card).toContainText('Justerat 24 november 2026, signerat, av Maria Lindqvist och Elin Sjöberg.')
     await expect(card.getByRole('button', { name: 'Se efter om det är justerat' })).toBeEnabled()
