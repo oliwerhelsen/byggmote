@@ -10,3 +10,9 @@ export function title(node: HTMLElement, on = true): { destroy: () => void } {
   if (on) document.getElementById('title')?.appendChild(node)
   return { destroy: () => node.remove() }
 }
+
+/** Windows' status bar, for a view that says more of itself there than the window knows (App.svelte). */
+export function status(node: HTMLElement): { destroy: () => void } {
+  document.getElementById('status')?.appendChild(node)
+  return { destroy: () => node.remove() }
+}

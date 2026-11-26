@@ -6,7 +6,7 @@
   import PointInspector, { type Fresh } from '../lib/PointInspector.svelte'
   import Speakers from '../lib/Speakers.svelte'
   import { clock, day, failure, KINDS, minutes, overdue } from '../lib/format'
-  import { tools } from '../lib/tools'
+  import { status, tools } from '../lib/tools'
   import type { About, Go } from '../lib/view'
 
   // `about`: what the window's toolbar says of the meeting. `state`: what the application menu can do with it now.
@@ -962,21 +962,28 @@
       </div>
     </div>
 
-    <!-- The document's status line. -->
-    <footer class="status">
-      {#if p && !mac}<span>{confirmed || !draft ? 'Justerat' : 'Utkast'}{m.corrections ? ', redigerat' : ''}</span>{/if}
+    <!-- The document's status line: the Mac's at the foot of the document, Windows' in the window's status bar. -->
+    {#snippet standingNow()}
+      {#if p && !mac}<span>{confirmed || !draft ? 'Justerat' : 'Utkast'}{m?.corrections ? ', redigerat' : ''}</span>{/if}
       {#if p}
         <span>{some(p.points.length, '1 punkt', 'punkter')}</span>
         {#if checks}<span class="sepd"><span class="dot"></span>{checks} att kontrollera</span>{/if}
       {/if}
       <span class="sepd">{where}</span>
       {#if copied}<span class="sepd" role="status">Kopierat</span>{/if}
-      <span class="fill"></span>
-      <span class="promise">
-        <svg width="12" height="13" viewBox="0 0 12 13" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><rect x="2" y="5.5" width="8" height="6" rx="1.5" /><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" /></svg>
-        Ljud och utskrift stannar på den här datorn
-      </span>
-    </footer>
+    {/snippet}
+    {#if mac}
+      <footer class="status">
+        {@render standingNow()}
+        <span class="fill"></span>
+        <span class="promise">
+          <svg width="12" height="13" viewBox="0 0 12 13" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><rect x="2" y="5.5" width="8" height="6" rx="1.5" /><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" /></svg>
+          Ljud och utskrift stannar på den här datorn
+        </span>
+      </footer>
+    {:else}
+      <div class="said" use:status>{@render standingNow()}</div>
+    {/if}
 
     <Speakers bind:this={speakers} {project} {unnamed} lines={m.lines} speakers={m.speakers} {listen} {name} />
   {/if}
@@ -1198,7 +1205,8 @@
 
   /* The status line. */
   .status { flex: none; display: flex; align-items: center; gap: 16px; height: 26px; padding: 0 12px; border-top: 1px solid var(--rule); background: var(--pane); font-size: 12px; color: var(--ink-500); white-space: nowrap; overflow: hidden; }
-  .status .sepd, .promise { display: inline-flex; align-items: center; gap: 6px; }
+  .status .sepd, .said .sepd, .promise { display: inline-flex; align-items: center; gap: 6px; }
+  .said { display: flex; align-items: center; gap: 16px; }
   :global(:root[data-platform='mac']) .status { gap: 6px; height: 24px; padding: 0 14px; background: #f6f5f9; font-size: 11px; }
   :global(:root[data-platform='mac']) .status > span + .sepd::before { content: '·'; }
   :global(:root[data-platform='mac']) .status .sepd { gap: 5px; }

@@ -2,18 +2,19 @@
 // to the window (`Command`), which does it the same way as its own button would. Each has the platform's shortcut.
 import { app, Menu, type BrowserWindow, type MenuItemConstructorOptions } from 'electron'
 import { COMMANDS, NO_DOC, type Command, type MenuState } from '../shared/types'
-import { commands as recordCommands, recording } from './recording'
+import { commands as recordCommands, recording, show as showRecording } from './recording'
 
 const mac = process.platform === 'darwin'
 
-let state: MenuState = { ready: false, held: false, project: false, series: false, connected: false, sidebar: true, meeting: false, typing: true, ...NO_DOC }
+let state: MenuState = { ready: false, held: false, project: false, series: false, connected: false, sidebar: true, meeting: false, typing: true, view: '', ...NO_DOC }
 
 /** Whether the window can do it now. A recording or a job in the window is not left by a shortcut. */
 function can(c: Command): boolean {
   if (!state.ready) return false
   if (c === 'sidebar') return true
   if (state.held) return false
-  if (c === 'find' || c === 'inspector') return state.meeting
+  if (c === 'find') return state.meeting || state.view === 'points'
+  if (c === 'inspector' || c === 'reveal') return state.meeting
   if (c === 'saveDocx' || c === 'savePdf' || c === 'saveMd' || c === 'copyText' || c === 'nextCheck' || c === 'rename') return state.protocol
   if (c === 'newPoint' || c === 'rewrite') return state.free
   if (c === 'send') return state.sendable
@@ -25,7 +26,7 @@ function can(c: Command): boolean {
   if (c === 'attend') return state.absent
   if (c === 'confirmation') return state.sent
   if (c === 'sync') return state.connected
-  if (c === 'overview' || c === 'points') return state.project
+  if (c === 'overview' || c === 'points' || c === 'switchProject') return state.project
   if (c === 'record') return state.project && state.series && !recording() // one meeting is recorded at a time
   if (c === 'agenda' || c === 'addRecording') return state.project && state.series
   return true
@@ -48,6 +49,8 @@ export function buildMenu(open: () => void = reopen, mainWindows: () => BrowserW
     win.webContents.send('command', c)
   }
   const item = (c: Command, label: string, accelerator?: string): MenuItemConstructorOptions => ({ id: c, label, accelerator, enabled: can(c), click: () => send(c) })
+  // The view in the window has the tick.
+  const view = (c: 'overview' | 'points' | 'agenda', label: string, n: number): MenuItemConstructorOptions => ({ ...item(c, label, `CmdOrCtrl+${n}`), type: 'checkbox', checked: state.view === c })
   // A key a field needs for itself (Enter, the space bar, the arrows): the window takes it (Protocol.svelte), which
   // knows where the keys go. Windows shows it without taking it. The Mac shows only what the menu takes, so there
   // it is the menu's too, except while something is typed.
@@ -74,16 +77,19 @@ export function buildMenu(open: () => void = reopen, mainWindows: () => BrowserW
       label: mac ? 'Arkiv' : '&Arkiv',
       submenu: [
         item('newProject', 'Nytt projekt…', 'CmdOrCtrl+Shift+N'),
+        item('switchProject', 'Byt projekt…', 'CmdOrCtrl+Shift+O'),
         item('addRecording', 'Lägg till en inspelning…', 'CmdOrCtrl+O'),
         line,
         { label: 'Spara som', submenu: [item('saveDocx', 'Word…', 'CmdOrCtrl+Shift+S'), item('savePdf', 'PDF…'), item('saveMd', 'Markdown…')] },
         item('copyText', 'Kopiera texten', 'CmdOrCtrl+Shift+C'),
+        item('reveal', mac ? 'Visa i Finder' : process.platform === 'win32' ? 'Visa i Utforskaren' : 'Visa i mappen'),
         line,
         item('sync', 'Hämta från Stommen', mac ? 'Cmd+Shift+U' : 'F5'),
         line,
         ...(mac ? [] : [settings, line]),
         { role: 'close', label: 'Stäng fönstret' },
-        ...(mac ? [] : [{ role: 'quit', label: 'Avsluta' } satisfies MenuItemConstructorOptions])
+        // Alt+F4 is the system's own: the menu shows it and does not take it.
+        ...(mac ? [] : [{ role: 'quit', label: 'Avsluta', accelerator: 'Alt+F4', registerAccelerator: false } satisfies MenuItemConstructorOptions])
       ]
     },
     {
@@ -91,27 +97,27 @@ export function buildMenu(open: () => void = reopen, mainWindows: () => BrowserW
       submenu: [
         { role: 'undo', label: 'Ångra' }, { role: 'redo', label: 'Gör om' }, line,
         { role: 'cut', label: 'Klipp ut' }, { role: 'copy', label: 'Kopiera' }, { role: 'paste', label: 'Klistra in' }, { role: 'selectAll', label: 'Markera allt' },
-        line, item('find', 'Sök i utskriften', 'CmdOrCtrl+F')
+        line, item('find', state.view === 'points' ? 'Sök bland punkterna' : 'Sök i utskriften', 'CmdOrCtrl+F')
       ]
     },
     {
       label: mac ? 'Visa' : '&Visa',
       submenu: [
-        item('overview', 'Översikt', 'CmdOrCtrl+1'),
-        item('points', 'Öppna punkter', 'CmdOrCtrl+2'),
-        item('agenda', 'Dagordning', 'CmdOrCtrl+3'),
+        view('overview', 'Översikt', 1),
+        view('points', 'Öppna punkter', 2),
+        view('agenda', 'Dagordning', 3),
         line,
-        { ...item('sidebar', 'Visa sidopanelen', mac ? 'Ctrl+Cmd+S' : 'Ctrl+B'), type: 'checkbox', checked: state.sidebar },
-        { ...item('inspector', 'Visa utskriften', mac ? 'Alt+Cmd+I' : 'Ctrl+I'), type: 'checkbox', checked: state.inspector && state.meeting },
+        item('sidebar', state.sidebar ? 'Dölj sidopanelen' : 'Visa sidopanelen', mac ? 'Ctrl+Cmd+S' : 'Ctrl+B'),
+        item('inspector', state.inspector && state.meeting ? 'Dölj utskriften' : 'Visa utskriften', mac ? 'Alt+Cmd+I' : 'Ctrl+I'),
         line,
         item('palette', 'Kommandopalett…', 'CmdOrCtrl+K'),
         line,
-        { role: 'togglefullscreen', label: 'Helskärm' },
+        { role: 'togglefullscreen', label: mac ? 'Starta helskärmsläge' : 'Helskärm' },
         // A checkout run from a terminal, never the installed app.
         ...(app.isPackaged ? [] : [line, { role: 'reload', label: 'Läs in fönstret igen', accelerator: 'CmdOrCtrl+Alt+R' }, { role: 'toggleDevTools', label: 'Utvecklarverktyg' }] satisfies MenuItemConstructorOptions[])
       ]
     },
-    { label: mac ? 'Möte' : '&Möte', submenu: [item('record', 'Spela in möte…', 'CmdOrCtrl+R'), line, ...recordCommands(), line, item('rename', 'Byt namn på mötet…')] },
+    { label: mac ? 'Möte' : '&Möte', submenu: [item('record', 'Spela in möte…', 'CmdOrCtrl+R'), ...recordCommands(true), line, item('rename', 'Byt namn på mötet…')] },
     {
       label: mac ? 'Protokoll' : '&Protokoll',
       submenu: [
@@ -135,30 +141,31 @@ export function buildMenu(open: () => void = reopen, mainWindows: () => BrowserW
       ]
     },
     ...(mac
-      ? [{ role: 'windowMenu', label: 'Fönster', submenu: [{ role: 'minimize', label: 'Minimera' }, { role: 'zoom', label: 'Zooma' }, line, { role: 'front', label: 'Lägg alla överst' }] } satisfies MenuItemConstructorOptions]
+      ? [{ role: 'windowMenu', label: 'Fönster', submenu: [{ role: 'minimize', label: 'Minimera' }, { role: 'zoom', label: 'Zooma' }, line,
+          { id: 'recording', label: 'Inspelning', enabled: Boolean(recording()), click: showRecording }, line, { role: 'front', label: 'Lägg alla överst' }] } satisfies MenuItemConstructorOptions]
       : []),
     {
       role: 'help',
       label: mac ? 'Hjälp' : '&Hjälp',
-      submenu: [item('intro', 'Visa introduktionen'), ...(mac ? [] : [line, about])]
+      submenu: [item('shortcuts', 'Kortkommandon', 'CmdOrCtrl+/'), item('intro', 'Visa introduktionen'), ...(mac ? [] : [line, about])]
     }
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
+// What the menu's labels and ticks are drawn from: when one of these changes, the menu is drawn again.
+const drawn = (): string => [state.sidebar, state.inspector && state.meeting, state.view, mac && state.typing].join('|')
+
 /** The window says what it can do now: the commands that cannot run are greyed out, and their shortcuts do nothing. */
 export function setMenuState(next: MenuState): void {
-  const typed = state.typing
-  state = Object.fromEntries(Object.keys(state).map((k) => [k, Boolean(next[k as keyof MenuState])])) as MenuState
-  if (mac && state.typing !== typed) return buildMenu() // the keys a field needs are the menu's only while nothing is typed
+  const before = drawn()
+  const view = (['overview', 'points', 'agenda'] as const).find((v) => v === next.view) ?? ''
+  state = { ...(Object.fromEntries(Object.keys(state).map((k) => [k, Boolean(next[k as keyof MenuState])])) as unknown as MenuState), view }
+  if (drawn() !== before) return buildMenu() // the keys a field needs are the Mac menu's only while nothing is typed
   const menu = Menu.getApplicationMenu()
   if (!menu) return
   for (const c of COMMANDS) {
     const it = menu.getMenuItemById(c)
     if (it) it.enabled = can(c)
   }
-  const side = menu.getMenuItemById('sidebar')
-  if (side) side.checked = state.sidebar
-  const insp = menu.getMenuItemById('inspector')
-  if (insp) insp.checked = state.inspector
 }

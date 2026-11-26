@@ -275,6 +275,7 @@
   :global(:root[data-platform='mac']) .tool { height: 28px; padding: 0 7px; color: var(--ink-700); }
   :global(:root[data-platform='mac']) .tool svg { color: inherit; }
   .sep { width: 1px; height: 20px; margin: 0 4px; background: var(--line); }
+  :global(:root[data-platform='win']) .tools .sep { display: none; } /* Windows' command bar has nothing after it */
 
   .strip { flex: none; display: flex; align-items: center; margin: 0 24px; padding: 12px 0; border-bottom: 1px solid var(--line); }
   :global(:root[data-platform='mac']) .strip { padding: 16px 0; }

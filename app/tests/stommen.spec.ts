@@ -177,7 +177,7 @@ async function signIn(password: string, to = address): Promise<void> {
 test('the address is Stommen over https, and a wrong password is said plainly', async () => {
   await openStommen()
   await expect(sw.getByRole('heading', { name: 'Stommen', level: 1 })).toBeVisible()
-  await expect(win.getByText('Stommen är inte kopplat än.')).toBeVisible()
+  await expect(win.getByText('Stommen är inte kopplat', { exact: true })).toBeVisible()
 
   await signIn(PASSWORD, 'http://stommen.example')
   await expect(sw.getByRole('alert')).toHaveText('Adressen till Stommen ska börja med https://.')
@@ -193,7 +193,7 @@ test('signing in brings the Projekt with its Roller and Kontakter, and the sessi
   await expect(sw.getByRole('heading', { name: 'Inloggad som Maria Lindqvist' })).toBeVisible()
   await expect(sw.getByText('Norrstaden Fastigheter AB, på ' + address + '.')).toBeVisible()
   await expect(sw.getByText('Ett Projekt hämtade, med 3 Kontakter. En Roll är vakant.')).toBeVisible()
-  await expect(win.getByText('Kopplad till Stommen som Maria Lindqvist.')).toBeVisible()
+  await expect(win.getByText('Stommen: Maria Lindqvist', { exact: true })).toBeVisible()
   await expect(sw.getByText('Du loggar in igen nästa gång appen startar.')).toBeVisible() // this run has no keychain
   await expect(win.getByLabel('Projekt', { exact: true }).locator('option')).toHaveText(['Kv. Eken kontorshus', 'Kv. Linden', 'Nytt projekt…'])
 
@@ -246,7 +246,7 @@ test('a session Stommen has ended shows as signed out, with the address kept', a
   await expect(sw.getByRole('alert')).toHaveText('Inloggningen i Stommen gäller inte längre. Logga in igen.')
   await expect(sw.getByRole('heading', { name: 'Logga in i Stommen' })).toBeVisible()
   await expect(sw.getByLabel('Adress till Stommen')).toHaveValue(address)
-  await expect(win.getByText('Stommen är inte kopplat än.')).toBeVisible()
+  await expect(win.getByText('Stommen är inte kopplat', { exact: true })).toBeVisible()
   await expect(win.getByLabel('Projekt', { exact: true }).locator('option')).toHaveText(['Kv. Eken kontorshus', 'Kv. Linden', 'Nytt projekt…']) // what was fetched stays
 })
 

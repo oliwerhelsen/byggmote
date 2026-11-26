@@ -43,7 +43,7 @@ test.afterAll(async () => {
 
 test('with no project it asks for one, and says nothing about needing Stommen', async () => {
   await expect(win.getByRole('heading', { name: 'Skapa ditt första projekt' })).toBeVisible()
-  await expect(win.getByText('Stommen är inte kopplat än.')).toBeVisible()
+  await expect(win.getByText('Stommen är inte kopplat', { exact: true })).toBeVisible()
   await expect(win.getByText('Projekt och Roller hämtas från Stommen')).toHaveCount(0)
 })
 
