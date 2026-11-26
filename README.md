@@ -126,13 +126,18 @@ window as a `Command`; what cannot run now is greyed out. On the Mac the window 
 sidebar and the toolbar reach its top. The sidebar is the project's library: its overview (the next meeting, what is
 open, the meetings, who is in it), the open points as a list of their own, each mötesserie's agenda, and the meetings.
 Text, controls and rows have the Mac's measures or Windows' (`data-platform` in `app.css`); `BYGGMOTE_PLATFORM=win32`
-shows Windows' on a Mac. Inställningar is a window of its own (⌘, / Ctrl+,), with the connection to Stommen as one of its tabs; what is
-changed there the main window reads again. The palette (⌘K / Ctrl+K) runs a command or opens a meeting, an open point
+shows Windows' on a Mac. Inställningar is a window of its own (⌘, / Ctrl+,), drawn as the computer draws one (`views/Settings.svelte`,
+`lib/Row.svelte`, `settings.css`): on the Mac a compact window named after its pane, with the panes as a toolbar of
+icons and each pane a form, and what the app is made of under Om Byggmöte in the app menu (`views/About.svelte`); on
+Windows and Linux the pages down the left side, Om Byggmöte among them, and each page a list of rows with switches.
+The connection to Stommen is one of its panes; a change is kept as it is made, and the other windows read it again. The palette (⌘K / Ctrl+K) runs a command or opens a meeting, an open point
 or another project from a few letters. Nytt möte asks with or without the agenda and that everyone knows, names the
 microphone and shows that it hears (it listens only while the dialog is open); from an agenda the agenda is chosen. A meeting is recorded in a small window of its own that stays over other programs
 (`app/src/main/recording.ts`, `views/RecordWindow.svelte`), with an icon beside the clock that has its commands, and
 shortcuts that work in any program (⌃⌥N for the next heading, ⌃⌥1 to 4 for a mark, ⌃⌥P to pause; Alt+Shift with the
-same keys on Windows and Linux). The main window is free meanwhile, and writes the recording out when the meeting is
+same keys on Windows and Linux). Those keys are the person's to change under Inspelning in Inställningar
+(`app/src/shared/keys.ts`, `choose` in `recording.ts`): a click on a command, then the new keys, kept in
+`settings.json`; keys another command has, or that the system does not give the app, are refused in words. The main window is free meanwhile, and writes the recording out when the meeting is
 ended. A recording is written out behind the window: it is listed in the sidebar with the step it is
 at, the Dock's icon or the taskbar's button shows that work goes on, several wait their turn, and one that failed
 stays in the list until it has been looked at. A protocol is a document in the window: an outline of its headings, the page, the transcript

@@ -3,17 +3,91 @@
 // with the recording's commands, and shortcuts that work in any program.
 import { join } from 'node:path'
 import { BrowserWindow, globalShortcut, Menu, nativeImage, Tray, type MenuItemConstructorOptions } from 'electron'
-import type { RecordCommand, RecordSpec, RecordStatus } from '../shared/types'
+import { accelerators, normal, spell, standard, VALID, type Global } from '../shared/keys'
+import type { RecordCommand, RecordSpec, RecordStatus, Shortcuts } from '../shared/types'
 import { MAC_TEMPLATE_2X, TILE_32 } from './tray-icons'
 
 const mac = process.platform === 'darwin'
 
-/** The shortcuts that work in any program while a meeting is recorded. Ctrl+Alt on the Mac and Alt+Shift elsewhere:
- * Alt with a digit is a spreadsheet's, and Ctrl+Alt with a digit types a character on a Swedish keyboard on Windows. */
-const GLOBAL: [RecordCommand, string][] = (
-  [['pause', 'P'], ['next', 'N'], ['decision', '1'], ['todo', '2'], ['changeOrder', '3'], ['question', '4']] as const
-).map(([c, key]) => [c, `${mac ? 'Control+Alt' : 'Alt+Shift'}+${key}`])
-export const shortcut = (c: RecordCommand): string | undefined => GLOBAL.find(([x]) => x === c)?.[1]
+// The shortcuts that work in any program while a meeting is recorded (app/src/shared/keys.ts): the standard ones, or
+// the person's own from Inställningar. BYGGMOTE_PLATFORM: a Mac that shows Windows' keys takes those keys.
+const keysMac = (process.env['BYGGMOTE_PLATFORM'] || process.platform) === 'darwin'
+let chosen: Shortcuts = {}
+let taken: string[] = [] // the ones the system has given the app now
+const global = (): [Global, string][] => Object.entries(accelerators(chosen, keysMac)) as [Global, string][]
+export const shortcut = (c: RecordCommand): string | undefined => (accelerators(chosen, keysMac) as Partial<Record<RecordCommand, string>>)[c]
+
+/** Take the shortcuts from the system while a meeting is recorded, or give them back. */
+function take(on: boolean): void {
+  for (const keys of taken) globalShortcut.unregister(keys)
+  taken = []
+  if (!on || !win) return
+  for (const [c, keys] of global()) if (globalShortcut.register(keys, () => send(c))) taken.push(keys)
+}
+
+/** While the person presses a new combination in Inställningar, a recording does not take the keys as its own. */
+export const listen = (on: boolean): void => take(!on)
+
+/** The keys kept from an earlier run, as they were chosen then. */
+export function keep(kept: Shortcuts): void {
+  chosen = kept
+}
+
+const NAMES = { pause: 'Pausa', next: 'Nästa rubrik', mark: 'Sätt märke' } as const
+
+/**
+ * The person's own keys, from Inställningar. Refused with a sentence for the person when a combination has no
+ * modifier, is another command's, or is one the system does not give the app. Returns what to keep: only what
+ * differs from the standard keys. The menus, the icon's menu and a recording that is going on follow at once.
+ */
+export function choose(wanted: Shortcuts): Shortcuts {
+  const std = standard(keysMac)
+  const next: Shortcuts = {}
+  for (const k of ['pause', 'next', 'mark'] as const) {
+    const given = wanted[k]
+    if (!given) continue
+    let keys = normal(given, keysMac)
+    if (!VALID.test(keys) || !/Control|Alt|Command/.test(keys)) {
+      throw new Error(`Ett kortkommando är ${keysMac ? '⌃, ⌥ eller ⌘' : 'Ctrl eller Alt'} tillsammans med en bokstav, en siffra eller en funktionstangent.`)
+    }
+    if (k === 'mark') {
+      if (!/\+[1-4]$/.test(keys)) throw new Error('Märkena har siffrorna 1 till 4. Tryck tangenterna tillsammans med en av dem.')
+      keys = keys.slice(0, -1) + '1'
+    }
+    if (keys !== std[k]) next[k] = keys
+  }
+  const said = (keys: string): string => spell(keys, keysMac)
+  const after = accelerators(next, keysMac)
+  const row = (c: Global): keyof typeof NAMES => (c === 'pause' || c === 'next' ? c : 'mark')
+  const all = Object.entries(after) as [Global, string][]
+  for (const [c, keys] of all) {
+    const other = all.find(([x, k]) => k === keys && row(x) !== row(c))
+    if (other) throw new Error(`${said(keys)} används redan av ${NAMES[row(other[0])]}. Välj andra tangenter.`)
+  }
+  // The application menu's own: a shortcut that works in any program would take the key from it.
+  const walk = (items: Electron.MenuItem[]): Electron.MenuItem[] => items.flatMap((i) => [i, ...(i.submenu ? walk(i.submenu.items) : [])])
+  for (const i of walk(Menu.getApplicationMenu()?.items ?? [])) {
+    if (!i.accelerator || i.registerAccelerator === false) continue
+    const keys = normal(String(i.accelerator), keysMac)
+    if (Object.values(after).includes(keys)) throw new Error(`${said(keys)} används redan av ${i.label.replace(/[&…]/g, '')}. Välj andra tangenter.`)
+  }
+  // Asked of the system only for the ones that are new: it says no to a combination another program has.
+  const before = Object.values(accelerators(chosen, keysMac))
+  const fresh = Object.values(after).filter((k) => !before.includes(k))
+  take(false)
+  const refused = fresh.filter((k) => !globalShortcut.register(k, () => {}))
+  for (const k of fresh) globalShortcut.unregister(k)
+  if (refused.length) {
+    take(true)
+    throw new Error(`Datorn ger inte ${said(refused[0])} till Byggmöte, ett annat program använder det. Välj andra tangenter.`)
+  }
+  chosen = next
+  take(true)
+  drawn = ''
+  draw()
+  menu()
+  return next
+}
 
 let win: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -124,7 +198,7 @@ export function open(spec: RecordSpec, preload: string, hidden: boolean): void {
     drawn = ''
     tray?.destroy()
     tray = null
-    for (const [, keys] of GLOBAL) globalShortcut.unregister(keys)
+    take(false)
     tell(null)
     menu()
   })
@@ -139,7 +213,7 @@ export function open(spec: RecordSpec, preload: string, hidden: boolean): void {
   if (mac) image.setTemplateImage(true)
   tray = new Tray(image)
   tray.on('click', () => (mac ? undefined : show())) // on the Mac a click opens the menu
-  for (const [c, keys] of GLOBAL) globalShortcut.register(keys, () => send(c))
+  take(true)
 }
 
 let allow: () => void = () => {}

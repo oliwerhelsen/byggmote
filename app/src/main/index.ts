@@ -309,6 +309,11 @@ function handlers(tell: (p: Progress) => void, tellModels: (e: ModelEvent) => vo
         next.openAtLogin = patch.openAtLogin
       }
       if (typeof patch.microphone === 'string') next.microphone = patch.microphone.slice(0, 500)
+      if (patch.shortcuts && typeof patch.shortcuts === 'object') {
+        const wanted = { ...cur.shortcuts }
+        for (const k of ['pause', 'next', 'mark'] as const) if (typeof patch.shortcuts[k] === 'string') wanted[k] = patch.shortcuts[k].slice(0, 40)
+        next.shortcuts = rec.choose(wanted)
+      }
       return kept.write(next)
     },
 
@@ -384,47 +389,84 @@ function handlers(tell: (p: Progress) => void, tellModels: (e: ModelEvent) => vo
       openSettings(/^[a-z]+$/.test(String(tab ?? '')) ? String(tab) : 'general')
     },
     async changed() {
-      for (const w of mainWindows()) w.webContents.send('changed')
+      for (const w of [...mainWindows(), rec.recordingWindow()]) w?.webContents.send('changed')
+    },
+    async shortcutListen(on) {
+      settingsWindow?.webContents.setIgnoreMenuShortcuts(Boolean(on))
+      rec.listen(Boolean(on))
+    },
+    async settingsFit(height) {
+      const h = Math.round(Number(height))
+      if (!settingsWindow || !macLook || !(h >= 120 && h <= 2000)) return
+      settingsWindow.setContentSize(MAC_WIDTH, h, settingsWindow.isVisible())
     }
   }
 }
 
 let settingsWindow: BrowserWindow | null = null
-/** The windows that are the app itself: not the recording's, not Inställningar. */
-const mainWindows = (): BrowserWindow[] => BrowserWindow.getAllWindows().filter((w) => w !== rec.recordingWindow() && w !== settingsWindow)
+let aboutWindow: BrowserWindow | null = null
+/** The windows that are the app itself: not the recording's, not Inställningar, not Om Byggmöte. */
+const mainWindows = (): BrowserWindow[] => BrowserWindow.getAllWindows().filter((w) => w !== rec.recordingWindow() && w !== settingsWindow && w !== aboutWindow)
 
-/** Inställningar is a window of its own, as on any desktop: one of them, brought forward if it is open. */
-function openSettings(tab: string): void {
-  if (settingsWindow) {
-    if (settingsWindow.isMinimized()) settingsWindow.restore()
-    settingsWindow.focus()
-    return
-  }
+// The Mac's settings window or Windows': the same choice as the window's own (app/src/preload/index.ts).
+const macLook = (process.env['BYGGMOTE_PLATFORM'] || process.platform) === 'darwin'
+const MAC_WIDTH = 620
+
+/** A small window that is the app's and nothing else: a link opens in the browser, and nothing navigates away. */
+function small(options: Electron.BrowserWindowConstructorOptions, hash: string): BrowserWindow {
   const hidden = process.env['BYGGMOTE_HIDDEN'] === '1'
-  const win = (settingsWindow = new BrowserWindow({
-    width: 860,
-    height: 640,
-    minWidth: 720,
-    minHeight: 480,
+  const win = new BrowserWindow({
     show: false,
-    title: 'Inställningar',
-    backgroundColor: '#faf9fb',
     fullscreenable: false,
     maximizable: false,
-    autoHideMenuBar: true, // Windows and Linux: a settings window has no menu bar
+    ...options,
     webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: !hidden }
-  }))
+  })
+  if (process.platform !== 'darwin') win.removeMenu() // Windows and Linux: no menu bar of its own, not behind Alt either
   win.once('ready-to-show', () => {
     if (!hidden) win.show()
   })
-  win.on('closed', () => (settingsWindow = null))
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('https://')) void shell.openExternal(url)
     return { action: 'deny' }
   })
   win.webContents.on('will-navigate', (e) => e.preventDefault())
-  if (process.env['ELECTRON_RENDERER_URL']) void win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#settings=${tab}`)
-  else void win.loadFile(join(__dirname, '../renderer/index.html'), { hash: `settings=${tab}` })
+  if (process.env['ELECTRON_RENDERER_URL']) void win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#${hash}`)
+  else void win.loadFile(join(__dirname, '../renderer/index.html'), { hash })
+  return win
+}
+
+/**
+ * Inställningar is a window of its own, as on any desktop: one of them, brought forward if it is open. On the Mac it
+ * is a fixed, compact window named after its pane, as tall as the pane (`settingsFit`); on Windows and Linux it is
+ * the size of a settings window there, with pages down its left side.
+ */
+function openSettings(tab: string): void {
+  if (tab === 'about' && macLook) return openAbout() // on the Mac that is the app menu's Om Byggmöte, not a pane
+  if (settingsWindow) {
+    if (settingsWindow.isMinimized()) settingsWindow.restore()
+    settingsWindow.focus()
+    return
+  }
+  const win = (settingsWindow = small(
+    macLook
+      ? { width: MAC_WIDTH, height: 506, useContentSize: true, resizable: false, title: 'Inställningar', backgroundColor: '#f3f2f6',
+          // The title is drawn in the window, over the toolbar of panes, with the three buttons where a title bar has them.
+          ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden' as const } : {}) }
+      : { width: 860, height: 600, minWidth: 720, minHeight: 480, title: 'Inställningar', backgroundColor: '#f3f3f5' },
+    `settings=${tab}&v=${app.getVersion()}`
+  ))
+  win.on('closed', () => {
+    settingsWindow = null
+    rec.listen(false)
+  })
+}
+
+/** Om Byggmöte on the Mac: a small window of the app's own, with what the Om page says on Windows. */
+function openAbout(): void {
+  if (aboutWindow) return aboutWindow.focus()
+  aboutWindow = small({ width: 440, height: 448, useContentSize: true, resizable: false, minimizable: false, title: 'Om Byggmöte', backgroundColor: '#f3f2f6' }, `about&v=${app.getVersion()}`)
+  aboutWindow.on('closed', () => (aboutWindow = null))
 }
 
 function open(): BrowserWindow {
@@ -458,7 +500,8 @@ function open(): BrowserWindow {
   return win
 }
 
-void app.whenReady().then(() => {
+void app.whenReady().then(async () => {
+  rec.keep((await kept.read()).shortcuts)
   // In dev the app runs inside Electron's own bundle, whose icon is Electron's; the installed app has its own.
   if (!app.isPackaged && process.platform === 'darwin') app.dock?.setIcon(join(__dirname, '../../build/icon-mac.png'))
   // The microphone, for recording a meeting, and nothing else a page can ask for.
@@ -472,7 +515,7 @@ void app.whenReady().then(() => {
   for (const [name, fn] of Object.entries(handlers(tell, tellModels))) {
     ipcMain.handle(name, (_e, ...args: unknown[]) => (fn as (...a: unknown[]) => unknown)(...args))
   }
-  buildMenu(open, mainWindows, () => openSettings('general'))
+  buildMenu(open, mainWindows, (tab = 'general') => openSettings(tab))
   rec.setUp((s) => {
     for (const w of mainWindows()) w.webContents.send('recording', s)
   }, () => buildMenu())

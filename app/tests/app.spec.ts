@@ -289,7 +289,7 @@ test('the application menu opens the views, and greys out what cannot run', asyn
   await expect(win.getByRole('heading', { name: 'Nytt möte' })).toBeVisible()
   await win.getByRole('button', { name: 'Avbryt', exact: true }).click()
   const [sw] = await Promise.all([app.waitForEvent('window'), menu('settings')]) // Inställningar is a window of its own
-  await expect(sw.getByRole('heading', { name: 'Inställningar', level: 1 })).toBeVisible()
+  await expect(sw.getByRole('tablist', { name: 'Inställningar' })).toBeVisible()
   await sw.close()
   expect(await enabled('sync')).toBe(false) // nothing to fetch from: Stommen is not connected
   expect(await enabled('record')).toBe(true)

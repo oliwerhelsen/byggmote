@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   // The small window a meeting is recorded in. It stays over other programs; the main window is free meanwhile.
-  import type { Agenda, Kind, RecordCommand, RecordSpec } from '../../../shared/types'
+  import { accelerators, spell, type Global } from '../../../shared/keys'
+  import type { Agenda, Kind, RecordCommand, RecordSpec, Shortcuts } from '../../../shared/types'
   import Icon from '../lib/Icon.svelte'
   import { clock, failure, KINDS } from '../lib/format'
 
@@ -11,7 +12,7 @@
   // svelte-ignore state_referenced_locally
   const project = { id: spec.projectId, name: spec.projectName }
 
-  const MARKS: Kind[] = ['decision', 'todo', 'changeOrder', 'question']
+  const MARKS = ['decision', 'todo', 'changeOrder', 'question'] as const satisfies Kind[]
 
   let agenda = $state<Agenda | null>(null)
   let phase = $state<'idle' | 'recording' | 'paused' | 'saving'>('idle')
@@ -189,9 +190,14 @@
   }
   $effect(() => window.api.onRecordCommand(command))
 
-  // The shortcuts as the computer writes them (app/src/main/recording.ts registers them).
+  // The shortcuts as the computer writes them (app/src/main/recording.ts registers them): the standard keys or the
+  // person's own, read again when they are changed in Inställningar while the meeting goes on.
   const mac = window.api.platform === 'darwin'
-  const keys = (k: string): string => (mac ? `⌃⌥${k}` : `Alt+Skift+${k}`)
+  let chosen = $state<Shortcuts>({})
+  const read = (): Promise<unknown> => window.api.settings().then((s) => (chosen = s.shortcuts)).catch(() => {})
+  void read()
+  $effect(() => window.api.onChanged(() => void read()))
+  const keys = (c: Global): string => spell(accelerators(chosen, mac)[c], mac)
   let all = $state(false) // the whole agenda, for a heading that is not the next one
 </script>
 
@@ -229,7 +235,7 @@
           <p class="cur">{#if !heading}<span class="muted">Ingen rubrik än</span>{/if}{#if heading}<strong>{heading.no}. {heading.name}</strong>{#if at(heading.no) !== undefined}<span class="small muted">sedan {clock(at(heading.no)!)}</span>{/if}{/if}</p>
           {#if next}
             <button class="btn next" disabled={phase === 'saving' || phase === 'idle'} onclick={() => press(next.no)}>
-              <span class="grow">Nästa rubrik: {next.no}. {next.name}</span><kbd>{keys('N')}</kbd>
+              <span class="grow">Nästa rubrik: {next.no}. {next.name}</span><kbd>{keys('next')}</kbd>
             </button>
           {/if}
           <button class="link" aria-expanded={all} onclick={() => (all = !all)}>{all ? 'Dölj rubrikerna' : 'Alla rubriker'}</button>
@@ -256,8 +262,8 @@
     <section aria-labelledby="marks">
       <h2 id="marks" class="head">Sätt ett märke</h2>
       <div class="marks">
-        {#each MARKS as kind, i}
-          <button class="btn" disabled={phase !== 'recording'} onclick={() => mark(kind)}><span class="grow">{KINDS[kind]}</span><kbd>{keys(String(i + 1))}</kbd></button>
+        {#each MARKS as kind (kind)}
+          <button class="btn" disabled={phase !== 'recording'} onclick={() => mark(kind)}><span class="grow">{KINDS[kind]}</span><kbd>{keys(kind)}</kbd></button>
         {/each}
       </div>
       {#if marks.length}
