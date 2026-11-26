@@ -109,7 +109,8 @@ async function recordingWindow(): Promise<Page> {
 }
 async function closeRecording(rec: Page): Promise<void> {
   rec.on('dialog', (d) => void d.accept()) // "Avbryta inspelningen?"
-  await Promise.all([rec.waitForEvent('close'), rec.getByRole('button', { name: /Stäng|Avbryt inspelningen/ }).click()])
+  // The window can be gone before the click has been told it landed: that is the click doing its work, not failing.
+  await Promise.all([rec.waitForEvent('close'), rec.getByRole('button', { name: /Stäng|Avbryt inspelningen/ }).click().catch(() => {})])
 }
 
 test('nothing is recorded before everyone knows, and the meeting is recorded in a window of its own', async () => {
@@ -131,7 +132,7 @@ test('nothing is recorded before everyone knows, and the meeting is recorded in 
   const taken = (): Promise<boolean> => app.evaluate(({ globalShortcut }) => globalShortcut.isRegistered('Control+Alt+N'))
   if (process.platform === 'darwin') expect(await taken()).toBe(true)
   await closeRecording(rec)
-  if (process.platform === 'darwin') expect(await taken()).toBe(false)
+  if (process.platform === 'darwin') await expect.poll(taken).toBe(false) // given back once the window is gone
   await expect(side.getByText('Spelas in', { exact: true })).toHaveCount(0)
   expect(await enabled('record')).toBe(true)
 })
