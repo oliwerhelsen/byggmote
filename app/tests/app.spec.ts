@@ -83,6 +83,11 @@ test('the agenda has the open point under its heading', async () => {
   await expect(dialog.getByText('Mikrofon:')).toBeVisible()
   await expect(dialog.getByRole('radio')).toHaveCount(0)
   await dialog.getByRole('button', { name: 'Avbryt' }).click()
+  // opened again at once, from elsewhere, it asks
+  await menu('overview')
+  await menu('record')
+  await expect(dialog.getByRole('radio')).toHaveCount(2)
+  await dialog.getByRole('button', { name: 'Avbryt' }).click()
   await expect(dialog).toBeHidden()
 })
 

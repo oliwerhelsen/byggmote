@@ -31,7 +31,8 @@
   /** The microphone the recording will use (RecordWindow.svelte asks the same way), heard only for its level. Only
    * when the computer has already allowed it: the question is asked in Inställningar and the first run, not here. */
   async function listen(): Promise<void> {
-    const mine = ++turn
+    quiet()
+    const mine = turn
     microphone = 'Datorns val'
     try {
       const wanted = (await window.api.settings()).microphone
@@ -79,6 +80,8 @@
   }
 
   function closed(): void {
+    // The dialog says it closed a moment after it did: by then it may have been opened again.
+    if (dialog?.open) return
     quiet()
     series = null
   }
