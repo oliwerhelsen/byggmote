@@ -335,7 +335,7 @@ test('a protocol justerat in Stommen meanwhile is not replaced, and the meeting 
 
 test('the meeting asks Stommen when it is opened, and Stommen wins', async () => {
   adjusted = { on: '2026-11-24', method: 'signed', by: 'Maria Lindqvist och Elin Sjöberg' } // registered again in Stommen
-  await win.getByRole('button', { name: 'Till möten' }).click()
+  await win.getByRole('navigation', { name: 'Huvudmeny' }).getByRole('button', { name: 'Möten', exact: true }).click()
   const before = seen.length
   await win.getByRole('button', { name: 'Byggmöte 4', exact: true }).click()
   const card = win.getByRole('region', { name: 'Till Stommen' })
@@ -356,7 +356,7 @@ test('a Stommen that cannot say yet is quiet when the meeting opens, and says wh
   adjusted = null
   older = true
   try {
-    await win.getByRole('button', { name: 'Till möten' }).click()
+    await win.getByRole('navigation', { name: 'Huvudmeny' }).getByRole('button', { name: 'Möten', exact: true }).click()
     await win.getByRole('button', { name: 'Byggmöte 4', exact: true }).click()
     const card = win.getByRole('region', { name: 'Till Stommen' })
     // what was known last stays, and nothing alarms

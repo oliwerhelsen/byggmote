@@ -34,8 +34,12 @@ test.afterAll(async () => {
   rmSync(config, { recursive: true, force: true })
 })
 
+// A protocol is left through the sidebar; the agenda and a recording have their own way back.
+const toMeetings = (): Promise<void> => win.getByRole('navigation', { name: 'Huvudmeny' }).getByRole('button', { name: 'Möten', exact: true }).click()
+
 test.beforeEach(async () => {
   if (await win.getByRole('button', { name: 'Till möten' }).count()) await win.getByRole('button', { name: 'Till möten' }).click()
+  else await toMeetings()
   await expect(win.getByRole('heading', { name: 'Tidigare möten' })).toBeVisible()
 })
 
@@ -68,7 +72,7 @@ test('a protocol: who was there, the points with their checks, and the transcrip
 
   // the formats to save it as are behind one button
   await win.getByRole('button', { name: 'Spara som' }).click()
-  await expect(win.getByRole('menuitem')).toHaveText(['Word', 'PDF', 'Markdown'])
+  await expect(win.getByRole('menuitem')).toHaveText(['Word', 'PDF', 'Markdown', 'Kopiera texten'])
   await win.keyboard.press('Escape')
   await expect(win.getByRole('menu')).toHaveCount(0)
   await expect(win.getByRole('button', { name: 'Spara som' })).toBeFocused()
@@ -126,7 +130,7 @@ test('a person says an amount is right, and takes it back', async () => {
   await expect(decision).toContainText('Beloppet 86 500 kr är kontrollerat mot inspelningen.')
   await expect(win.getByText('En sak ska kontrolleras')).toHaveCount(0)
 
-  await win.getByRole('button', { name: 'Till möten' }).click()
+  await toMeetings()
   const row = win.locator('tbody tr').filter({ hasText: 'Byggmöte 4' })
   await expect(row).toContainText('Utkast')
   await expect(row).not.toContainText('att kontrollera')
@@ -161,7 +165,7 @@ test('a point is changed in its form, and what stays open is on the next agenda'
   await expect(form).toContainText('Modellen skrev: ”Stommen på plan tre är klar.”')
   await form.getByRole('button', { name: 'Avbryt' }).click()
 
-  await win.getByRole('button', { name: 'Till möten' }).click()
+  await toMeetings()
   await expect(win.getByRole('region', { name: 'Öppna punkter' })).toContainText('4.3.1')
 })
 
@@ -254,4 +258,22 @@ test('the sidebar lists the meetings of the project, opens one, and can be put a
   await expect(side).toHaveCount(0)
   await win.getByRole('button', { name: 'Visa sidopanelen' }).click()
   await expect(side).toBeVisible()
+})
+
+test('a protocol is a document: an outline to its headings, and its commands in the menu', async () => {
+  await protocol4()
+  const outline = win.getByRole('navigation', { name: 'Rubriker' })
+  await expect(outline.getByRole('button')).toHaveCount(11)
+  await outline.getByRole('button', { name: /Ekonomi/ }).click()
+  await menu('newPoint') // under the heading chosen in the outline
+  await expect(win.getByRole('group', { name: 'Ny punkt' }).or(win.getByLabel('Ny punkt'))).toBeVisible()
+  await win.getByRole('button', { name: 'Avbryt' }).click()
+  expect(await enabled('saveDocx')).toBe(true)
+  expect(await enabled('send')).toBe(false) // not connected to Stommen
+  await menu('inspector')
+  await expect(win.getByRole('heading', { name: 'Utskrift' })).toHaveCount(0)
+  await menu('find') // brings the transcript back, with its search
+  await expect(win.getByPlaceholder('Sök i utskriften')).toBeFocused()
+  await toMeetings()
+  expect(await enabled('saveDocx')).toBe(false)
 })

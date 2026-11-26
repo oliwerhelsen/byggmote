@@ -125,8 +125,9 @@ Mac's menu bar, the window's own menu bar on Windows and Linux), each with a sho
 window as a `Command`; what cannot run now is greyed out. On the Mac the window has no title bar of its own, and the
 sidebar and the toolbar reach its top. The sidebar is the project's library: its meetings, under their mötesserie.
 Text, controls and rows have the Mac's measures or Windows' (`data-platform` in `app.css`); `BYGGMOTE_PLATFORM=win32`
-shows Windows' on a Mac. So far the menu has what the window as a whole does (the views, a recording, a project,
-Stommen, Inställningar); what is done to a protocol is still only on its page.
+shows Windows' on a Mac. A protocol is a document in the window: an outline of its headings, the page, the transcript
+beside it (it can be put away) and the recording under both, with what is done to it in the toolbar and in the
+Protokoll and Arkiv menus (Ny punkt, Nästa att kontrollera, Spara som, Skicka till Stommen).
 
     npm run check     the types, main process and views
     npm test          builds the app and drives it against a knowledge base the engine writes (no model runs)
