@@ -356,19 +356,11 @@
     }
   }
 
-  async function name(speaker: string, person: string): Promise<void> {
-    await window.api.nameSpeaker(dir, speaker, person)
+  /** Names a speaker with a person of the project, or a written name the engine makes a person of. */
+  async function name(speaker: string, who: { person: string } | { name: string }): Promise<void> {
+    await window.api.nameSpeaker(dir, speaker, who)
     stale = Boolean(p)
-    await load()
-  }
-
-  async function addAndName(speaker: string, typed: string): Promise<void> {
-    await window.api.personAdd(project.id, typed, '')
-    const added = (await window.api.projects()).projects.find((x) => x.id === project.id)?.people.find((x) => x.name === typed)
-    if (!added) throw new Error('Personen hittades inte efter att den lades till')
-    await window.api.nameSpeaker(dir, speaker, added.id)
-    stale = Boolean(p)
-    await refresh()
+    if ('name' in who) await refresh() // a new person is in the project now
     await load()
   }
 
@@ -993,7 +985,7 @@
       <div class="said" use:status>{@render standingNow()}</div>
     {/if}
 
-    <Speakers bind:this={speakers} {project} {unnamed} lines={m.lines} {listen} {name} add={addAndName} />
+    <Speakers bind:this={speakers} {project} {unnamed} lines={m.lines} speakers={m.speakers} {listen} {name} />
   {/if}
 </div>
 
