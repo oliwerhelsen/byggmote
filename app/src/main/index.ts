@@ -465,7 +465,7 @@ function openSettings(tab: string): void {
 /** Om Byggmöte on the Mac: a small window of the app's own, with what the Om page says on Windows. */
 function openAbout(): void {
   if (aboutWindow) return aboutWindow.focus()
-  aboutWindow = small({ width: 440, height: 430, useContentSize: true, resizable: false, minimizable: false, title: 'Om Byggmöte', backgroundColor: '#f3f2f6' }, `about&v=${app.getVersion()}`)
+  aboutWindow = small({ width: 440, height: 448, useContentSize: true, resizable: false, minimizable: false, title: 'Om Byggmöte', backgroundColor: '#f3f2f6' }, `about&v=${app.getVersion()}`)
   aboutWindow.on('closed', () => (aboutWindow = null))
 }
 

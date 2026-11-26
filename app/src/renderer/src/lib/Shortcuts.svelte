@@ -102,7 +102,7 @@
 <style>
   /* The Mac's list: the names in one column, the keys in the next, a line each. */
   .sc { display: grid; grid-template-columns: 1fr auto; row-gap: 8px; align-items: center; width: 100%; max-width: 360px; padding: 4px 40px 0 0; }
-  .sc .sc-row { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; padding: 0; border: 0; background: transparent; text-align: left; font: inherit; }
+  .sc .sc-row { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; padding: 0; border: 0; background: transparent; text-align: left; }
   .sc .sc-row.hint { display: block; padding-top: 2px; }
   .sc button.sc-row:hover :global(.kbd) { border-color: var(--ink-400); }
   .back { margin-left: 8px; padding: 0; border: 0; background: transparent; color: var(--coral-700); font: inherit; white-space: nowrap; }

@@ -31,7 +31,7 @@
 </div>
 
 <style>
-  .about { min-height: 100%; align-items: center; gap: 6px; padding: 26px 28px 22px; text-align: center; }
+  .about { min-height: 0; align-items: center; gap: 6px; padding: 26px 28px 22px; text-align: center; }
   .tile { flex: none; width: 64px; height: 64px; border-radius: 15px; background: var(--coral-700); color: #fff; display: grid; place-items: center; margin-bottom: 6px; }
   h1 { font: 700 15px/1.3 var(--font-ui); letter-spacing: 0; }
   .what { max-width: 340px; margin: 8px 0 10px; }
