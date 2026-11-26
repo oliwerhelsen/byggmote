@@ -49,7 +49,7 @@
         <p><strong>Det gick inte att skriva ut inspelningen.</strong> Den ligger kvar där den var, så inget är förlorat.</p>
         <p class="small mono">{problem}</p>
         <p class="small mono">{job.file}</p>
-        <button class="btn" style="margin-top: 12px" onclick={() => go({ name: 'meetings' })}>Till möten</button>
+        <button class="btn" style="margin-top: 12px" onclick={() => go({ name: 'overview' })}>Till översikten</button>
       </div>
     </div>
   {:else}

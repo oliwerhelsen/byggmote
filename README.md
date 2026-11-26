@@ -123,7 +123,8 @@ person signs in there; a project from Stommen is Stommen's, and its people and R
 The window keeps to the computer's conventions. Its commands are in the application menu (`app/src/main/menu.ts`: the
 Mac's menu bar, the window's own menu bar on Windows and Linux), each with a shortcut, and a choice there reaches the
 window as a `Command`; what cannot run now is greyed out. On the Mac the window has no title bar of its own, and the
-sidebar and the toolbar reach its top. The sidebar is the project's library: its meetings, under their mötesserie.
+sidebar and the toolbar reach its top. The sidebar is the project's library: its overview (the next meeting, what is
+open, the meetings, who is in it), the open points as a list of their own, each mötesserie's agenda, and the meetings.
 Text, controls and rows have the Mac's measures or Windows' (`data-platform` in `app.css`); `BYGGMOTE_PLATFORM=win32`
 shows Windows' on a Mac. A protocol is a document in the window: an outline of its headings, the page, the transcript
 beside it (it can be put away) and the recording under both, with what is done to it in the toolbar and in the

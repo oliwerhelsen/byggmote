@@ -4,6 +4,7 @@
   import Icon from '../lib/Icon.svelte'
   import PointForm from '../lib/PointForm.svelte'
   import { clock, day, failure, KINDS, minutes, overdue } from '../lib/format'
+  import { tools } from '../lib/tools'
   import type { Go } from '../lib/view'
 
   // `about`: what the window's toolbar says of the meeting. `state`: what the application menu can do with it now.
@@ -282,12 +283,6 @@
     }
   }
 
-  /** The toolbar's place for what is done to a protocol: the buttons are this view's, the bar is the window's. */
-  function tools(node: HTMLElement): { destroy: () => void } {
-    document.getElementById('tools')?.appendChild(node)
-    return { destroy: () => node.remove() }
-  }
-
   function showInspector(on: boolean): void {
     inspector = on
     localStorage.setItem('inspector', on ? 'shown' : 'hidden')
@@ -363,7 +358,7 @@
         <div>
           <p><strong>Det gick inte att läsa mötet.</strong></p>
           <p class="small mono">{problem}</p>
-          <button class="btn" style="margin-top: 12px" onclick={() => go({ name: 'meetings' })}>Till möten</button>
+          <button class="btn" style="margin-top: 12px" onclick={() => go({ name: 'overview' })}>Till översikten</button>
         </div>
       </div>
     </div>
@@ -540,7 +535,7 @@
             {#if series}
               <button class="btn primary" style="margin-top: 16px" disabled={writing} onclick={() => write()}>Skriv protokollet</button>
             {:else}
-              <p class="small muted" style="margin-top: 12px">Projektet behöver en mötesserie först. Den startas från Möten.</p>
+              <p class="small muted" style="margin-top: 12px">Projektet behöver en mötesserie först. Den startas från Översikt.</p>
             {/if}
           </section>
         {:else}

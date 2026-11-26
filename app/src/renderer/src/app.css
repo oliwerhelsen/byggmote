@@ -86,3 +86,11 @@ textarea.field { display: block; width: 100%; padding: 6px 9px; resize: vertical
 .time:hover > span { background: var(--coral-100); color: var(--ink-900); }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* A list as a desktop app draws it: a small grey header with its columns marked off, rows of the list's height. */
+.table { width: 100%; border-collapse: collapse; }
+.table th { position: sticky; top: 0; height: 26px; padding: 0 10px; text-align: left; font-size: var(--ui-small); font-weight: 600; color: var(--ink-500); white-space: nowrap;
+  background: var(--canvas); border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); }
+.table th:last-child { border-right: 0; }
+.table td { height: var(--row-h); padding: 4px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; vertical-align: middle; }
+.table td.wrap { white-space: normal; min-width: 220px; }

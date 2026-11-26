@@ -1,10 +1,10 @@
 <script lang="ts">
-  import type { Command, MeetingRow, Project, SeriesRef, Settings as Kept, StommenState } from '../../shared/types'
+  import type { Agenda as Headings, Command, MeetingRow, Project, SeriesRef, Settings as Kept, StommenState } from '../../shared/types'
   import Icon from './lib/Icon.svelte'
   import { failure, minutes, shortDate, standing } from './lib/format'
   import type { View } from './lib/view'
   import Agenda from './views/Agenda.svelte'
-  import Meetings from './views/Meetings.svelte'
+  import OpenPoints from './views/OpenPoints.svelte'
   import NewProject from './lib/NewProject.svelte'
   import RecordDialog from './lib/RecordDialog.svelte'
   import Overview from './views/Overview.svelte'
@@ -16,7 +16,7 @@
   import Working from './views/Working.svelte'
 
   const TITLES: Record<View['name'], string> = {
-    meetings: 'Möten',
+    points: 'Öppna punkter',
     agenda: 'Dagordning',
     recording: 'Inspelning',
     working: 'Mötet bearbetas',
@@ -33,7 +33,7 @@
   let loaded = $state(false)
   let problem = $state('')
   let chosen = $state(localStorage.getItem('project') ?? '')
-  let view = $state<View>({ name: 'meetings' })
+  let view = $state<View>({ name: 'overview' })
   let stommen = $state<StommenState | null>(null)
   let settings = $state<Kept | null>(null)
   let folder = $state('')
@@ -42,6 +42,8 @@
   let recorder = $state<{ show: (s: SeriesRef, agenda?: boolean) => void }>()
   // The sidebar is the project's library: its meetings, read again when something in them may have changed.
   let rows = $state<MeetingRow[]>([])
+  let read = $state(false) // whether the meetings below are the chosen project's yet
+  let agendas = $state<Headings[] | null>(null) // each mötesserie's, with what earlier meetings left open
   let stale = $state(0)
   let sidebar = $state(localStorage.getItem('sidebar') !== 'hidden')
   // The meeting in the window: what the toolbar says of it, what the menu can do with it, and the view to tell.
@@ -74,12 +76,16 @@
   $effect(() => {
     const id = project?.id
     void stale
+    const series = project?.series.map((x) => x.id) ?? []
     if (!id) {
       rows = []
+      agendas = null
       return
     }
-    void window.api.meetings(id).then((r) => { if (project?.id === id) rows = r }).catch(() => {})
+    void window.api.meetings(id).then((r) => { if (project?.id === id) { rows = r; read = true } }).catch(() => { read = true })
+    void Promise.all(series.map((x) => window.api.agenda(id, x))).then((a) => { if (project?.id === id) agendas = a }).catch(() => { agendas = [] })
   })
+  const open = $derived((agendas ?? []).reduce((n, a) => n + a.headings.reduce((k, h) => k + h.open.length, 0), 0))
   // A meeting with no series of the project's (one removed, or a recording from before there were series) comes last.
   const groups = $derived.by(() => {
     if (!project) return []
@@ -105,6 +111,9 @@
 
   function choose(id: string): void {
     chosen = id
+    read = false
+    agendas = null
+    rows = []
     localStorage.setItem('project', id)
     view = { name: 'overview' }
   }
@@ -124,7 +133,7 @@
   }
 
   const go = (to: View): void => {
-    if (view.name === 'working') stale++ // the job left a meeting behind
+    if (view.name === 'working' || view.name === 'protocol') stale++ // a job left a meeting behind, or a protocol was corrected
     if (to.name === 'protocol') meeting = { title: '', sub: '' }
     view = to
   }
@@ -153,7 +162,7 @@
     else if (c === 'intro') void window.api.setUp(false).then((s) => (settings = s))
     else if (!project) return
     else if (c === 'overview') go({ name: 'overview' })
-    else if (c === 'meetings') go({ name: 'meetings' })
+    else if (c === 'points') go({ name: 'points' })
     else if (!first) return
     else if (c === 'agenda') go({ name: 'agenda', series: first })
     else if (c === 'record') recorder?.show(first)
@@ -202,10 +211,16 @@
           disabled={held} onclick={() => go({ name: 'overview' })}>
           <Icon name="home" size={16} /> Översikt
         </button>
-        <button class="item" class:current={view.name === 'meetings' || view.name === 'agenda'} aria-current={view.name === 'meetings' || view.name === 'agenda' ? 'page' : undefined}
-          disabled={held} onclick={() => go({ name: 'meetings' })}>
-          <Icon name="list" size={16} /> Möten
+        <button class="item" class:current={view.name === 'points'} aria-current={view.name === 'points' ? 'page' : undefined}
+          disabled={held} onclick={() => go({ name: 'points' })}>
+          <Icon name="clock" size={16} /> Öppna punkter {#if open}<span class="n">{open}</span>{/if}
         </button>
+        {#each project?.series ?? [] as s (s.id)}
+          {@const here = view.name === 'agenda' && view.series.id === s.id}
+          <button class="item" class:current={here} aria-current={here ? 'page' : undefined} disabled={held} onclick={() => go({ name: 'agenda', series: s })}>
+            <Icon name="list" size={16} /> <span class="clip">Dagordning inför {s.name.toLowerCase()} {s.next}</span>
+          </button>
+        {/each}
 
         <div class="library">
           {#each groups as g (g.id)}
@@ -306,9 +321,10 @@
       {:else}
         {#key project.id}
           {#if view.name === 'overview'}
-            <Overview {project} {go} refresh={load} gone={() => (view = { name: 'overview' })} />
-          {:else if view.name === 'meetings'}
-            <Meetings {project} {go} refresh={load} />
+            <Overview {project} rows={read ? rows : null} {agendas} {go} refresh={load} gone={() => (view = { name: 'overview' })}
+              record={(s) => recorder?.show(s)} add={addRecording} />
+          {:else if view.name === 'points'}
+            <OpenPoints {rows} {agendas} {go} />
           {:else if view.name === 'agenda'}
             <Agenda {project} series={view.series} {go} />
           {:else if view.name === 'recording'}
@@ -353,6 +369,9 @@
   .side-head .count { font-weight: 400; }
   .item { display: flex; align-items: center; gap: 8px; flex: none; height: var(--row-h); padding: 0 8px; border: 0; border-radius: var(--ctl-r); background: transparent; text-align: left; white-space: nowrap; }
   .item :global(svg) { flex: none; color: var(--coral-700); }
+  .item .n { margin-left: auto; font-size: var(--ui-small); color: var(--ink-500); }
+  .item.current .n { color: inherit; }
+  .item .clip { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .item:hover:not(:disabled):not(.current) { background: rgb(0 0 0 / 0.045); }
   .library { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; margin: 0 -8px; padding: 0 8px; }
   .meeting { display: flex; flex-direction: column; gap: 1px; flex: none; padding: 6px 8px; border: 0; border-radius: var(--ctl-r); background: transparent; text-align: left; }

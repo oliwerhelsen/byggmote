@@ -146,7 +146,7 @@
       await saved
       await window.api.recordingDiscard(id)
     }
-    go({ name: 'meetings' })
+    go({ name: 'overview' })
   }
 
   const press = (no: number): void => {
@@ -173,7 +173,7 @@
       <h1>{title}</h1>
       <p class="muted">{project.name}</p>
     </div>
-    <button class="btn" disabled={phase === 'saving'} onclick={leave}>{phase === 'idle' ? 'Till möten' : 'Avbryt inspelningen'}</button>
+    <button class="btn" disabled={phase === 'saving'} onclick={leave}>{phase === 'idle' ? 'Till översikten' : 'Avbryt inspelningen'}</button>
   </div>
 
   {#if problem}
