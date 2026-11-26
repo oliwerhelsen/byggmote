@@ -30,6 +30,26 @@
   let asked = $state<'' | 'busy' | 'done'>('') // Stommen asked whether the sent protocol is justerat
   let copied = $state(false)
   let renaming = $state<string | null>(null) // the title while it is being written
+  let saving = $state(false) // whether the Spara som menu is showing
+
+  const SAVE = [['docx', 'Word'], ['pdf', 'PDF'], ['md', 'Markdown']] as const
+
+  /** The Spara som menu from the keyboard: arrows move between the formats, Escape closes it and gives the button the focus back. */
+  function saveKeys(e: KeyboardEvent): void {
+    const button = document.getElementById('save-as')
+    if (e.key === 'Escape' && saving) {
+      saving = false
+      button?.focus()
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      saving = true
+      void tick().then(() => {
+        const items = [...document.querySelectorAll<HTMLElement>('#save-as-menu button')]
+        const at = items.indexOf(document.activeElement as HTMLElement)
+        items[(at + (e.key === 'ArrowDown' ? 1 : at < 0 ? 0 : -1) + items.length) % items.length]?.focus()
+      })
+    }
+  }
 
   async function rename(): Promise<void> {
     const text = renaming?.trim()
@@ -294,9 +314,19 @@
       <div class="row">
         <button class="btn" onclick={() => go({ name: 'meetings' })}><Icon name="back" /> Till möten</button>
         {#if p}
-          <button class="btn" onclick={() => keep('docx')}><Icon name="file" /> Spara som Word</button>
-          <button class="btn" onclick={() => keep('pdf')}><Icon name="file" /> Spara som PDF</button>
-          <button class="btn" onclick={() => keep('md')}>Spara som Markdown</button>
+          <div class="menu" onfocusout={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && (saving = false)}
+            onkeydown={saveKeys} role="presentation">
+            <button id="save-as" class="btn" aria-haspopup="menu" aria-expanded={saving} aria-controls="save-as-menu" onclick={() => (saving = !saving)}>
+              <Icon name="file" /> Spara som <Icon name="down" size={16} />
+            </button>
+            {#if saving}
+              <ul class="options" id="save-as-menu" role="menu" aria-labelledby="save-as">
+                {#each SAVE as [how, label] (how)}
+                  <li role="none"><button type="button" role="menuitem" onclick={() => { saving = false; void keep(how) }}>{label}</button></li>
+                {/each}
+              </ul>
+            {/if}
+          </div>
           <button class="btn" onclick={() => keep('copy')}>{copied ? 'Kopierat' : 'Kopiera texten'}</button>
         {/if}
         {#if p && series && free}
@@ -745,6 +775,8 @@
   .point :global(.form) { margin: 4px 0 8px; }
   .speakers li { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 0; border-bottom: 1px solid var(--line); }
   .combo { position: relative; min-width: 240px; }
+  .menu { position: relative; }
+  .menu .options { right: auto; min-width: 100%; }
   .combo .field { width: 100%; }
   .options { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0; max-height: 240px; overflow: auto; margin: 0; padding: 4px; list-style: none; background: var(--surface); border: 1px solid var(--ink-300); border-radius: var(--radius-sm); box-shadow: 0 8px 24px rgb(0 0 0 / 0.12); }
   .options button { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 40px; padding: 0 10px; border: 0; border-radius: 6px; background: none; text-align: left; font: inherit; cursor: pointer; }

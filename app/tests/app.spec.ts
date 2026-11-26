@@ -66,6 +66,13 @@ test('a protocol: who was there, the points with their checks, and the transcrip
   await expect(win.getByRole('heading', { name: 'Protokoll, byggmöte 4' })).toBeVisible()
   await expect(win.locator('.attendees li').first()).toHaveText('Maria Lindqvist, Projektledare')
 
+  // the formats to save it as are behind one button
+  await win.getByRole('button', { name: 'Spara som' }).click()
+  await expect(win.getByRole('menuitem')).toHaveText(['Word', 'PDF', 'Markdown'])
+  await win.keyboard.press('Escape')
+  await expect(win.getByRole('menu')).toHaveCount(0)
+  await expect(win.getByRole('button', { name: 'Spara som' })).toBeFocused()
+
   const decision = win.locator('.point').filter({ hasText: '4.4.1' })
   await expect(decision).toContainText('Beslut')
   await expect(decision).toContainText('Kontrollera beloppet 86 500 kr.')
