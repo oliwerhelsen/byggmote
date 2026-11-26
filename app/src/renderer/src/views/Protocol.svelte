@@ -18,9 +18,9 @@
   let active = $state<number | null>(null)
   let writing = $state(false)
   let stale = $state(false)
-  let naming = $state<Record<string, string>>({})
-  let finding = $state<Record<string, string>>({}) // what is typed in a speaker's search
-  let open = $state<string | null>(null) // the speaker whose list is showing
+  let typed = $state<Record<string, string>>({}) // the name written for a speaker
+  let everyone = $state<Record<string, boolean>>({}) // a speaker whose list shows the whole project
+  let busy = $state<string | null>(null) // the speaker being named
   let editing = $state<string | null>(null) // the number of the point in its form
   let adding = $state<number | null>(null) // the heading a new point is written under
   let asking = $state(false) // whether to write over a person's corrections
@@ -165,51 +165,52 @@
     }
   }
 
-  async function name(speaker: string): Promise<void> {
-    if (!naming[speaker]) return
+  type Speaker = MeetingDetail['speakers'][number]
+  const SHOWN = 8 // names before "N till": a Projekt from Stommen can have many Kontakter
+
+  /** Names a speaker, then the next one without a name gets the focus, so a meeting is named from the keyboard. */
+  async function name(s: Speaker, who: { person: string } | { name: string }): Promise<void> {
+    busy = s.id
     try {
-      await window.api.nameSpeaker(dir, speaker, naming[speaker])
+      await window.api.nameSpeaker(dir, s.id, who)
+      delete typed[s.id]
       stale = Boolean(p)
+      if ('name' in who) await refresh() // a new person is in the project now
       await load()
+      problem = ''
+      await tick()
+      document.querySelector<HTMLInputElement>('.speakers input')?.focus()
     } catch (e) {
       problem = failure(e)
+    } finally {
+      busy = null
     }
   }
 
+  /** What is written for a speaker, its spaces tidied. */
+  const written = (s: Speaker): string => (typed[s.id] ?? '').split(/\s+/).filter(Boolean).join(' ')
+  const fits = (s: Speaker, x: { name: string; role?: string }): boolean => `${x.name} ${x.role ?? ''}`.toLowerCase().includes(written(s).toLowerCase())
 
-  /** People in the Projekt that match what is typed, by name or Roll. */
-  function matches(speaker: string) {
-    const q = (finding[speaker] ?? '').trim().toLowerCase()
-    return project.people.filter((x) => !q || `${x.name} ${x.role ?? ''}`.toLowerCase().includes(q))
+  /** The person offered with just the written name: one of the project's, or who the voice sounds like. */
+  function same(s: Speaker): string | null {
+    const t = written(s).toLowerCase()
+    if (!t) return null
+    return project.people.find((x) => x.name.toLowerCase() === t)?.id ?? (s.voice?.name.toLowerCase() === t ? s.voice.person : null)
   }
 
-  /** Whether what is typed is a new person, which a Projekt of our own can add on the spot. */
-  function addable(speaker: string): boolean {
-    const q = (finding[speaker] ?? '').trim().toLowerCase()
-    return Boolean(q) && !project.stommen && !project.people.some((x) => x.name.toLowerCase() === q)
+  /** Enter: the person with the written name, else a new person with it. */
+  function enter(s: Speaker): void {
+    const text = written(s)
+    if (!text || busy) return
+    const hit = same(s)
+    void name(s, hit ? { person: hit } : { name: text })
   }
 
-  function pick(speaker: string, id: string, label: string): void {
-    naming[speaker] = id
-    finding[speaker] = label
-    open = null
-  }
-
-  /** Adds the typed name to the Projekt and names the speaker with it. */
-  async function addAndName(speaker: string): Promise<void> {
-    const typed = (finding[speaker] ?? '').trim()
-    try {
-      await window.api.personAdd(project.id, typed, '')
-      const added = (await window.api.projects()).projects.find((x) => x.id === project.id)?.people.find((x) => x.name === typed)
-      if (!added) throw new Error('Personen hittades inte efter att den lades till')
-      await window.api.nameSpeaker(dir, speaker, added.id)
-      stale = Boolean(p)
-      open = null
-      await refresh()
-      await load()
-    } catch (e) {
-      problem = failure(e)
-    }
+  /** The project's people that fit what is written, those not yet heard in the meeting first. Not the voice's match: it is offered on its own. */
+  function choices(s: Speaker) {
+    const hit = project.people.filter((x) => x.id !== s.voice?.person && fits(s, x))
+    const heard = new Set(m?.speakers.map((x) => x.person))
+    return [...hit.filter((x) => !heard.has(x.id)), ...hit.filter((x) => heard.has(x.id))]
   }
 
   /** A correction from a button: the engine makes it and the meeting is read again. */
@@ -375,61 +376,69 @@
         {#if unnamed.length}
           <section class="card" aria-labelledby="unnamed">
             <h2 id="unnamed">{unnamed.length === 1 ? 'En talare har inget namn' : `${unnamed.length} talare har inget namn`}</h2>
-            <p class="muted">Lyssna på en rad och välj vem det är. Namnen styr vilka som står som närvarande, och med vilken Roll.</p>
+            <p class="muted">Lyssna på en rad och skriv vem det är, eller välj ett namn. Namnen styr vilka som står som närvarande, och med vilken Roll.</p>
             <ul class="speakers">
               {#each unnamed as s (s.id)}
                 {@const first = m.lines.find((l) => l.speaker === s.id)}
+                {@const list = choices(s)}
+                {@const few = everyone[s.id] || written(s) ? list : list.slice(0, SHOWN)}
                 <li>
-                  <div class="grow">
-                    <p><strong>{s.name}</strong></p>
-                    {#if first}<p class="small muted clamp">”{first.text}”</p>{/if}
+                  <div class="said">
+                    <div class="grow">
+                      <p><strong>{s.name}</strong></p>
+                      {#if first}<p class="small muted clamp">”{first.text}”</p>{/if}
+                    </div>
+                    {#if first}
+                      <button class="time" aria-label="Lyssna på {s.name} från {clock(first.at)}" onclick={() => listen(first.at, first.id)}>
+                        <span><Icon name="play" size={12} /> {clock(first.at)}</span>
+                      </button>
+                    {/if}
                   </div>
-                  {#if first}
-                    <button class="time" aria-label="Lyssna på {s.name} från {clock(first.at)}" onclick={() => listen(first.at, first.id)}>
-                      <span><Icon name="play" size={12} /> {clock(first.at)}</span>
-                    </button>
-                  {/if}
-                  <div class="combo">
+                  <label class="name">
                     <input
                       class="field"
                       type="text"
-                      role="combobox"
                       aria-label="Vem är {s.name}?"
-                      aria-expanded={open === s.id}
-                      aria-controls="who-{s.id}"
+                      placeholder="Skriv ett namn"
                       autocomplete="off"
-                      placeholder="Sök eller skriv ett namn"
-                      value={finding[s.id] ?? ''}
-                      onfocus={() => (open = s.id)}
-                      onblur={() => setTimeout(() => open === s.id && (open = null), 150)}
-                      oninput={(e) => {
-                        finding[s.id] = e.currentTarget.value
-                        naming[s.id] = ''
-                        open = s.id
+                      disabled={busy === s.id}
+                      value={typed[s.id] ?? ''}
+                      oninput={(e) => (typed[s.id] = e.currentTarget.value)}
+                      onkeydown={(e) => {
+                        if (e.isComposing) return
+                        if (e.key === 'Enter') enter(s)
+                        else if (e.key === 'Escape' && typed[s.id]) typed[s.id] = ''
+                        else return
+                        e.preventDefault()
                       }}
                     />
-                    {#if open === s.id}
-                      <ul class="options" id="who-{s.id}" role="listbox">
-                        {#each matches(s.id) as person (person.id)}
-                          <li role="option" aria-selected={naming[s.id] === person.id}>
-                            <button type="button" onmousedown={(e) => e.preventDefault()} onclick={() => pick(s.id, person.id, person.name)}>
-                              {person.name}{person.role ? `, ${person.role}` : ''}
-                            </button>
-                          </li>
-                        {/each}
-                        {#if addable(s.id)}
-                          <li role="option" aria-selected="false">
-                            <button type="button" class="add" onmousedown={(e) => e.preventDefault()} onclick={() => addAndName(s.id)}>
-                              <Icon name="plus" size={14} /> Lägg till ”{(finding[s.id] ?? '').trim()}”
-                            </button>
-                          </li>
-                        {:else if !matches(s.id).length}
-                          <li class="small muted none">{project.stommen ? 'Ingen med det namnet. Personer läggs till i Stommen.' : 'Skriv ett namn för att lägga till.'}</li>
-                        {/if}
-                      </ul>
-                    {/if}
-                  </div>
-                  <button class="btn" disabled={!naming[s.id]} onclick={() => name(s.id)}>Sätt namn</button>
+                    <kbd aria-hidden="true">↩</kbd>
+                  </label>
+                  {#if written(s) && !same(s)}
+                    <p class="small muted">
+                      Enter sparar ”{written(s)}” som en ny person {project.stommen ? 'här. I Stommen står namnet utan Kontakt.' : 'i projektet.'}
+                    </p>
+                  {/if}
+                  {#if s.voice && fits(s, s.voice)}
+                    {@const voice = s.voice}
+                    <p class="small muted" id="heard-{s.id}">Rösten känns igen från ett tidigare möte</p>
+                    <div class="chips" role="group" aria-labelledby="heard-{s.id}">
+                      <button class="chip heard" disabled={busy === s.id} onclick={() => name(s, { person: voice.person })}>
+                        <Icon name="wave" size={14} /> {voice.name}
+                      </button>
+                    </div>
+                  {/if}
+                  {#if list.length}
+                    <p class="small muted" id="people-{s.id}">I projektet</p>
+                    <div class="chips" role="group" aria-labelledby="people-{s.id}">
+                      {#each few as x (x.id)}
+                        <button class="chip" title={x.role} disabled={busy === s.id} onclick={() => name(s, { person: x.id })}>{x.name}</button>
+                      {/each}
+                      {#if few.length < list.length}
+                        <button class="chip more" onclick={() => (everyone[s.id] = true)}>{list.length - few.length} till</button>
+                      {/if}
+                    </div>
+                  {/if}
                 </li>
               {/each}
             </ul>
@@ -773,16 +782,23 @@
   .confirmed { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .confirmed :global(svg) { flex: none; color: var(--ok); }
   .point :global(.form) { margin: 4px 0 8px; }
-  .speakers li { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 0; border-bottom: 1px solid var(--line); }
-  .combo { position: relative; min-width: 240px; }
+  .speakers li { display: grid; gap: 8px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+  .said { display: flex; align-items: center; gap: 12px; }
+  .name { position: relative; display: block; max-width: 360px; margin-top: 4px; }
+  .name .field { width: 100%; padding-right: 40px; }
+  .name kbd { position: absolute; top: 50%; right: 14px; transform: translateY(-50%); font-family: var(--font-mono); font-size: 16px; color: var(--ink-400); pointer-events: none; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 16px; border: 1px solid var(--ink-300); border-radius: var(--radius-pill); background: var(--surface); color: var(--ink-700); font: inherit; font-size: 14px; cursor: pointer; }
+  .chip:hover:not(:disabled) { border-color: var(--ink-500); color: var(--ink-900); }
+  .chip:disabled { opacity: 0.5; cursor: default; }
+  .chip.heard { border-color: var(--coral-200); background: var(--coral-50); color: var(--ink-900); font-weight: 500; }
+  .chip.heard :global(svg) { color: var(--coral-700); }
+  .chip.more { border-style: dashed; color: var(--ink-500); }
   .menu { position: relative; }
   .menu .options { right: auto; min-width: 100%; }
-  .combo .field { width: 100%; }
   .options { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0; max-height: 240px; overflow: auto; margin: 0; padding: 4px; list-style: none; background: var(--surface); border: 1px solid var(--ink-300); border-radius: var(--radius-sm); box-shadow: 0 8px 24px rgb(0 0 0 / 0.12); }
   .options button { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 40px; padding: 0 10px; border: 0; border-radius: 6px; background: none; text-align: left; font: inherit; cursor: pointer; }
   .options button:hover, .options button:focus-visible { background: var(--ink-100, #f3f3f3); }
-  .options .add { font-weight: 500; }
-  .options .none { padding: 10px; }
   .speakers li:last-child { border-bottom: 0; padding-bottom: 0; }
   .clamp { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   details summary { cursor: pointer; font-weight: 500; min-height: 44px; display: flex; align-items: center; }
