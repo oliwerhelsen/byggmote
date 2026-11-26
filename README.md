@@ -134,9 +134,15 @@ shortcuts that work in any program (⌃⌥N for the next heading, ⌃⌥1 to 4 f
 same keys on Windows and Linux). The main window is free meanwhile, and writes the recording out when the meeting is
 ended. A recording is written out behind the window: it is listed in the sidebar with the step it is
 at, the Dock's icon or the taskbar's button shows that work goes on, several wait their turn, and one that failed
-stays in the list until it has been looked at. A protocol is a document in the window: an outline of its headings, the page, the transcript
-beside it (it can be put away) and the recording under both, with what is done to it in the toolbar and in the
-Protokoll and Arkiv menus (Ny punkt, Nästa att kontrollera, Spara som, Skicka till Stommen).
+stays in the list until it has been looked at. A protocol is a document in the window. Its headings are an outline beside the page, and its points are one table on
+the page (number, kind, text, time, Ansvarig, Senast). A click chooses a point: its text is corrected where it stands
+(Enter or leaving the field saves it, Escape puts it back), and its other properties are in the inspector's Punkt tab,
+each saved as it is changed, with the line it was said in and what the engine knows of its history. The inspector's
+other tabs are the transcript (searched from the toolbar) and where the protocol stands with Stommen; the recording is
+a strip under both, with a mark where each point is said, and a status line is at the window's foot. What is done to
+the protocol is in the toolbar (the Mac's icons, a command bar with labels on Windows) and in the Protokoll and Arkiv
+menus. The keys a text field needs for itself (Enter, the space bar, the arrows) are taken by the page when no field
+has the focus (`Protocol.svelte`), and shown in the menu.
 
     npm run check     the types, main process and views
     npm test          builds the app and drives it against a knowledge base the engine writes (no model runs)

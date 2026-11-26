@@ -143,7 +143,7 @@
   .chip { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 9px; background: var(--sunken); font: 500 11px var(--font-mono); color: var(--ink-700); }
   :global(:root[data-platform='win']) .chip { border-radius: 4px; }
   .said { font-size: var(--ui-small); color: var(--ink-500); display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .combo { position: relative; flex: none; width: 220px; }
+  .combo { position: relative; flex: none; width: 260px; }
   .combo .field { width: 100%; }
   .options { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0; max-height: 220px; overflow: auto; padding: 5px; background: rgb(250 249 252 / 0.98); border: 1px solid rgb(0 0 0 / 0.16); border-radius: 8px; box-shadow: 0 10px 30px rgb(0 0 0 / 0.22); }
   .options button { display: flex; align-items: center; gap: 6px; width: 100%; min-height: var(--ctl-h); padding: 0 10px; border: 0; border-radius: var(--ctl-r); background: none; text-align: left; }

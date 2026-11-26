@@ -1208,6 +1208,6 @@
   .status { flex: none; display: flex; align-items: center; gap: 16px; height: 26px; padding: 0 12px; border-top: 1px solid var(--rule); background: var(--pane); font-size: 12px; color: var(--ink-500); white-space: nowrap; overflow: hidden; }
   .status .sepd, .promise { display: inline-flex; align-items: center; gap: 6px; }
   :global(:root[data-platform='mac']) .status { gap: 6px; height: 24px; padding: 0 14px; background: #f6f5f9; font-size: 11px; }
-  :global(:root[data-platform='mac']) .status .sepd::before { content: '·'; }
+  :global(:root[data-platform='mac']) .status > span + .sepd::before { content: '·'; }
   :global(:root[data-platform='mac']) .status .sepd { gap: 5px; }
 </style>
