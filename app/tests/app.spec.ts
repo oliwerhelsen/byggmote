@@ -34,6 +34,11 @@ test.afterAll(async () => {
   rmSync(config, { recursive: true, force: true })
 })
 
+// The application menu is the Mac's menu bar and the window's own on Windows and Linux: a choice in it, or its
+// shortcut, reaches the window as a command.
+const menu = (id: string): Promise<void> => app.evaluate(({ Menu }, item) => Menu.getApplicationMenu()!.getMenuItemById(item)!.click(), id)
+const enabled = (id: string): Promise<boolean> => app.evaluate(({ Menu }, item) => Menu.getApplicationMenu()!.getMenuItemById(item)!.enabled, id)
+
 // Every test starts on the project's overview, reached through the sidebar; a recording has its own way back.
 const toOverview = (): Promise<void> => win.getByRole('navigation', { name: 'Huvudmeny' }).getByRole('button', { name: 'Översikt' }).click()
 
@@ -96,26 +101,50 @@ test('a protocol: who was there, the points with their checks, and the transcrip
   await expect(win.getByText('Mötet har inget ljud sparat.')).toBeVisible()
 })
 
-test('nothing is recorded before everyone knows', async () => {
+/** The small window a meeting is recorded in, opened by the dialog. It closes again whether or not this computer has a microphone. */
+async function recordingWindow(): Promise<Page> {
+  const [rec] = await Promise.all([app.waitForEvent('window'), win.getByRole('button', { name: 'Börja spela in' }).click()])
+  await rec.waitForLoadState()
+  return rec
+}
+async function closeRecording(rec: Page): Promise<void> {
+  rec.on('dialog', (d) => void d.accept()) // "Avbryta inspelningen?"
+  await Promise.all([rec.waitForEvent('close'), rec.getByRole('button', { name: /Stäng|Avbryt inspelningen/ }).click()])
+}
+
+test('nothing is recorded before everyone knows, and the meeting is recorded in a window of its own', async () => {
   await win.getByRole('button', { name: 'Spela in möte' }).click()
   const start = win.getByRole('button', { name: 'Börja spela in' })
   await expect(start).toBeDisabled()
   await win.getByRole('checkbox', { name: 'Alla i rummet vet att mötet spelas in' }).check()
   await expect(start).toBeEnabled()
-  await start.click()
-  await expect(win.getByRole('heading', { name: 'Byggmöte 5' })).toBeVisible()
-  await expect(win.locator('.heading')).toHaveCount(11)
-  await win.getByRole('button', { name: /Till översikten|Avbryta inspelningen|Avbryt inspelningen/ }).click()
+  const rec = await recordingWindow()
+  await expect(rec.getByRole('heading', { name: 'Byggmöte 5' })).toHaveCount(1)
+  await rec.getByRole('button', { name: 'Alla rubriker' }).click()
+  await expect(rec.locator('.heading')).toHaveCount(11)
+  // the main window is free, shows the recording, and does not offer a second one
+  const side = win.getByRole('navigation', { name: 'Huvudmeny' })
+  await expect(side.getByText('Spelas in', { exact: true })).toBeVisible()
+  await expect(win.getByRole('heading', { name: 'Möten', exact: true })).toBeVisible()
+  expect(await enabled('record')).toBe(false)
+  // its shortcuts work in any program while it is open (asked of the Mac only: a runner without a desktop has none to give)
+  const taken = (): Promise<boolean> => app.evaluate(({ globalShortcut }) => globalShortcut.isRegistered('Control+Alt+N'))
+  if (process.platform === 'darwin') expect(await taken()).toBe(true)
+  await closeRecording(rec)
+  if (process.platform === 'darwin') expect(await taken()).toBe(false)
+  await expect(side.getByText('Spelas in', { exact: true })).toHaveCount(0)
+  expect(await enabled('record')).toBe(true)
 })
 
 test('a meeting can be recorded without an agenda', async () => {
   await win.getByRole('button', { name: 'Spela in möte' }).click()
   await win.getByLabel('Utan dagordning').check()
   await win.getByRole('checkbox', { name: 'Alla i rummet vet att mötet spelas in' }).check()
-  await win.getByRole('button', { name: 'Börja spela in' }).click()
-  await expect(win.getByRole('heading', { name: 'Byggmöte 5' })).toBeVisible()
-  await expect(win.locator('.heading')).toHaveCount(0)
-  await expect(win.getByRole('heading', { name: 'Dagordning' })).toHaveCount(0)
+  const rec = await recordingWindow()
+  await expect(rec.getByRole('heading', { name: 'Byggmöte 5' })).toHaveCount(1)
+  await expect(rec.getByRole('button', { name: 'Alla rubriker' })).toHaveCount(0)
+  await expect(rec.getByRole('heading', { name: 'Dagordning' })).toHaveCount(0)
+  await closeRecording(rec)
 })
 
 const protocol4 = async (): Promise<void> => {
@@ -228,11 +257,6 @@ test('a protocol the next meeting builds on is read, not changed', async () => {
   await expect(win.getByRole('button', { name: 'Skriv om protokollet' })).toHaveCount(0)
 })
 
-// The application menu is the Mac's menu bar and the window's own on Windows and Linux: a choice in it, or its
-// shortcut, reaches the window as a command.
-const menu = (id: string): Promise<void> => app.evaluate(({ Menu }, item) => Menu.getApplicationMenu()!.getMenuItemById(item)!.click(), id)
-const enabled = (id: string): Promise<boolean> => app.evaluate(({ Menu }, item) => Menu.getApplicationMenu()!.getMenuItemById(item)!.enabled, id)
-
 test('the application menu opens the views, and greys out what cannot run', async () => {
   await menu('overview')
   await expect(win.getByRole('heading', { name: 'Kv. Eken kontorshus', level: 1 })).toBeVisible()
@@ -240,7 +264,7 @@ test('the application menu opens the views, and greys out what cannot run', asyn
   await expect(win.getByRole('heading', { name: 'Dagordning, byggmöte 5' })).toBeVisible()
   await menu('record')
   await expect(win.getByRole('heading', { name: 'Nytt möte' })).toBeVisible()
-  await win.getByRole('button', { name: 'Avbryt' }).click()
+  await win.getByRole('button', { name: 'Avbryt', exact: true }).click()
   await menu('settings')
   await expect(win.getByRole('heading', { name: 'Inställningar', level: 1 })).toBeVisible()
   expect(await enabled('sync')).toBe(false) // nothing to fetch from: Stommen is not connected

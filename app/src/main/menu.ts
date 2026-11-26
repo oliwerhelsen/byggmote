@@ -2,6 +2,7 @@
 // to the window (`Command`), which does it the same way as its own button would. Each has the platform's shortcut.
 import { app, BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron'
 import { COMMANDS, type Command, type MenuState } from '../shared/types'
+import { commands as recordCommands, recording, recordingWindow } from './recording'
 
 const mac = process.platform === 'darwin'
 
@@ -18,13 +19,18 @@ function can(c: Command): boolean {
   if (c === 'send') return state.sendable
   if (c === 'sync') return state.connected
   if (c === 'overview' || c === 'points') return state.project
-  if (c === 'agenda' || c === 'record' || c === 'addRecording') return state.project && state.series
+  if (c === 'record') return state.project && state.series && !recording() // one meeting is recorded at a time
+  if (c === 'agenda' || c === 'addRecording') return state.project && state.series
   return true
 }
 
-export function buildMenu(reopen: () => void): void {
+let reopen: () => void = () => {}
+
+/** Draw the menu again: the recording's commands in Möte follow where the recording stands. */
+export function buildMenu(open: () => void = reopen): void {
+  reopen = open
   const send = (c: Command): void => {
-    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+    const win = BrowserWindow.getAllWindows().find((w) => w !== recordingWindow()) // the main window, not the recording's
     if (!win) return reopen() // the Mac keeps the app when its window is closed: the choice brings the window back
     if (win.isMinimized()) win.restore()
     win.webContents.send('command', c)
@@ -77,14 +83,14 @@ export function buildMenu(reopen: () => void): void {
         item('agenda', 'Dagordning', 'CmdOrCtrl+3'),
         line,
         { ...item('sidebar', 'Visa sidopanelen', mac ? 'Ctrl+Cmd+S' : 'Ctrl+B'), type: 'checkbox', checked: state.sidebar },
-        { ...item('inspector', 'Visa utskriften', mac ? 'Alt+Cmd+I' : 'Ctrl+I'), type: 'checkbox', checked: state.inspector },
+        { ...item('inspector', 'Visa utskriften', mac ? 'Alt+Cmd+I' : 'Ctrl+I'), type: 'checkbox', checked: state.inspector && state.meeting },
         line,
         { role: 'togglefullscreen', label: 'Helskärm' },
         // A checkout run from a terminal, never the installed app.
         ...(app.isPackaged ? [] : [line, { role: 'reload', label: 'Läs in fönstret igen', accelerator: 'CmdOrCtrl+Alt+R' }, { role: 'toggleDevTools', label: 'Utvecklarverktyg' }] satisfies MenuItemConstructorOptions[])
       ]
     },
-    { label: mac ? 'Möte' : '&Möte', submenu: [item('record', 'Spela in möte…', 'CmdOrCtrl+R'), line, item('rename', 'Byt namn på mötet…')] },
+    { label: mac ? 'Möte' : '&Möte', submenu: [item('record', 'Spela in möte…', 'CmdOrCtrl+R'), line, ...recordCommands(), line, item('rename', 'Byt namn på mötet…')] },
     {
       label: mac ? 'Protokoll' : '&Protokoll',
       submenu: [
