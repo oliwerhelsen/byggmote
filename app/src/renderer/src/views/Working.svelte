@@ -28,7 +28,7 @@
   {#if mac}<span class="badge" use:title>{problem ? 'Gick inte att skriva ut' : waiting ? 'Väntar på sin tur' : 'Skrivs ut'}</span>{/if}
 
   <div class="job">
-    <h2>{job.title} skrivs ut</h2>
+    <h2>{job.title} {problem ? 'skrevs inte ut' : waiting ? 'väntar på sin tur' : 'skrivs ut'}</h2>
     <p class="muted">Inspelningen skrivs ut och blir ett protokoll. Allt görs på den här datorn.</p>
 
     {#if problem}
