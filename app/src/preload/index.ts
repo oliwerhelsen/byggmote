@@ -1,6 +1,6 @@
 // The only way from the window to the computer: the calls of `Api`, each one a message to the main process.
 import { contextBridge, ipcRenderer } from 'electron'
-import type { Api, ModelEvent, Progress } from '../shared/types'
+import type { Api, Command, ModelEvent, Progress } from '../shared/types'
 import { CHANNELS } from '../shared/types'
 
 const calls = Object.fromEntries(CHANNELS.map((name) => [name, (...args: unknown[]) => ipcRenderer.invoke(name, ...args)]))
@@ -16,7 +16,14 @@ const api = {
     const heard = (_e: unknown, m: ModelEvent): void => listener(m)
     ipcRenderer.on('models', heard)
     return () => ipcRenderer.removeListener('models', heard)
-  }
+  },
+  onCommand(listener: (c: Command) => void) {
+    const heard = (_e: unknown, c: Command): void => listener(c)
+    ipcRenderer.on('command', heard)
+    return () => ipcRenderer.removeListener('command', heard)
+  },
+  // BYGGMOTE_PLATFORM: a Mac shows the window as Windows draws it, for a look at the other one.
+  platform: process.env['BYGGMOTE_PLATFORM'] || process.platform
 } as unknown as Api
 
 contextBridge.exposeInMainWorld('api', api)

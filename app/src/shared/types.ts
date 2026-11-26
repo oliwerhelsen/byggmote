@@ -193,9 +193,21 @@ export interface Api {
   /** Where the meetings are kept now, and a way to show or change it. `folderChoose` resolves null when cancelled. */
   folderShow(): Promise<void>
   folderChoose(): Promise<string | null>
+  /** What the window can do now, so the application menu greys out the rest. */
+  menuState(state: MenuState): Promise<void>
   onProgress(listener: (p: Progress) => void): () => void
   onModels(listener: (e: ModelEvent) => void): () => void
+  /** A choice in the application menu, or its shortcut. */
+  onCommand(listener: (c: Command) => void): () => void
+  /** The computer's kind (`process.platform`): the window keeps to its conventions. */
+  platform: string
 }
 
+/** What the application menu asks the window to do. Each is also a shortcut (app/src/main/menu.ts). */
+export const COMMANDS = ['settings', 'newProject', 'addRecording', 'sync', 'overview', 'meetings', 'agenda', 'record', 'sidebar', 'intro'] as const
+export type Command = (typeof COMMANDS)[number]
+/** `ready`: past the first run. `held`: a recording or a job is in the window. `sidebar`: it is shown. */
+export type MenuState = { ready: boolean; held: boolean; project: boolean; series: boolean; connected: boolean; sidebar: boolean }
+
 export const CHANNELS = ['projects', 'meetings', 'agenda', 'meeting', 'audio', 'startSeries', 'pickRecording', 'process',
-  'writeProtocol', 'nameSpeaker', 'setTitle', 'changePoint', 'addPoint', 'removePoint', 'restorePoint', 'confirmCheck', 'attend', 'stommenState', 'stommenSignIn', 'stommenSync', 'stommenSignOut', 'stommenSend', 'stommenConfirmation', 'projectAdd', 'projectRename', 'projectDelete', 'personAdd', 'personRemove', 'protocolSave', 'protocolCopy', 'recordingStart', 'recordingChunk', 'recordingStop', 'recordingDiscard', 'settings', 'settingsSet', 'setUp', 'models', 'modelsDownload', 'modelsCancel', 'computer', 'folderShow', 'folderChoose'] as const
+  'writeProtocol', 'nameSpeaker', 'setTitle', 'changePoint', 'addPoint', 'removePoint', 'restorePoint', 'confirmCheck', 'attend', 'stommenState', 'stommenSignIn', 'stommenSync', 'stommenSignOut', 'stommenSend', 'stommenConfirmation', 'projectAdd', 'projectRename', 'projectDelete', 'personAdd', 'personRemove', 'protocolSave', 'protocolCopy', 'recordingStart', 'recordingChunk', 'recordingStop', 'recordingDiscard', 'settings', 'settingsSet', 'setUp', 'models', 'modelsDownload', 'modelsCancel', 'computer', 'folderShow', 'folderChoose', 'menuState'] as const

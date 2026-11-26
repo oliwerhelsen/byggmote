@@ -755,7 +755,7 @@
 
 <style>
   .document { display: flex; flex-direction: column; gap: 28px; }
-  .head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; min-height: 44px; margin-bottom: 8px;
+  .head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; min-height: var(--ctl-h); margin-bottom: 8px;
     border-bottom: 1px solid var(--line); }
   .head h2 { display: flex; gap: 12px; align-items: baseline; }
   /* One under every heading and on every point: quiet until it is wanted, so the document is what is read. */
@@ -766,7 +766,7 @@
   .point { display: flex; flex-direction: column; gap: 4px; padding: 8px 12px 12px; margin: 0 -12px; border-radius: var(--radius-sm); }
   .point.selected { background: var(--coral-50); }
   .badge.plain { padding-left: 10px; }
-  .top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: 44px; }
+  .top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: var(--ctl-h); }
   .follow { padding-left: 12px; border-left: 2px solid var(--line); }
   .check { margin-top: 6px; padding: 10px 12px; }
   .answers { margin-top: 8px; gap: 8px; }
@@ -779,17 +779,17 @@
   .menu .options { right: auto; min-width: 100%; }
   .combo .field { width: 100%; }
   .options { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0; max-height: 240px; overflow: auto; margin: 0; padding: 4px; list-style: none; background: var(--surface); border: 1px solid var(--ink-300); border-radius: var(--radius-sm); box-shadow: 0 8px 24px rgb(0 0 0 / 0.12); }
-  .options button { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 40px; padding: 0 10px; border: 0; border-radius: 6px; background: none; text-align: left; font: inherit; cursor: pointer; }
+  .options button { display: flex; align-items: center; gap: 6px; width: 100%; min-height: var(--ctl-h); padding: 0 10px; border: 0; border-radius: 6px; background: none; text-align: left; font: inherit; cursor: pointer; }
   .options button:hover, .options button:focus-visible { background: var(--ink-100, #f3f3f3); }
   .options .add { font-weight: 500; }
   .options .none { padding: 10px; }
   .speakers li:last-child { border-bottom: 0; padding-bottom: 0; }
   .clamp { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  details summary { cursor: pointer; font-weight: 500; min-height: 44px; display: flex; align-items: center; }
+  details summary { cursor: pointer; font-weight: 500; min-height: var(--ctl-h); display: flex; align-items: center; }
   .dropped { display: flex; flex-direction: column; gap: 12px; }
   .transcript { position: sticky; top: 24px; display: flex; flex-direction: column; gap: 12px; max-height: calc(100vh - 64px - 48px); padding-bottom: 12px; }
-  audio { width: 100%; height: 44px; }
-  .search { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; border: 1px solid var(--ink-300); border-radius: var(--radius-sm); color: var(--ink-500); }
+  audio { width: 100%; height: 36px; }
+  .search { display: flex; align-items: center; gap: 8px; min-height: var(--ctl-h); padding: 0 12px; border: 1px solid var(--ink-300); border-radius: var(--radius-sm); color: var(--ink-500); }
   .search:focus-within { box-shadow: var(--focus); }
   .search input { flex: 1; min-width: 0; height: 42px; border: 0; background: transparent; color: var(--ink-900); outline: none; box-shadow: none; }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }

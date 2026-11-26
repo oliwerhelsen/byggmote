@@ -9,6 +9,7 @@ import { call, run, stopAll, stream } from './engine'
 import * as kept from './settings'
 import { toDocx, toPdf, type Sheet } from './export'
 import * as stommen from './stommen'
+import { buildMenu, setMenuState } from './menu'
 
 // The tests give the app a folder of its own for what it keeps, so a run never reads or writes the person's.
 if (process.env['BYGGMOTE_USER_DATA']) app.setPath('userData', process.env['BYGGMOTE_USER_DATA'])
@@ -106,7 +107,7 @@ const correct = async (args: string[], fields?: PointFields | NewPoint): Promise
   await call(['correct', ...args], fields)
 }
 
-function handlers(tell: (p: Progress) => void, tellModels: (e: ModelEvent) => void): { [K in Exclude<keyof Api, 'onProgress' | 'onModels'>]: (...args: Parameters<Api[K]>) => ReturnType<Api[K]> } {
+function handlers(tell: (p: Progress) => void, tellModels: (e: ModelEvent) => void): { [K in Exclude<keyof Api, 'onProgress' | 'onModels' | 'onCommand' | 'platform'>]: (...args: Parameters<Api[K]>) => ReturnType<Api[K]> } {
   return {
     projects: () => call<{ folder: string; projects: Project[] }>(['projects']),
 
@@ -340,6 +341,10 @@ function handlers(tell: (p: Progress) => void, tellModels: (e: ModelEvent) => vo
       const got = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
       if (got.canceled || !got.filePaths[0]) return null
       return (await call<{ folder: string }>(['folder', got.filePaths[0]])).folder
+    },
+
+    async menuState(state) {
+      setMenuState(state)
     }
   }
 }
@@ -356,7 +361,9 @@ function open(): void {
     show: false,
     title: 'Byggmöte',
     backgroundColor: '#faf9fb',
-    autoHideMenuBar: true,
+    // The Mac's window has no title bar of its own: the sidebar and the toolbar reach the top, with the three
+    // buttons over the sidebar. Windows and Linux keep theirs, with the menu bar under it.
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 18, y: 19 } } : {}),
     webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: !hidden }
   })
   win.once('ready-to-show', () => {
@@ -386,6 +393,7 @@ void app.whenReady().then(() => {
   for (const [name, fn] of Object.entries(handlers(tell, tellModels))) {
     ipcMain.handle(name, (_e, ...args: unknown[]) => (fn as (...a: unknown[]) => unknown)(...args))
   }
+  buildMenu(open)
   open()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) open()

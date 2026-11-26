@@ -61,11 +61,11 @@
   dialog::backdrop { background: rgb(0 0 0 / 0.35); }
   dialog h2 { margin-bottom: 4px; }
   fieldset { border: 0; padding: 0; margin: 16px 0 0; display: flex; flex-direction: column; gap: 8px; }
-  .choice { display: flex; align-items: flex-start; gap: 12px; min-height: 44px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); cursor: pointer; }
+  .choice { display: flex; align-items: flex-start; gap: 12px; min-height: var(--ctl-h); padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); cursor: pointer; }
   .choice:has(input:checked) { border-color: var(--coral-700); background: var(--coral-100); }
   .choice input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--coral-700); }
   .block { display: block; }
-  .consent { display: flex; align-items: center; gap: 10px; min-height: 44px; margin-top: 16px; }
+  .consent { display: flex; align-items: center; gap: 10px; min-height: var(--ctl-h); margin-top: 16px; }
   .consent input { width: 20px; height: 20px; accent-color: var(--coral-700); }
   .actions { justify-content: flex-end; margin-top: 12px; }
 </style>

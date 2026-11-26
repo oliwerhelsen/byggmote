@@ -142,7 +142,7 @@
   .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin: 0; }
   dt { font-size: 13px; color: var(--ink-500); }
   dd { margin: 2px 0 0; font-size: 18px; font-weight: 500; }
-  .btn.icon { padding: 0; width: 44px; }
+  .btn.icon { padding: 0; width: var(--ctl-h); }
   .name { gap: 4px; }
   .danger { border-color: var(--bad); }
   .danger h2 { color: var(--bad); }

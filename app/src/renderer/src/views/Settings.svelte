@@ -183,7 +183,7 @@
 <style>
   .settings { display: flex; gap: 32px; align-items: flex-start; }
   .tabs { flex: 0 0 200px; display: flex; flex-direction: column; gap: 2px; }
-  .tab { min-height: 44px; padding: 0 14px; border: 0; border-radius: var(--radius-sm); background: transparent; text-align: left; font-weight: 500; }
+  .tab { min-height: var(--ctl-h); padding: 0 14px; border: 0; border-radius: var(--radius-sm); background: transparent; text-align: left; font-weight: 500; }
   .tab:hover { background: var(--sunken); }
   .tab[aria-selected='true'] { background: var(--coral-50); color: var(--coral-800); }
   .panel { flex: 1 1 auto; min-width: 0; max-width: 680px; }
