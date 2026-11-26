@@ -1079,7 +1079,7 @@
   :global(:root[data-platform='win']) .work { border: 1px solid var(--rule); border-right: 0; border-bottom: 0; border-top-left-radius: 8px; overflow: hidden; background: var(--quiet); }
 
   /* The page on its desk, with the columns' names over it. */
-  .desk { flex: 1 1 auto; min-width: 0; overflow-y: auto; background: var(--desk); padding: 0 0 28px; }
+  .desk { flex: 1 1 auto; min-width: 0; overflow-y: auto; background: var(--desk); padding: 0 0 28px; container-type: inline-size; }
   .colstrip { position: sticky; top: 0; z-index: 2; display: flex; justify-content: center; height: 26px; padding: 0 20px; background: var(--quiet); border-bottom: 1px solid var(--rule); font-size: 12px; color: var(--ink-500); }
   .colstrip .prow { width: 760px; max-width: 100%; padding: 0 42px; align-items: center; }
   :global(:root[data-platform='mac']) .colstrip { height: 24px; background: #f6f5f9; font-size: 11px; font-weight: 600; }
@@ -1132,6 +1132,13 @@
   :global(:root[data-platform='mac']) .point.sel { background: var(--coral-50); box-shadow: inset 0 0 0 1px var(--coral-200); }
   :global(:root[data-platform='mac']) .edit { box-shadow: 0 0 0 1px var(--coral-700), 0 0 0 4px rgb(201 58 66 / 0.25); }
   :global(:root[data-platform='mac']) .strip { border-radius: 5px; box-shadow: none; }
+  /* A narrow window: the page keeps its text column and gives up margin and some of the two last columns. */
+  @container (max-width: 700px) {
+    .paper { max-width: calc(100% - 20px); padding: 20px 16px 28px; }
+    .colstrip { padding: 0 10px; }
+    .colstrip .prow { padding: 0 22px; }
+    .prow { grid-template-columns: 42px 52px minmax(0, 1fr) 46px 84px 72px; column-gap: 6px; }
+  }
   .after { margin-top: 22px; padding-top: 10px; border-top: 1px solid var(--rule); }
   .after h3, .after summary { font: 600 12px/1.4 var(--font-body); color: var(--ink-700); cursor: default; }
   .after > p { margin-top: 4px; }

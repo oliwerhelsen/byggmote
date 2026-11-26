@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test'
+import { _electron as electron, expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 
 const here = join(__dirname, '..')
 const python = join(here, '..', 'engine', '.venv', ...(process.platform === 'win32' ? ['Scripts', 'python.exe'] : ['bin', 'python']))
@@ -70,35 +70,56 @@ test('the agenda has the open point under its heading', async () => {
   await expect(win.locator('.headings > li')).toHaveCount(11)
 })
 
-test('a protocol: who was there, the points with their checks, and the transcript', async () => {
+// The inspector's Punkt tab has the chosen point's properties; the status line is at the window's foot.
+const punkt = (): Locator => win.getByRole('tabpanel', { name: 'Punkt' })
+const row = (no: string): Locator => win.locator('.point').filter({ hasText: no })
+const status = (): Locator => win.locator('footer.status')
+
+test('a protocol: who was there, the points as a table with their checks, and the transcript', async () => {
   await win.getByRole('button', { name: 'Byggmöte 4', exact: true }).click()
   await expect(win.getByRole('heading', { name: 'Protokoll, byggmöte 4' })).toBeVisible()
   await expect(win.locator('.attendees li').first()).toHaveText('Maria Lindqvist, Projektledare')
+  await expect(win.locator('.colstrip')).toHaveText('NrTypPunktTidAnsvarigSenast')
+  await expect(win.locator('section').filter({ has: win.getByRole('heading', { name: 'Handlingar' }) })).toContainText('Inget noterat')
+  await expect(status()).toContainText('3 punkter')
+  await expect(status()).toContainText('1 att kontrollera')
+  await expect(status()).toContainText('Ljud och utskrift stannar på den här datorn')
 
   // the formats to save it as are behind one button
   await win.getByRole('button', { name: 'Spara som' }).click()
-  await expect(win.getByRole('menuitem')).toHaveText(['Word', 'PDF', 'Markdown', 'Kopiera texten'])
+  await expect(win.getByRole('menuitem')).toHaveText(['Word', 'PDF', 'Markdown', /^Kopiera texten/])
   await win.keyboard.press('Escape')
   await expect(win.getByRole('menu')).toHaveCount(0)
   await expect(win.getByRole('button', { name: 'Spara som' })).toBeFocused()
 
-  const decision = win.locator('.point').filter({ hasText: '4.4.1' })
+  const decision = row('4.4.1')
   await expect(decision).toContainText('Beslut')
   await expect(decision).toContainText('Kontrollera beloppet 86 500 kr.')
   await expect(decision).toContainText('åttiosex och fem')
 
-  const carried = win.locator('.point').filter({ hasText: '3.4.1' })
+  const carried = row('3.4.1')
   await expect(carried).toContainText('Kvarstår, från byggmöte 3')
   await expect(carried).toContainText('Togs inte upp på mötet.')
-  await expect(carried).toContainText('Senast 2026-11-12, förfallen.')
+  await expect(carried.locator('.due')).toHaveText('2026-11-12förfallen')
 
-  // a point's time shows its line in the transcript
+  // with nothing chosen the inspector says so; a point's time chooses it, and shows the line it was said in
+  await expect(punkt()).toContainText('Ingen punkt är vald.')
   await decision.getByRole('button', { name: 'Lyssna från 17:42' }).click()
+  await expect(decision).toHaveAttribute('aria-current', 'true')
+  await expect(punkt()).toContainText('Anders Holm')
+  await expect(punkt()).toContainText('Ett Beslut är alltid avslutat.')
+  await expect(punkt()).toContainText('Modellen skrev punkten')
+  await win.getByRole('tab', { name: 'Utskrift' }).click()
   await expect(win.locator('.lines li.active')).toContainText('Beställaren godkänner ÄTA 14')
 
   await win.getByRole('searchbox').fill('stomresningen')
   await expect(win.locator('.lines li')).toHaveCount(1)
   await expect(win.getByText('Mötet har inget ljud sparat.')).toBeVisible()
+  await expect(win.getByRole('button', { name: 'Spela upp' })).toBeDisabled()
+  // no project of Stommen's, so nothing to send
+  await expect(win.locator('.tools').getByRole('button', { name: 'Skicka till Stommen' })).toBeDisabled()
+  await win.getByRole('tab', { name: 'Stommen' }).click()
+  await expect(win.getByRole('tabpanel', { name: 'Stommen' })).toContainText('Projektet finns bara på den här datorn')
 })
 
 /** The small window a meeting is recorded in, opened by the dialog. It closes again whether or not this computer has a microphone. */
@@ -155,95 +176,129 @@ const protocol4 = async (): Promise<void> => {
 
 test('a person says an amount is right, and takes it back', async () => {
   await protocol4()
-  const decision = win.locator('.point').filter({ hasText: '4.4.1' })
+  const decision = row('4.4.1')
   await decision.getByRole('button', { name: 'Beloppet 86 500 kr i punkt 4.4.1 stämmer' }).click()
-  await expect(decision).toContainText('Beloppet 86 500 kr är kontrollerat mot inspelningen.')
-  await expect(win.getByText('En sak ska kontrolleras')).toHaveCount(0)
+  await expect(decision).not.toContainText('Kontrollera beloppet')
+  await expect(status()).not.toContainText('att kontrollera')
+  await decision.focus()
+  await expect(punkt()).toContainText('Beloppet 86 500 kr är kontrollerat mot inspelningen.')
 
   await toOverview()
-  const row = win.locator('tbody tr').filter({ hasText: 'Byggmöte 4' })
-  await expect(row).toContainText('Utkast')
-  await expect(row).not.toContainText('att kontrollera')
+  const meeting = win.locator('tbody tr').filter({ hasText: 'Byggmöte 4' })
+  await expect(meeting).toContainText('Utkast')
+  await expect(meeting).not.toContainText('att kontrollera')
 
   await protocol4()
-  await decision.getByRole('button', { name: 'Ångra kontrollen av 86 500 kr i punkt 4.4.1' }).click()
+  await decision.focus()
+  await punkt().getByRole('button', { name: 'Ångra kontrollen av 86 500 kr i punkt 4.4.1' }).click()
   await expect(decision).toContainText('Kontrollera beloppet 86 500 kr.')
 })
 
-test('a point is changed in its form, and what stays open is on the next agenda', async () => {
+test('a point is corrected where it stands and in the inspector, and what stays open is on the next agenda', async () => {
   await protocol4()
-  await win.getByRole('button', { name: 'Ändra punkt 4.3.1' }).click()
-  const form = win.getByRole('form', { name: 'Ändra punkt 4.3.1' })
-  await expect(form.getByLabel('Punkten')).toBeFocused()
-  await expect(form.getByLabel('Återstår efter mötet')).toHaveCount(0) // a note is said and done
-  await form.getByLabel('Punkten').fill('Platschefen redovisar läget för stommen på plan tre.')
-  await form.getByLabel('Typ').selectOption({ label: 'Att göra' })
-  await expect(form.getByLabel('Återstår efter mötet')).toBeChecked()
-  await form.getByLabel('Ansvarig').selectOption({ label: 'Platschef' })
-  await form.getByLabel('Senast').fill('2026-11-26')
-  await form.getByRole('button', { name: 'Spara' }).click()
-
-  const point = win.locator('.point').filter({ hasText: '4.3.1' })
+  const point = row('4.3.1')
+  await point.locator('.txt').click()
+  const field = win.getByRole('textbox', { name: 'Punkt 4.3.1' })
+  await expect(field).toBeFocused()
+  await expect(punkt().getByLabel('Återstår efter mötet')).toBeDisabled() // a note is said and done
+  await expect(punkt()).toContainText('En Notering är alltid avslutad.')
+  await field.fill('Platschefen redovisar läget för stommen på plan tre.')
+  await field.press('Enter')
   await expect(point).toContainText('Platschefen redovisar läget för stommen på plan tre.')
-  await expect(point).toContainText('Att göra')
-  await expect(point).toContainText('Ändrad för hand')
-  await expect(point).toContainText('Ansvarig: Platschef. Senast 2026-11-26')
-  await expect(win.getByRole('button', { name: 'Ändra punkt 4.3.1' })).toBeFocused()
+  await expect(win.locator('header .edited')).toHaveText('Redigerat')
 
-  // the form remembers what the model wrote
-  await win.getByRole('button', { name: 'Ändra punkt 4.3.1' }).click()
-  await expect(form).toContainText('Modellen skrev: ”Stommen på plan tre är klar.”')
-  await form.getByRole('button', { name: 'Avbryt' }).click()
+  // Escape puts the text back, and the key for Ändra punkt opens the field again
+  await expect(point).toBeFocused()
+  await win.keyboard.press(process.platform === 'darwin' ? 'Enter' : 'F2')
+  await expect(field).toBeFocused()
+  await field.fill('Något helt annat')
+  await field.press('Escape')
+  await expect(field).toHaveCount(0)
+  await expect(point).toContainText('Platschefen redovisar läget för stommen på plan tre.')
+
+  // each property is saved as it is changed
+  await punkt().getByLabel('Typ').selectOption({ label: 'Att göra' })
+  await expect(point).toContainText('Att göra')
+  await expect(punkt().getByLabel('Återstår efter mötet')).toBeChecked()
+  await punkt().getByLabel('Ansvarig').selectOption({ label: 'Platschef' })
+  await expect(point.locator('.who')).toHaveText('Platschef')
+  await punkt().getByLabel('Senast').fill('2026-11-26')
+  await expect(point.locator('.due')).toContainText('2026-11-26')
+  // what the engine knows of the point's history, and what the model wrote
+  await expect(punkt()).toContainText('Ändrad för hand')
+  await expect(punkt()).toContainText('Modellen skrev: ”Stommen på plan tre är klar.”')
 
   await toOverview()
   await expect(win.getByRole('region', { name: 'Öppna punkter' })).toContainText('4.3.1')
 })
 
-test('a point is added where it is said, taken out and put back', async () => {
+test('a point is written on the page where it is said, taken out and put back', async () => {
   await protocol4()
+  await win.getByRole('tab', { name: 'Utskrift' }).click()
   await win.locator('.lines').getByRole('button', { name: 'Lyssna från 14:20' }).click()
-  await win.getByRole('button', { name: 'Lägg till punkt under Ekonomi' }).click()
-  const form = win.getByRole('form', { name: 'Ny punkt' })
-  await expect(form).toContainText('Punkten pekar på 14:20 i utskriften, där Maria Lindqvist säger')
-  await expect(form.getByRole('button', { name: 'Lägg till punkten' })).toBeDisabled()
-  await form.getByLabel('Punkten', { exact: true }).fill('Mängdregleringen av schakt tas upp på nästa möte')
-  await form.getByLabel('Typ').selectOption({ label: 'Notering' })
-  await form.getByRole('button', { name: 'Lägg till punkten' }).click()
+  await win.getByRole('button', { name: 'Ny punkt under Ekonomi' }).click()
+  const field = win.getByRole('textbox', { name: 'Ny punkt' })
+  await expect(field).toBeFocused()
+  await expect(punkt()).toContainText('Punkten pekar på 14:20 i utskriften, där Maria Lindqvist säger')
+  await expect(punkt().getByRole('button', { name: 'Lägg till punkten' })).toBeDisabled()
+  await field.fill('Mängdregleringen av schakt tas upp på nästa möte')
+  await punkt().getByLabel('Typ').selectOption({ label: 'Notering' })
+  await punkt().getByRole('button', { name: 'Lägg till punkten' }).click()
 
-  const point = win.locator('.point').filter({ hasText: '4.4.2' })
+  const point = row('4.4.2')
   await expect(point).toContainText('Mängdregleringen av schakt tas upp på nästa möte.')
-  await expect(point).toContainText('Tillagd för hand')
+  await expect(point).toContainText('Notering')
   await expect(point.getByRole('button', { name: 'Lyssna från 14:20' })).toBeVisible()
+  await expect(point).toHaveAttribute('aria-current', 'true') // the new point is the chosen one
+  await expect(punkt()).toContainText('Tillagd för hand')
 
-  await win.getByRole('button', { name: 'Ändra punkt 4.4.2' }).click()
-  await win.getByRole('button', { name: 'Ta bort punkten' }).click()
+  await punkt().getByRole('button', { name: 'Ta bort punkten' }).click()
   await expect(point).toHaveCount(0)
   await expect(win.getByText('En punkt är borttagen')).toBeVisible()
   await win.getByRole('button', { name: 'Lägg tillbaka punkt 4.4.2' }).click()
   await expect(point).toContainText('Mängdregleringen av schakt tas upp på nästa möte.')
   await expect(win.getByText('En punkt är borttagen')).toHaveCount(0)
+
+  // Escape leaves a new point, and Enter adds one
+  await menu('newPoint')
+  await field.fill('En punkt som inte blir av')
+  await field.press('Escape')
+  await expect(field).toHaveCount(0)
+  await expect(win.getByText('En punkt som inte blir av')).toHaveCount(0)
+  await win.getByRole('button', { name: 'Ny punkt under Tidplan' }).click()
+  await field.fill('Taket läggs vecka 49')
+  await field.press('Enter')
+  const made = row('Taket läggs vecka 49.')
+  await expect(made).toContainText('4.3.2')
+  await expect(made).toContainText('Att göra')
+  await made.focus()
+  await win.keyboard.press(process.platform === 'darwin' ? 'Meta+Backspace' : 'Delete') // Ta bort punkt
+  await expect(made).toHaveCount(0)
 })
 
 test('a model does not write over what a person has set right without a yes', async () => {
   await protocol4()
-  const decision = win.locator('.point').filter({ hasText: '4.4.1' })
+  const decision = row('4.4.1')
   await decision.getByRole('button', { name: 'Beloppet 86 500 kr i punkt 4.4.1 stämmer' }).click() // a correction of this test's own
-  await expect(decision).toContainText('är kontrollerat mot inspelningen')
-  await win.getByRole('button', { name: 'Skriv om protokollet' }).click()
+  await expect(decision).not.toContainText('Kontrollera beloppet')
+  await menu('rewrite')
   await expect(win.getByRole('alert')).toContainText(/Protokollet har (en rättning\. Den|\d+ rättningar\. De) försvinner om modellen skriver om protokollet\./)
   await win.getByRole('button', { name: /^Behåll rättning(en|arna)$/ }).click()
   await expect(win.getByRole('alert')).toHaveCount(0)
-  await expect(decision).toContainText('är kontrollerat mot inspelningen')
+  await expect(decision).not.toContainText('Kontrollera beloppet')
 })
 
 test('someone who was there and said nothing is added, and taken off again', async () => {
   await protocol4()
+  await menu('attend')
+  await expect(win.getByLabel('Någon som var med utan att säga något')).toBeFocused()
   await win.getByLabel('Någon som var med utan att säga något').selectOption({ label: 'Sara Nyberg, BAS-U' })
   await win.getByRole('button', { name: 'Lägg till som närvarande' }).click()
   const there = win.locator('.attendees li').filter({ hasText: 'Sara Nyberg' })
   await expect(there).toContainText('Sara Nyberg, BAS-U')
-  await expect(there).toContainText('Tillagd för hand')
-  await expect(win.getByLabel('Någon som var med utan att säga något')).toHaveCount(0) // everyone in the project is there now
+  await expect(there).toContainText('(tillagd för hand)')
+  await expect(win.getByLabel('Någon som var med utan att säga något')).toHaveCount(0)
+  await expect.poll(() => enabled('attend')).toBe(false) // everyone in the project is there now
   await win.getByRole('button', { name: 'Ta bort Sara Nyberg från närvarande' }).click()
   await expect(there).toHaveCount(0)
 })
@@ -252,10 +307,16 @@ test('a protocol the next meeting builds on is read, not changed', async () => {
   await win.getByRole('button', { name: 'Byggmöte 3', exact: true }).click()
   await expect(win.getByRole('heading', { name: 'Protokoll, byggmöte 3' })).toBeVisible()
   await expect(win.getByText('Byggmöte 4 bygger på det här protokollet, så punkterna går inte att ändra längre.')).toBeVisible()
-  await expect(win.locator('.point').filter({ hasText: '3.4.1' })).toBeVisible()
-  await expect(win.getByRole('button', { name: /^Ändra punkt/ })).toHaveCount(0)
-  await expect(win.getByRole('button', { name: /^Lägg till punkt under/ })).toHaveCount(0)
-  await expect(win.getByRole('button', { name: 'Skriv om protokollet' })).toHaveCount(0)
+  const point = row('3.4.1')
+  await point.locator('.txt').click()
+  await expect(point).toHaveAttribute('aria-current', 'true')
+  await expect(win.getByRole('textbox', { name: /^Punkt / })).toHaveCount(0)
+  await expect(punkt().getByLabel('Typ')).toBeDisabled()
+  await expect(punkt().getByLabel('Ansvarig')).toBeDisabled()
+  await expect(punkt().getByRole('button', { name: 'Ta bort punkten' })).toHaveCount(0)
+  await expect(win.getByRole('button', { name: 'Ny punkt', exact: true })).toBeDisabled()
+  await expect(win.getByRole('button', { name: /^Ny punkt under/ })).toHaveCount(0)
+  for (const c of ['newPoint', 'editPoint', 'removePoint', 'rewrite']) expect(await enabled(c)).toBe(false)
 })
 
 test('the application menu opens the views, and greys out what cannot run', async () => {
@@ -293,16 +354,29 @@ test('a protocol is a document: an outline to its headings, and its commands in 
   await expect(outline.getByRole('button')).toHaveCount(11)
   await outline.getByRole('button', { name: /Ekonomi/ }).click()
   await menu('newPoint') // under the heading chosen in the outline
-  await expect(win.getByRole('group', { name: 'Ny punkt' }).or(win.getByLabel('Ny punkt'))).toBeVisible()
-  await win.getByRole('button', { name: 'Avbryt' }).click()
+  const economy = win.locator('section').filter({ has: win.getByRole('heading', { name: 'Ekonomi' }) })
+  await expect(economy.getByRole('textbox', { name: 'Ny punkt' })).toBeFocused()
+  await win.keyboard.press('Escape')
   expect(await enabled('saveDocx')).toBe(true)
   expect(await enabled('send')).toBe(false) // not connected to Stommen
+  expect(await enabled('play')).toBe(false) // the meeting has no sound
+  expect(await enabled('nameSpeakers')).toBe(false) // every speaker has a name
+  // what is done to a point is greyed out until one is chosen
+  expect(await enabled('editPoint')).toBe(false)
+  await row('4.4.1').focus()
+  await expect.poll(() => enabled('editPoint')).toBe(true)
+  await menu('editPoint')
+  await expect(win.getByRole('textbox', { name: 'Punkt 4.4.1' })).toBeFocused()
+  await win.keyboard.press('Escape')
+  await menu('nextCheck')
+  await expect(win.locator('.point[aria-current]')).toHaveCount(1)
   await menu('inspector')
-  await expect(win.getByRole('heading', { name: 'Utskrift' })).toHaveCount(0)
-  await menu('find') // brings the transcript back, with its search
+  await expect(win.getByRole('tablist', { name: 'Inspektör' })).toHaveCount(0)
+  await menu('find') // brings the inspector back on the transcript, with the search in the toolbar
   await expect(win.getByPlaceholder('Sök i utskriften')).toBeFocused()
+  await expect(win.getByRole('tab', { name: 'Utskrift' })).toHaveAttribute('aria-selected', 'true')
   await toOverview()
-  expect(await enabled('saveDocx')).toBe(false)
+  await expect.poll(() => enabled('saveDocx')).toBe(false)
 })
 
 test('the open points of the project are a list of their own, and one opens in its protocol', async () => {
