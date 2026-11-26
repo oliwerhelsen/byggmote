@@ -148,7 +148,7 @@ async function stommenTab(): Promise<Locator> {
   await win.getByRole('tab', { name: 'Stommen' }).click()
   return win.getByRole('tabpanel', { name: 'Stommen' })
 }
-const status = (): Locator => win.locator('footer.status')
+const status = (): Locator => win.locator('footer.status, footer.statusbar')
 const toolbarSend = (): Locator => win.locator('.tools').getByRole('button', { name: 'Skicka till Stommen' })
 /** A point's text is corrected where it stands on the page. */
 async function retext(no: string, text: string): Promise<void> {

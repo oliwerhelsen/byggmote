@@ -94,7 +94,7 @@ test('the agenda has the open point under its heading', async () => {
 // The inspector's Punkt tab has the chosen point's properties; the status line is at the window's foot.
 const punkt = (): Locator => win.getByRole('tabpanel', { name: 'Punkt' })
 const row = (no: string): Locator => win.locator('.point').filter({ hasText: no })
-const status = (): Locator => win.locator('footer.status')
+const status = (): Locator => win.locator('footer.status, footer.statusbar')
 
 test('a protocol: who was there, the points as a table with their checks, and the transcript', async () => {
   await win.getByRole('button', { name: 'Byggmöte 4', exact: true }).click()
@@ -235,7 +235,9 @@ test('a point is corrected where it stands and in the inspector, and what stays 
   await field.fill('Platschefen redovisar läget för stommen på plan tre.')
   await field.press('Enter')
   await expect(point).toContainText('Platschefen redovisar läget för stommen på plan tre.')
-  await expect(win.locator('header .edited')).toHaveText('Redigerat')
+  // the Mac says it by the title, the others in the status bar
+  if (process.platform === 'darwin') await expect(win.locator('header .edited')).toHaveText('Redigerat')
+  else await expect(status()).toContainText('redigerat')
 
   // Escape puts the text back, and the key for Ändra punkt opens the field again
   await expect(point).toBeFocused()
