@@ -44,6 +44,10 @@
   let rows = $state<MeetingRow[]>([])
   let stale = $state(0)
   let sidebar = $state(localStorage.getItem('sidebar') !== 'hidden')
+  // The meeting in the window: what the toolbar says of it, what the menu can do with it, and the view to tell.
+  let protocol = $state<{ command: (c: Command) => void }>()
+  let meeting = $state({ title: '', sub: '' })
+  let doc = $state({ protocol: false, free: false, sendable: false, inspector: localStorage.getItem('inspector') !== 'hidden' })
   void window.api.settings().then((s) => (settings = s))
 
   const project = $derived(projects.find((p) => p.id === chosen) ?? projects[0])
@@ -121,6 +125,7 @@
 
   const go = (to: View): void => {
     if (view.name === 'working') stale++ // the job left a meeting behind
+    if (to.name === 'protocol') meeting = { title: '', sub: '' }
     view = to
   }
 
@@ -134,10 +139,13 @@
     if (file && project) go({ name: 'working', job: { projectId: project.id, seriesId: s.id, file, title: `${s.name} ${s.next}` } })
   }
 
+  const PROTOCOL: Command[] = ['saveDocx', 'savePdf', 'saveMd', 'copyText', 'find', 'inspector', 'newPoint', 'nextCheck', 'rename', 'rewrite', 'send']
+
   /** A choice in the application menu, or its shortcut. The menu greys out what cannot run; this refuses it too. */
   function command(c: Command): void {
     if (c === 'sidebar') return showSidebar(!sidebar)
     if (held || !settings?.setUp) return
+    if (PROTOCOL.includes(c)) return view.name === 'protocol' ? protocol?.command(c) : undefined
     const first = project?.series[0]
     if (c === 'settings') go({ name: 'settings' })
     else if (c === 'newProject') openNew()
@@ -155,7 +163,8 @@
   $effect(() => {
     void window.api.menuState({
       ready: loaded && Boolean(settings?.setUp), held, project: Boolean(project), series: Boolean(project?.series.length),
-      connected: Boolean(stommen?.connected), sidebar
+      connected: Boolean(stommen?.connected), sidebar, ...doc, meeting: view.name === 'protocol',
+      ...(view.name === 'protocol' ? {} : { protocol: false, free: false, sendable: false })
     })
   })
 </script>
@@ -244,10 +253,17 @@
         <Icon name="sidebar" size={17} />
       </button>
       <div class="titles">
-        <p class="title">{TITLES[view.name]}</p>
-        {#if project && !elsewhere}<p class="sub">{project.name}</p>{/if}
+        {#if view.name === 'protocol' && meeting.title}
+          <p class="title">{meeting.title}</p>
+          <p class="sub">{meeting.sub}</p>
+        {:else}
+          <p class="title">{TITLES[view.name]}</p>
+          {#if project && !elsewhere}<p class="sub">{project.name}</p>{/if}
+        {/if}
       </div>
       <span class="grow"></span>
+      <!-- A view puts what is done in it here (Protocol.svelte). -->
+      <div id="tools"></div>
       {#if project?.series.length && !held && !elsewhere}
         <button class="btn rec" onclick={() => recorder?.show(project.series[0])}>Spela in</button>
       {/if}
@@ -301,7 +317,8 @@
             <Working job={view.job} {go} />
           {:else if view.name === 'protocol'}
             {#key view.dir}
-              <Protocol {project} dir={view.dir} problem={view.problem ?? ''} connected={Boolean(stommen?.connected)} {go} refresh={load} />
+              <Protocol bind:this={protocol} {project} dir={view.dir} problem={view.problem ?? ''} connected={Boolean(stommen?.connected)} {go} refresh={load}
+                about={(title, sub) => (meeting = { title, sub })} state={(s) => (doc = s)} />
             {/key}
           {/if}
         {/key}
@@ -367,7 +384,8 @@
   .sub { font-size: var(--ui-small); color: var(--ink-500); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .rec::before { content: ''; width: 9px; height: 9px; border-radius: 50%; background: #fff; }
   .rec { background: var(--coral-700); border-color: var(--coral-800); color: #fff; font-weight: 600; }
-  main { flex: 1 1 auto; overflow: auto; }
+  #tools { display: flex; align-items: center; min-width: 0; }
+  main { flex: 1 1 auto; min-height: 0; overflow: auto; }
 
   .strip { position: fixed; inset: 0 0 auto 0; height: 0; z-index: 1; }
   :global(:root[data-platform='mac']) .strip { height: 40px; }

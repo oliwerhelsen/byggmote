@@ -1,12 +1,17 @@
 <script lang="ts">
   import { tick } from 'svelte'
-  import type { Confirmation, Kind, MeetingDetail, NewPoint, Point, PointFields, Project } from '../../../shared/types'
+  import type { Command, Confirmation, Kind, MeetingDetail, NewPoint, Point, PointFields, Project } from '../../../shared/types'
   import Icon from '../lib/Icon.svelte'
   import PointForm from '../lib/PointForm.svelte'
   import { clock, day, failure, KINDS, minutes, overdue } from '../lib/format'
   import type { Go } from '../lib/view'
 
-  let { project, dir, problem: handed, connected, go, refresh }: { project: Project; dir: string; problem: string; connected: boolean; go: Go; refresh: () => Promise<void> } = $props()
+  // `about`: what the window's toolbar says of the meeting. `state`: what the application menu can do with it now.
+  let { project, dir, problem: handed, connected, go, refresh, about, state: tell }: {
+    project: Project; dir: string; problem: string; connected: boolean; go: Go; refresh: () => Promise<void>
+    about: (title: string, sub: string) => void
+    state: (s: { protocol: boolean; free: boolean; sendable: boolean; inspector: boolean }) => void
+  } = $props()
 
   let m = $state<MeetingDetail | null>(null)
   let problem = $state('')
@@ -31,6 +36,9 @@
   let copied = $state(false)
   let renaming = $state<string | null>(null) // the title while it is being written
   let saving = $state(false) // whether the Spara som menu is showing
+  let inspector = $state(localStorage.getItem('inspector') !== 'hidden') // the transcript beside the protocol
+  let at = $state<number | null>(null) // the heading chosen in the outline: a new point from the toolbar goes under it
+  let seen = -1 // the check Nästa att kontrollera showed last
 
   const SAVE = [['docx', 'Word'], ['pdf', 'PDF'], ['md', 'Markdown']] as const
 
@@ -274,28 +282,141 @@
     }
   }
 
+  /** The toolbar's place for what is done to a protocol: the buttons are this view's, the bar is the window's. */
+  function tools(node: HTMLElement): { destroy: () => void } {
+    document.getElementById('tools')?.appendChild(node)
+    return { destroy: () => node.remove() }
+  }
+
+  function showInspector(on: boolean): void {
+    inspector = on
+    localStorage.setItem('inspector', on ? 'shown' : 'hidden')
+  }
+
+  /** The outline: a heading is brought to the top of the page. */
+  function reach(no: number): void {
+    at = no
+    document.getElementById(`h-${no}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }
+
+  /** A new point from the toolbar or the menu: under the heading chosen in the outline, else the first that takes points. */
+  function newPoint(): void {
+    const h = pointable.find((x) => x.no === at) ?? pointable[0]
+    if (!free || !h) return
+    editing = null
+    adding = h.no
+    void tick().then(() => document.getElementById(`h-${h.no}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' }))
+  }
+
+  /** The next thing to read against the recording, round and round. */
+  function nextCheck(): void {
+    const all = [...document.querySelectorAll<HTMLElement>('.document .check')]
+    if (!all.length) return
+    seen = (seen + 1) % all.length
+    all[seen].scrollIntoView({ block: 'center', behavior: 'smooth' })
+    all[seen].querySelector<HTMLElement>('button')?.focus({ preventScroll: true })
+  }
+
+  const sendable = $derived(Boolean(connected && p && standing && standing.why === null && !confirmed && (!standing.sent_at || standing.changed)))
+
+  /** A choice in the application menu that is about the protocol. */
+  export function command(c: Command): void {
+    if (c === 'inspector') showInspector(!inspector)
+    else if (c === 'find') {
+      showInspector(true)
+      void tick().then(() => document.getElementById('find')?.focus())
+    } else if (!p) return
+    else if (c === 'saveDocx') void keep('docx')
+    else if (c === 'savePdf') void keep('pdf')
+    else if (c === 'saveMd') void keep('md')
+    else if (c === 'copyText') void keep('copy')
+    else if (c === 'nextCheck') nextCheck()
+    else if (c === 'rename') renaming = m?.title ?? ''
+    else if (c === 'newPoint') newPoint()
+    else if (c === 'rewrite' && series && free && !writing) void write()
+    else if (c === 'send' && sendable && sending === '') {
+      showInspector(true)
+      sending = 'ask'
+    }
+  }
+
+  $effect(() => {
+    if (m) about(p && !renamed ? `${p.name} ${p.no}` : m.title, `${day(m.recorded_at)} · ${minutes(m.duration)} · ${m.speakers.length === 1 ? 'en talare' : `${m.speakers.length} talare`}`)
+  })
+  $effect(() => tell({ protocol: Boolean(p), free: Boolean(free), sendable, inspector }))
+  $effect(() => () => tell({ protocol: false, free: false, sendable: false, inspector: true }))
+
+  const count = (no: number): number => (p ? p.points.filter((x) => x.heading === no).length : 0)
+  const unchecked = (no: number): boolean => Boolean(p?.points.some((x) => x.heading === no && x.checks.some((c) => c.code === 'role' || !c.confirmed)))
+
   const tone: Partial<Record<Kind, string>> = { decision: 'ok', risk: 'warn' }
   const icon = (k: Kind): 'check' | 'alert' | 'flag' => (k === 'decision' ? 'check' : k === 'risk' ? 'alert' : 'flag')
   const sentence = (t: string): string => (/[.!?]$/.test(t) ? t : `${t}.`)
   const under = (no: number): Point[] => (p ? p.points.filter((x) => x.heading === no) : [])
 </script>
 
-<div class="page">
+<div class="doc" class:bare={!m}>
   {#if problem && !m}
-    <div class="note bad" role="alert">
-      <Icon name="alert" />
-      <div>
-        <p><strong>Det gick inte att läsa mötet.</strong></p>
-        <p class="small mono">{problem}</p>
-        <button class="btn" style="margin-top: 12px" onclick={() => go({ name: 'meetings' })}>Till möten</button>
+    <div class="page">
+      <div class="note bad" role="alert">
+        <Icon name="alert" />
+        <div>
+          <p><strong>Det gick inte att läsa mötet.</strong></p>
+          <p class="small mono">{problem}</p>
+          <button class="btn" style="margin-top: 12px" onclick={() => go({ name: 'meetings' })}>Till möten</button>
+        </div>
       </div>
     </div>
   {:else if !m}
-    <p class="muted">Läser in mötet.</p>
+    <div class="page"><p class="muted">Läser in mötet.</p></div>
   {:else}
-    <div class="page-head">
-      <div>
-        <div class="row">
+    <!-- What is done to the protocol, in the window's toolbar. -->
+    <div class="tools" use:tools>
+      {#if p && free && pointable.length}
+        <button class="btn" disabled={adding !== null} onclick={newPoint}><Icon name="plus" size={16} /> Ny punkt</button>
+      {/if}
+      {#if p && checks}
+        <button class="btn" onclick={nextCheck}><Icon name="alert" size={16} /> Nästa att kontrollera <span class="n">{checks}</span></button>
+      {/if}
+      {#if p}
+        <div class="menu" onfocusout={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && (saving = false)}
+          onkeydown={saveKeys} role="presentation">
+          <button id="save-as" class="btn" aria-haspopup="menu" aria-expanded={saving} aria-controls="save-as-menu" onclick={() => (saving = !saving)}>
+            <Icon name="file" size={16} /> Spara som <Icon name="down" size={14} />
+          </button>
+          {#if saving}
+            <ul class="options" id="save-as-menu" role="menu" aria-labelledby="save-as">
+              {#each SAVE as [how, label] (how)}
+                <li role="none"><button type="button" role="menuitem" onclick={() => { saving = false; void keep(how) }}>{label}</button></li>
+              {/each}
+              <li role="none" class="rule"><button type="button" role="menuitem" onclick={() => { saving = false; void keep('copy') }}>Kopiera texten</button></li>
+            </ul>
+          {/if}
+        </div>
+        {#if copied}<span class="small muted" role="status">Kopierat</span>{/if}
+      {/if}
+      <button class="btn only" aria-label={inspector ? 'Dölj utskriften' : 'Visa utskriften'} aria-pressed={inspector} onclick={() => showInspector(!inspector)}>
+        <Icon name="inspector" size={17} />
+      </button>
+    </div>
+
+    {#if p}
+      <nav class="outline" aria-label="Rubriker">
+        <p class="side-head"><span>Rubriker</span><span>{p.points.length === 1 ? '1 punkt' : `${p.points.length} punkter`}</span></p>
+        {#each p.headings as h (h.no)}
+          <button class:current={at === h.no} onclick={() => reach(h.no)}>
+            <span class="no">{h.no}</span><span class="name">{h.name}</span>
+            {#if unchecked(h.no)}<span class="mark" aria-label="Något att kontrollera"></span>{/if}
+            {#if count(h.no)}<span class="count">{count(h.no)}</span>{/if}
+          </button>
+        {/each}
+      </nav>
+    {/if}
+
+    <div class="middle">
+      <div class="scroll">
+      <div class="sheet stack">
+        <div class="row title">
           {#if renaming !== null}
             <form class="row" onsubmit={(e) => { e.preventDefault(); void rename() }}>
               <input class="field" aria-label="Mötets namn" bind:value={renaming} onkeydown={(e) => e.key === 'Escape' && (renaming = null)} />
@@ -304,43 +425,19 @@
             </form>
           {:else}
             <h1>{p && !renamed ? `Protokoll, ${p.name.toLowerCase()} ${p.no}` : m.title}</h1>
+            <button class="btn quiet" onclick={() => (renaming = m?.title ?? '')}><Icon name="edit" size={16} /> Byt namn</button>
           {/if}
-          {#if renaming === null}<button class="btn" onclick={() => (renaming = m?.title ?? '')}><Icon name="edit" /> Byt namn</button>{/if}
+          {#if p && series && free && renaming === null}
+            <button class="btn quiet" disabled={writing} onclick={() => write()}><Icon name="refresh" size={16} /> Skriv om protokollet</button>
+          {/if}
           {#if confirmed}<span class="badge"><Icon name="lock" size={14} /> Justerat</span>
           {:else if p?.status === 'draft'}<span class="badge"><Icon name="file" size={14} /> Utkast</span>{/if}
         </div>
-        <p class="muted">{day(m.recorded_at)}. {minutes(m.duration)}, {m.speakers.length === 1 ? 'en talare' : `${m.speakers.length} talare`}.</p>
-      </div>
-      <div class="row">
-        <button class="btn" onclick={() => go({ name: 'meetings' })}><Icon name="back" /> Till möten</button>
-        {#if p}
-          <div class="menu" onfocusout={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && (saving = false)}
-            onkeydown={saveKeys} role="presentation">
-            <button id="save-as" class="btn" aria-haspopup="menu" aria-expanded={saving} aria-controls="save-as-menu" onclick={() => (saving = !saving)}>
-              <Icon name="file" /> Spara som <Icon name="down" size={16} />
-            </button>
-            {#if saving}
-              <ul class="options" id="save-as-menu" role="menu" aria-labelledby="save-as">
-                {#each SAVE as [how, label] (how)}
-                  <li role="none"><button type="button" role="menuitem" onclick={() => { saving = false; void keep(how) }}>{label}</button></li>
-                {/each}
-              </ul>
-            {/if}
-          </div>
-          <button class="btn" onclick={() => keep('copy')}>{copied ? 'Kopierat' : 'Kopiera texten'}</button>
-        {/if}
-        {#if p && series && free}
-          <button class="btn" disabled={writing} onclick={() => write()}><Icon name="refresh" /> Skriv om protokollet</button>
-        {/if}
-      </div>
-    </div>
 
-    {#if problem}
-      <div class="note bad" role="alert" style="margin-bottom: 16px"><Icon name="alert" /><p class="small mono">{problem}</p></div>
-    {/if}
+        {#if problem}
+          <div class="note bad" role="alert"><Icon name="alert" /><p class="small mono">{problem}</p></div>
+        {/if}
 
-    <div class="columns">
-      <div class="main stack">
         {#if writing}
           <div class="note" role="status"><Icon name="clock" /><p><strong>Protokollet skrivs.</strong> Det tar ungefär en minut för ett kort möte, längre för ett långt.</p></div>
         {:else if wrote}
@@ -473,71 +570,7 @@
             </div>
           {/if}
 
-          {#if standing && standing.why !== 'local'}
-            <section class="card" aria-labelledby="to-stommen">
-              <h2 id="to-stommen">Till Stommen</h2>
-              {#if confirmed}
-                <p>
-                  <strong>Justerat {ON.format(new Date(`${confirmed.on}T00:00:00Z`))}</strong>, {HOW[confirmed.method] ?? confirmed.method}, av {confirmed.by}.
-                </p>
-              {/if}
-              <p class="muted">
-                {#if standing.sent_at}
-                  Skickat {WHEN.format(new Date(standing.sent_at))}, version {standing.version}.
-                  {#if standing.changed}Protokollet har ändrats sedan dess.{/if}
-                {:else if !confirmed}
-                  Protokollet är inte skickat.
-                {/if}
-              </p>
-              {#if sendProblem}
-                <div class="note bad" role="alert" style="margin-top: 12px"><Icon name="alert" /><p>{sendProblem}</p></div>
-              {/if}
-              {#if confirmed}
-                <p style="margin-top: 12px">
-                  Ett justerat protokoll rättas inte och skickas inte igen härifrån. Behöver det ändras, be om en ny version i Stommen.
-                </p>
-              {:else if standing.why === 'checks'}
-                <p style="margin-top: 12px">
-                  {standing.about === 1 ? 'En sak ska kontrolleras' : `${standing.about} saker ska kontrolleras`} innan protokollet kan skickas.
-                </p>
-              {:else if standing.why === 'role'}
-                <p style="margin-top: 12px">
-                  Rollen ”{standing.about}” finns inte längre i Stommen. Hämta projektet igen under Inställningar → Stommen, eller välj en annan Roll för punkten.
-                </p>
-              {:else if !connected}
-                <p style="margin-top: 12px">Logga in i Stommen under Inställningar för att skicka protokollet.</p>
-              {:else if sending === 'ask'}
-                <div class="note" style="margin-top: 12px">
-                  <Icon name="lock" />
-                  <div>
-                    <p>
-                      Det här går till Stommen: protokollet med {p.points.length === 1 ? 'sin punkt' : `sina ${p.points.length} punkter`}, och för varje
-                      punkt hur långt in i inspelningen det sades, raden som sades där och vem som sa den. Ljudet och resten av utskriften
-                      stannar på den här datorn.
-                    </p>
-                    <div class="row" style="margin-top: 12px">
-                      <button class="btn primary" onclick={send}>Skicka</button>
-                      <button class="btn" onclick={() => (sending = '')}>Avbryt</button>
-                    </div>
-                  </div>
-                </div>
-              {:else if !standing.sent_at || standing.changed}
-                <button class="btn primary" style="margin-top: 12px" disabled={sending === 'busy'} onclick={() => (sending = 'ask')}>
-                  {sending === 'busy' ? 'Skickar' : standing.sent_at ? 'Skicka igen' : 'Skicka till Stommen'}
-                </button>
-              {/if}
-              {#if connected && (standing.sent_at || confirmed) && sending !== 'ask'}
-                <div class="row" style="margin-top: 12px">
-                  <button class="btn" disabled={asked === 'busy'} onclick={() => look()}>
-                    <Icon name="refresh" /> {asked === 'busy' ? 'Ser efter' : 'Se efter om det är justerat'}
-                  </button>
-                  {#if asked === 'done' && !confirmed}<span class="small muted" role="status">Inte justerat i Stommen än.</span>{/if}
-                </div>
-              {/if}
-            </section>
-          {/if}
-
-          <article class="card document">
+          <article class="document paper">
             {#each p.headings as h (h.no)}
               <section aria-labelledby="h-{h.no}">
                 <div class="head">
@@ -725,77 +758,187 @@
           {/if}
         {/if}
       </div>
-
-      <aside class="side transcript card" aria-labelledby="transcript">
-        <h2 id="transcript">Utskrift</h2>
-        {#if sound}
-          <audio bind:this={player} src={sound} controls preload="metadata"></audio>
-        {:else}
-          <p class="small muted">{m.audio ? 'Ljudet läses in.' : 'Mötet har inget ljud sparat.'}</p>
-        {/if}
-        <label class="search">
-          <span class="sr">Sök i utskriften</span>
-          <Icon name="search" size={16} />
-          <input type="search" placeholder="Sök i utskriften" bind:value={query} />
-        </label>
-        <ol class="lines">
-          {#each shown as l (l.id)}
-            <li id="line-{l.id}" class:active={active === l.id}>
-              <button class="time" aria-label="Lyssna från {clock(l.at)}" onclick={() => listen(l.at, l.id)}><span>{clock(l.at)}</span></button>
-              <p><strong>{l.who}</strong> {l.text}</p>
-            </li>
-          {:else}
-            <li><p class="muted">{m.lines.length ? 'Inget i utskriften stämmer med sökningen.' : 'Inspelningen har inget tal som gick att skriva ut.'}</p></li>
-          {/each}
-        </ol>
-      </aside>
+      </div>
     </div>
+
+    {#if inspector}
+      <aside class="inspector">
+        {#if p && standing && standing.why !== 'local'}
+            <section class="to-stommen" aria-labelledby="to-stommen">
+              <h2 id="to-stommen">Till Stommen</h2>
+              {#if confirmed}
+                <p>
+                  <strong>Justerat {ON.format(new Date(`${confirmed.on}T00:00:00Z`))}</strong>, {HOW[confirmed.method] ?? confirmed.method}, av {confirmed.by}.
+                </p>
+              {/if}
+              <p class="muted">
+                {#if standing.sent_at}
+                  Skickat {WHEN.format(new Date(standing.sent_at))}, version {standing.version}.
+                  {#if standing.changed}Protokollet har ändrats sedan dess.{/if}
+                {:else if !confirmed}
+                  Protokollet är inte skickat.
+                {/if}
+              </p>
+              {#if sendProblem}
+                <div class="note bad" role="alert" style="margin-top: 12px"><Icon name="alert" /><p>{sendProblem}</p></div>
+              {/if}
+              {#if confirmed}
+                <p style="margin-top: 12px">
+                  Ett justerat protokoll rättas inte och skickas inte igen härifrån. Behöver det ändras, be om en ny version i Stommen.
+                </p>
+              {:else if standing.why === 'checks'}
+                <p style="margin-top: 12px">
+                  {standing.about === 1 ? 'En sak ska kontrolleras' : `${standing.about} saker ska kontrolleras`} innan protokollet kan skickas.
+                </p>
+              {:else if standing.why === 'role'}
+                <p style="margin-top: 12px">
+                  Rollen ”{standing.about}” finns inte längre i Stommen. Hämta projektet igen under Inställningar → Stommen, eller välj en annan Roll för punkten.
+                </p>
+              {:else if !connected}
+                <p style="margin-top: 12px">Logga in i Stommen under Inställningar för att skicka protokollet.</p>
+              {:else if sending === 'ask'}
+                <div class="note" style="margin-top: 12px">
+                  <Icon name="lock" />
+                  <div>
+                    <p>
+                      Det här går till Stommen: protokollet med {p.points.length === 1 ? 'sin punkt' : `sina ${p.points.length} punkter`}, och för varje
+                      punkt hur långt in i inspelningen det sades, raden som sades där och vem som sa den. Ljudet och resten av utskriften
+                      stannar på den här datorn.
+                    </p>
+                    <div class="row" style="margin-top: 12px">
+                      <button class="btn primary" onclick={send}>Skicka</button>
+                      <button class="btn" onclick={() => (sending = '')}>Avbryt</button>
+                    </div>
+                  </div>
+                </div>
+              {:else if !standing.sent_at || standing.changed}
+                <button class="btn primary" style="margin-top: 12px" disabled={sending === 'busy'} onclick={() => (sending = 'ask')}>
+                  {sending === 'busy' ? 'Skickar' : standing.sent_at ? 'Skicka igen' : 'Skicka till Stommen'}
+                </button>
+              {/if}
+              {#if connected && (standing.sent_at || confirmed) && sending !== 'ask'}
+                <div class="row" style="margin-top: 12px">
+                  <button class="btn" disabled={asked === 'busy'} onclick={() => look()}>
+                    <Icon name="refresh" /> {asked === 'busy' ? 'Ser efter' : 'Se efter om det är justerat'}
+                  </button>
+                  {#if asked === 'done' && !confirmed}<span class="small muted" role="status">Inte justerat i Stommen än.</span>{/if}
+                </div>
+              {/if}
+            </section>
+          {/if}
+
+        <section class="transcript" aria-labelledby="transcript">
+          <h2 id="transcript">Utskrift</h2>
+          <label class="search">
+            <span class="sr">Sök i utskriften</span>
+            <Icon name="search" size={15} />
+            <input id="find" type="search" placeholder="Sök i utskriften" bind:value={query} />
+          </label>
+          <ol class="lines">
+            {#each shown as l (l.id)}
+              <li id="line-{l.id}" class:active={active === l.id}>
+                <button class="time" aria-label="Lyssna från {clock(l.at)}" onclick={() => listen(l.at, l.id)}><span>{clock(l.at)}</span></button>
+                <p><strong>{l.who}</strong> {l.text}</p>
+              </li>
+            {:else}
+              <li><p class="muted">{m.lines.length ? 'Inget i utskriften stämmer med sökningen.' : 'Inspelningen har inget tal som gick att skriva ut.'}</p></li>
+            {/each}
+          </ol>
+        </section>
+      </aside>
+    {/if}
+
+    <!-- The recording, under the page and the transcript: a point or a line plays from where it is said. -->
+    <footer class="transport">
+      {#if sound}
+        <audio bind:this={player} src={sound} controls preload="metadata"></audio>
+      {:else}
+        <p class="small muted">{m.audio ? 'Ljudet läses in.' : 'Mötet har inget ljud sparat.'}</p>
+      {/if}
+    </footer>
   {/if}
 </div>
 
 <style>
-  .document { display: flex; flex-direction: column; gap: 28px; }
-  .head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; min-height: var(--ctl-h); margin-bottom: 8px;
-    border-bottom: 1px solid var(--line); }
-  .head h2 { display: flex; gap: 12px; align-items: baseline; }
+  /* A document window: the outline, the page on its grey desk, the transcript beside it, the recording under both. */
+  .doc { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: minmax(0, 1fr) auto; height: 100%; }
+  .doc.bare { display: block; }
+  .tools { display: flex; align-items: center; gap: 6px; }
+  .tools .n { display: inline-grid; place-items: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--warn); color: #fff; font-size: 11px; font-weight: 600; }
+  .tools .only { padding: 0; width: 32px; border-color: transparent; background: transparent; color: var(--ink-700); }
+  .tools .only[aria-pressed='true'] { background: rgb(0 0 0 / 0.07); }
+
+  .outline { grid-row: 1; width: 196px; display: flex; flex-direction: column; gap: 1px; padding: 8px; overflow-y: auto; background: var(--canvas); border-right: 1px solid var(--line); }
+  .side-head { display: flex; justify-content: space-between; height: 24px; padding: 0 8px; font-size: var(--ui-small); font-weight: 600; color: var(--ink-500); }
+  .side-head span:last-child { font-weight: 400; }
+  .outline button { display: flex; align-items: center; gap: 8px; flex: none; height: var(--row-h); padding: 0 8px; border: 0; border-radius: var(--ctl-r); background: transparent; text-align: left; white-space: nowrap; }
+  .outline button:hover:not(.current) { background: rgb(0 0 0 / 0.045); }
+  .outline button.current { background: rgb(201 58 66 / 0.12); font-weight: 600; }
+  .outline .no { flex: none; width: 16px; text-align: right; color: var(--ink-500); font-variant-numeric: tabular-nums; }
+  .outline .name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .outline .count { flex: none; font-size: var(--ui-small); color: var(--ink-500); font-weight: 400; }
+  .outline .mark { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
+
+  .middle { grid-row: 1; min-width: 0; display: flex; flex-direction: column; background: #e9e8ee; }
+  .scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 20px 24px 28px; }
+  .sheet { max-width: 800px; margin: 0 auto; }
+  .title { gap: 8px; }
+  .paper { background: var(--surface); box-shadow: 0 1px 4px rgb(0 0 0 / 0.18); padding: 36px 44px 44px; }
+  .sheet :global(.note), .sheet :global(.card) { background-color: var(--surface); }
+  .sheet :global(.note.warn) { background: var(--warn-bg); }
+  .sheet :global(.note.bad) { background: var(--bad-bg); }
+
+  .inspector { grid-row: 1; width: 320px; display: flex; flex-direction: column; min-height: 0; background: var(--canvas); border-left: 1px solid var(--line); }
+  .to-stommen { flex: none; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  .to-stommen h2, .transcript h2 { font: 600 var(--ui-small) var(--font-ui); letter-spacing: 0; color: var(--ink-500); margin-bottom: 6px; }
+  .transcript { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 12px 14px 0; }
+  .transport { grid-column: 1 / -1; display: flex; align-items: center; min-height: 44px; padding: 4px 12px; background: var(--surface); border-top: 1px solid var(--line); }
+  audio { width: 100%; height: 34px; }
+
+  .document { display: flex; flex-direction: column; gap: 22px; }
+  .head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; min-height: var(--ctl-h); margin-bottom: 6px;
+    border-bottom: 1px solid var(--line); scroll-margin-top: 12px; }
+  section :global(h2[id^='h-']) { scroll-margin-top: 12px; }
+  .head h2 { display: flex; gap: 10px; align-items: baseline; }
   /* One under every heading and on every point: quiet until it is wanted, so the document is what is read. */
   .head .btn, .top .btn { color: var(--ink-500); font-weight: 400; }
   .head .btn:hover:not(:disabled), .top .btn:hover:not(:disabled) { color: var(--coral-800); }
   .attendees { display: flex; flex-direction: column; gap: 2px; }
-  .attendees li { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-height: 28px; }
-  .point { display: flex; flex-direction: column; gap: 4px; padding: 8px 12px 12px; margin: 0 -12px; border-radius: var(--radius-sm); }
-  .point.selected { background: var(--coral-50); }
-  .badge.plain { padding-left: 10px; }
-  .top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: var(--ctl-h); }
-  .follow { padding-left: 12px; border-left: 2px solid var(--line); }
-  .check { margin-top: 6px; padding: 10px 12px; }
-  .answers { margin-top: 8px; gap: 8px; }
+  .attendees li { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-height: 24px; }
+  .point { display: flex; flex-direction: column; gap: 3px; padding: 4px 10px 8px; margin: 0 -10px; border-radius: var(--ctl-r); }
+  .point.selected { background: var(--coral-50); box-shadow: inset 0 0 0 1px var(--coral-200); }
+  .badge.plain { padding-left: 8px; }
+  .top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: var(--ctl-h); }
+  .follow { padding-left: 10px; border-left: 2px solid var(--line); }
+  .check { margin-top: 4px; padding: 6px 10px; align-items: center; }
+  .check .grow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .check .grow p { flex: 1 1 240px; }
+  .answers { gap: 6px; }
   .confirmed { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .confirmed :global(svg) { flex: none; color: var(--ok); }
   .point :global(.form) { margin: 4px 0 8px; }
-  .speakers li { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .speakers li { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--line); }
   .combo { position: relative; min-width: 240px; }
   .menu { position: relative; }
   .menu .options { right: auto; min-width: 100%; }
   .combo .field { width: 100%; }
-  .options { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0; max-height: 240px; overflow: auto; margin: 0; padding: 4px; list-style: none; background: var(--surface); border: 1px solid var(--ink-300); border-radius: var(--radius-sm); box-shadow: 0 8px 24px rgb(0 0 0 / 0.12); }
-  .options button { display: flex; align-items: center; gap: 6px; width: 100%; min-height: var(--ctl-h); padding: 0 10px; border: 0; border-radius: 6px; background: none; text-align: left; font: inherit; cursor: pointer; }
-  .options button:hover, .options button:focus-visible { background: var(--ink-100, #f3f3f3); }
+  .options { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0; max-height: 240px; overflow: auto; margin: 0; padding: 4px; list-style: none; background: var(--surface); border: 1px solid var(--edge); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.16); }
+  .options button { display: flex; align-items: center; gap: 6px; width: 100%; min-height: var(--ctl-h); padding: 0 10px; border: 0; border-radius: var(--ctl-r); background: none; text-align: left; font: inherit; }
+  .options button:hover, .options button:focus-visible { background: rgb(0 0 0 / 0.06); }
   .options .add { font-weight: 500; }
+  .options .rule { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--line); }
+  .title .btn.quiet { color: var(--ink-500); }
   .options .none { padding: 10px; }
   .speakers li:last-child { border-bottom: 0; padding-bottom: 0; }
   .clamp { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  details summary { cursor: pointer; font-weight: 500; min-height: var(--ctl-h); display: flex; align-items: center; }
+  details summary { cursor: default; font-weight: 500; min-height: var(--ctl-h); display: flex; align-items: center; }
   .dropped { display: flex; flex-direction: column; gap: 12px; }
-  .transcript { position: sticky; top: 24px; display: flex; flex-direction: column; gap: 12px; max-height: calc(100vh - 64px - 48px); padding-bottom: 12px; }
-  audio { width: 100%; height: 36px; }
-  .search { display: flex; align-items: center; gap: 8px; min-height: var(--ctl-h); padding: 0 12px; border: 1px solid var(--ink-300); border-radius: var(--radius-sm); color: var(--ink-500); }
+  .search { flex: none; display: flex; align-items: center; gap: 6px; height: var(--ctl-h); padding: 0 8px; border: 1px solid var(--edge); border-radius: var(--ctl-r); background: var(--surface); color: var(--ink-500); }
   .search:focus-within { box-shadow: var(--focus); }
-  .search input { flex: 1; min-width: 0; height: 42px; border: 0; background: transparent; color: var(--ink-900); outline: none; box-shadow: none; }
+  .search input { flex: 1; min-width: 0; height: 100%; border: 0; background: transparent; color: var(--ink-900); outline: none; box-shadow: none; }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-  .lines { overflow: auto; margin: 0 -12px; display: flex; flex-direction: column; }
-  .lines li { display: flex; gap: 4px; align-items: flex-start; padding: 2px 12px 2px 4px; border-radius: var(--radius-sm); }
-  .lines li.active { background: var(--coral-50); }
-  .lines p { padding-top: 10px; padding-bottom: 6px; }
-  @media (max-width: 1000px) { .transcript { position: static; max-height: 70vh; } }
+  .lines { flex: 1 1 auto; min-height: 0; overflow-y: auto; margin: 0 -14px; padding: 0 6px 8px; display: flex; flex-direction: column; }
+  .lines li { display: flex; gap: 4px; align-items: flex-start; padding: 2px 8px 2px 2px; border-radius: var(--ctl-r); }
+  .lines li.active { background: var(--coral-50); box-shadow: inset 0 0 0 1px var(--coral-200); }
+  .lines p { padding-top: 5px; padding-bottom: 4px; }
 </style>

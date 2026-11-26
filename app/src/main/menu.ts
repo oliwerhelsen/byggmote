@@ -5,13 +5,17 @@ import { COMMANDS, type Command, type MenuState } from '../shared/types'
 
 const mac = process.platform === 'darwin'
 
-let state: MenuState = { ready: false, held: false, project: false, series: false, connected: false, sidebar: true }
+let state: MenuState = { ready: false, held: false, project: false, series: false, connected: false, sidebar: true, meeting: false, protocol: false, free: false, sendable: false, inspector: true }
 
 /** Whether the window can do it now. A recording or a job in the window is not left by a shortcut. */
 function can(c: Command): boolean {
   if (!state.ready) return false
   if (c === 'sidebar') return true
   if (state.held) return false
+  if (c === 'find' || c === 'inspector') return state.meeting
+  if (c === 'saveDocx' || c === 'savePdf' || c === 'saveMd' || c === 'copyText' || c === 'nextCheck' || c === 'rename') return state.protocol
+  if (c === 'newPoint' || c === 'rewrite') return state.free
+  if (c === 'send') return state.sendable
   if (c === 'sync') return state.connected
   if (c === 'overview' || c === 'meetings') return state.project
   if (c === 'agenda' || c === 'record' || c === 'addRecording') return state.project && state.series
@@ -47,6 +51,9 @@ export function buildMenu(reopen: () => void): void {
         item('newProject', 'Nytt projekt…', 'CmdOrCtrl+Shift+N'),
         item('addRecording', 'Lägg till en inspelning…', 'CmdOrCtrl+O'),
         line,
+        { label: 'Spara som', submenu: [item('saveDocx', 'Word…', 'CmdOrCtrl+Shift+S'), item('savePdf', 'PDF…'), item('saveMd', 'Markdown…')] },
+        item('copyText', 'Kopiera texten', 'CmdOrCtrl+Shift+C'),
+        line,
         item('sync', 'Hämta från Stommen', mac ? 'Cmd+Shift+U' : 'F5'),
         line,
         ...(mac ? [] : [settings, line]),
@@ -58,7 +65,8 @@ export function buildMenu(reopen: () => void): void {
       label: mac ? 'Redigera' : '&Redigera',
       submenu: [
         { role: 'undo', label: 'Ångra' }, { role: 'redo', label: 'Gör om' }, line,
-        { role: 'cut', label: 'Klipp ut' }, { role: 'copy', label: 'Kopiera' }, { role: 'paste', label: 'Klistra in' }, { role: 'selectAll', label: 'Markera allt' }
+        { role: 'cut', label: 'Klipp ut' }, { role: 'copy', label: 'Kopiera' }, { role: 'paste', label: 'Klistra in' }, { role: 'selectAll', label: 'Markera allt' },
+        line, item('find', 'Sök i utskriften', 'CmdOrCtrl+F')
       ]
     },
     {
@@ -69,13 +77,25 @@ export function buildMenu(reopen: () => void): void {
         item('agenda', 'Dagordning', 'CmdOrCtrl+4'),
         line,
         { ...item('sidebar', 'Visa sidopanelen', mac ? 'Ctrl+Cmd+S' : 'Ctrl+B'), type: 'checkbox', checked: state.sidebar },
+        { ...item('inspector', 'Visa utskriften', mac ? 'Alt+Cmd+I' : 'Ctrl+I'), type: 'checkbox', checked: state.inspector },
         line,
         { role: 'togglefullscreen', label: 'Helskärm' },
         // A checkout run from a terminal, never the installed app.
         ...(app.isPackaged ? [] : [line, { role: 'reload', label: 'Läs in fönstret igen', accelerator: 'CmdOrCtrl+Alt+R' }, { role: 'toggleDevTools', label: 'Utvecklarverktyg' }] satisfies MenuItemConstructorOptions[])
       ]
     },
-    { label: mac ? 'Möte' : '&Möte', submenu: [item('record', 'Spela in möte…', 'CmdOrCtrl+R')] },
+    { label: mac ? 'Möte' : '&Möte', submenu: [item('record', 'Spela in möte…', 'CmdOrCtrl+R'), line, item('rename', 'Byt namn på mötet…')] },
+    {
+      label: mac ? 'Protokoll' : '&Protokoll',
+      submenu: [
+        item('newPoint', 'Ny punkt', 'CmdOrCtrl+N'),
+        item('nextCheck', 'Nästa att kontrollera', 'CmdOrCtrl+J'),
+        line,
+        item('rewrite', 'Skriv om protokollet…'),
+        line,
+        item('send', 'Skicka till Stommen…', 'CmdOrCtrl+Enter')
+      ]
+    },
     ...(mac
       ? [{ role: 'windowMenu', label: 'Fönster', submenu: [{ role: 'minimize', label: 'Minimera' }, { role: 'zoom', label: 'Zooma' }, line, { role: 'front', label: 'Lägg alla överst' }] } satisfies MenuItemConstructorOptions]
       : []),
@@ -92,7 +112,8 @@ export function buildMenu(reopen: () => void): void {
 export function setMenuState(next: MenuState): void {
   state = {
     ready: Boolean(next.ready), held: Boolean(next.held), project: Boolean(next.project),
-    series: Boolean(next.series), connected: Boolean(next.connected), sidebar: Boolean(next.sidebar)
+    series: Boolean(next.series), connected: Boolean(next.connected), sidebar: Boolean(next.sidebar),
+    meeting: Boolean(next.meeting), protocol: Boolean(next.protocol), free: Boolean(next.free), sendable: Boolean(next.sendable), inspector: Boolean(next.inspector)
   }
   const menu = Menu.getApplicationMenu()
   if (!menu) return
@@ -102,4 +123,6 @@ export function setMenuState(next: MenuState): void {
   }
   const side = menu.getMenuItemById('sidebar')
   if (side) side.checked = state.sidebar
+  const insp = menu.getMenuItemById('inspector')
+  if (insp) insp.checked = state.inspector
 }

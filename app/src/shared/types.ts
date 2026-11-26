@@ -204,10 +204,14 @@ export interface Api {
 }
 
 /** What the application menu asks the window to do. Each is also a shortcut (app/src/main/menu.ts). */
-export const COMMANDS = ['settings', 'newProject', 'addRecording', 'sync', 'overview', 'meetings', 'agenda', 'record', 'sidebar', 'intro'] as const
+export const COMMANDS = ['settings', 'newProject', 'addRecording', 'sync', 'overview', 'meetings', 'agenda', 'record', 'sidebar', 'intro',
+  // about the protocol in the window
+  'saveDocx', 'savePdf', 'saveMd', 'copyText', 'find', 'inspector', 'newPoint', 'nextCheck', 'rename', 'rewrite', 'send'] as const
 export type Command = (typeof COMMANDS)[number]
-/** `ready`: past the first run. `held`: a recording or a job is in the window. `sidebar`: it is shown. */
-export type MenuState = { ready: boolean; held: boolean; project: boolean; series: boolean; connected: boolean; sidebar: boolean }
+/** `ready`: past the first run. `held`: a recording or a job is in the window. `sidebar`: it is shown. `meeting`: one is
+ * open; `protocol`: it has one; `free`: that can be corrected; `sendable`: it can go to Stommen; `inspector`: the transcript is shown. */
+export type MenuState = { ready: boolean; held: boolean; project: boolean; series: boolean; connected: boolean; sidebar: boolean
+  meeting: boolean; protocol: boolean; free: boolean; sendable: boolean; inspector: boolean }
 
 export const CHANNELS = ['projects', 'meetings', 'agenda', 'meeting', 'audio', 'startSeries', 'pickRecording', 'process',
   'writeProtocol', 'nameSpeaker', 'setTitle', 'changePoint', 'addPoint', 'removePoint', 'restorePoint', 'confirmCheck', 'attend', 'stommenState', 'stommenSignIn', 'stommenSync', 'stommenSignOut', 'stommenSend', 'stommenConfirmation', 'projectAdd', 'projectRename', 'projectDelete', 'personAdd', 'personRemove', 'protocolSave', 'protocolCopy', 'recordingStart', 'recordingChunk', 'recordingStop', 'recordingDiscard', 'settings', 'settingsSet', 'setUp', 'models', 'modelsDownload', 'modelsCancel', 'computer', 'folderShow', 'folderChoose', 'menuState'] as const
