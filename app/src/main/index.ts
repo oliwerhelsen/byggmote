@@ -12,6 +12,10 @@ import * as stommen from './stommen'
 
 // The tests give the app a folder of its own for what it keeps, so a run never reads or writes the person's.
 if (process.env['BYGGMOTE_USER_DATA']) app.setPath('userData', process.env['BYGGMOTE_USER_DATA'])
+// The name in the menu (Om Byggmöte, Avsluta Byggmöte) is the one a person reads. Setting it would also move the folder
+// the app keeps its settings in, which is named after the ASCII name, so that folder is pinned first.
+app.setPath('userData', app.getPath('userData'))
+app.setName('Byggmöte')
 
 // What the window may name. It only ever gets a folder or a file from here, so one it makes up is refused: the
 // window shows text a language model wrote, and that text must not become a path.
@@ -369,6 +373,8 @@ function open(): void {
 }
 
 void app.whenReady().then(() => {
+  // In dev the app runs inside Electron's own bundle, whose icon is Electron's; the installed app has its own.
+  if (!app.isPackaged && process.platform === 'darwin') app.dock?.setIcon(join(__dirname, '../../build/icon-mac.png'))
   // The microphone, for recording a meeting, and nothing else a page can ask for.
   session.defaultSession.setPermissionRequestHandler((_wc, permission, allow) => allow(permission === 'media'))
   const tell = (p: Progress): void => {
