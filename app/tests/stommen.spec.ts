@@ -133,6 +133,8 @@ test.beforeAll(async () => {
   app = await electron.launch({ args, cwd: here, env: { ...process.env, ...none, BYGGMOTE_CONFIG: config, BYGGMOTE_HIDDEN: '1',
     BYGGMOTE_USER_DATA: userData, BYGGMOTE_NO_KEYCHAIN: '1', BYGGMOTE_SETUP: '1' } })
   win = await app.firstWindow()
+  // A CI runner's screen can be 1024 wide, which the window shrinks to, and the document's text column to nothing: the window gets the size it is drawn for.
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setBounds({ x: 0, y: 0, width: 1360, height: 900 }))
   await expect(win.getByRole('heading', { name: 'Senaste möten' })).toBeVisible()
 })
 
