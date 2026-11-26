@@ -193,15 +193,39 @@ export interface Api {
   /** Where the meetings are kept now, and a way to show or change it. `folderChoose` resolves null when cancelled. */
   folderShow(): Promise<void>
   folderChoose(): Promise<string | null>
+  /** A meeting is recorded in a small window of its own, which stays over other programs. One at a time. */
+  recordOpen(spec: RecordSpec): Promise<void>
+  /** From the recording window: where the recording stands, for the menu, the icon beside the clock and the main window. */
+  recordStatus(status: RecordStatus): Promise<void>
+  /** From the recording window: the recording is saved. The main window writes it out, and the recording window closes. */
+  recordDone(job: Job): Promise<void>
+  /** From the recording window: close it (the recording is thrown away, or never began). */
+  recordClose(): Promise<void>
+  /** Bring the recording window forward. */
+  recordShow(): Promise<void>
   /** What the window can do now, so the application menu greys out the rest. */
   menuState(state: MenuState): Promise<void>
   onProgress(listener: (p: Progress) => void): () => void
   onModels(listener: (e: ModelEvent) => void): () => void
   /** A choice in the application menu, or its shortcut. */
   onCommand(listener: (c: Command) => void): () => void
+  /** In the main window: the recording in the other window, or null when there is none. */
+  onRecording(listener: (s: RecordStatus | null) => void): () => void
+  /** In the main window: a recording to write out. */
+  onJob(listener: (job: Job) => void): () => void
+  /** In the recording window: a choice in the menu, by the icon beside the clock, or a shortcut pressed in any program. */
+  onRecordCommand(listener: (c: RecordCommand) => void): () => void
   /** The computer's kind (`process.platform`): the window keeps to its conventions. */
   platform: string
 }
+
+/** What a recording window is opened for. */
+export type RecordSpec = { projectId: string; projectName: string; series: SeriesRef; agenda: boolean }
+/** Where a recording stands. `seconds`: of recorded sound. `heading` and `next`: the agenda's, as "3. Tidplan". */
+export type RecordStatus = { title: string; phase: 'idle' | 'recording' | 'paused' | 'saving'; seconds: number; heading: string | null; next: string | null }
+/** What is done to a recording from outside its window. `cancel` asks first. */
+export const RECORD_COMMANDS = ['pause', 'next', 'decision', 'todo', 'changeOrder', 'question', 'finish', 'cancel'] as const
+export type RecordCommand = (typeof RECORD_COMMANDS)[number]
 
 /** What the application menu asks the window to do. Each is also a shortcut (app/src/main/menu.ts). */
 export const COMMANDS = ['settings', 'newProject', 'addRecording', 'sync', 'overview', 'points', 'agenda', 'record', 'sidebar', 'intro',
@@ -214,4 +238,4 @@ export type MenuState = { ready: boolean; held: boolean; project: boolean; serie
   meeting: boolean; protocol: boolean; free: boolean; sendable: boolean; inspector: boolean }
 
 export const CHANNELS = ['projects', 'meetings', 'agenda', 'meeting', 'audio', 'startSeries', 'pickRecording', 'process',
-  'writeProtocol', 'nameSpeaker', 'setTitle', 'changePoint', 'addPoint', 'removePoint', 'restorePoint', 'confirmCheck', 'attend', 'stommenState', 'stommenSignIn', 'stommenSync', 'stommenSignOut', 'stommenSend', 'stommenConfirmation', 'projectAdd', 'projectRename', 'projectDelete', 'personAdd', 'personRemove', 'protocolSave', 'protocolCopy', 'recordingStart', 'recordingChunk', 'recordingStop', 'recordingDiscard', 'settings', 'settingsSet', 'setUp', 'models', 'modelsDownload', 'modelsCancel', 'computer', 'folderShow', 'folderChoose', 'menuState'] as const
+  'writeProtocol', 'nameSpeaker', 'setTitle', 'changePoint', 'addPoint', 'removePoint', 'restorePoint', 'confirmCheck', 'attend', 'stommenState', 'stommenSignIn', 'stommenSync', 'stommenSignOut', 'stommenSend', 'stommenConfirmation', 'projectAdd', 'projectRename', 'projectDelete', 'personAdd', 'personRemove', 'protocolSave', 'protocolCopy', 'recordingStart', 'recordingChunk', 'recordingStop', 'recordingDiscard', 'settings', 'settingsSet', 'setUp', 'models', 'modelsDownload', 'modelsCancel', 'computer', 'folderShow', 'folderChoose', 'menuState', 'recordOpen', 'recordStatus', 'recordDone', 'recordClose', 'recordShow'] as const

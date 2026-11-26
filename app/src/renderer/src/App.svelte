@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { Agenda as Headings, Command, Job, MeetingRow, Progress, Project, SeriesRef, Settings as Kept, StommenState } from '../../shared/types'
+  import type { Agenda as Headings, Command, Job, MeetingRow, Progress, Project, RecordStatus, SeriesRef, Settings as Kept, StommenState } from '../../shared/types'
   import Icon from './lib/Icon.svelte'
-  import { failure, minutes, shortDate, standing } from './lib/format'
+  import { clock, failure, minutes, shortDate, standing } from './lib/format'
   import type { View } from './lib/view'
   import Agenda from './views/Agenda.svelte'
   import OpenPoints from './views/OpenPoints.svelte'
@@ -10,7 +10,6 @@
   import Overview from './views/Overview.svelte'
   import Protocol from './views/Protocol.svelte'
   import Onboarding from './views/Onboarding.svelte'
-  import Recording from './views/Recording.svelte'
   import Settings from './views/Settings.svelte'
   import Stommen from './views/Stommen.svelte'
   import Working, { STEPS, type Run } from './views/Working.svelte'
@@ -18,7 +17,6 @@
   const TITLES: Record<View['name'], string> = {
     points: 'Öppna punkter',
     agenda: 'Dagordning',
-    recording: 'Inspelning',
     working: 'Mötet bearbetas',
     protocol: 'Protokoll',
     overview: 'Översikt',
@@ -53,10 +51,11 @@
   void window.api.settings().then((s) => (settings = s))
 
   const project = $derived(projects.find((p) => p.id === chosen) ?? projects[0])
-  // A recording is not left by a click in the menu. A job is: it goes on behind whatever the window shows.
   // The views that are not about the chosen project's meetings.
   const elsewhere = $derived(view.name === 'stommen' || view.name === 'settings')
-  const held = $derived(view.name === 'recording')
+  // The meeting being recorded in its own window, as that window says it stands. One at a time.
+  let live = $state<RecordStatus | null>(null)
+  $effect(() => window.api.onRecording((r) => (live = r)))
 
   async function load(): Promise<void> {
     try {
@@ -182,6 +181,8 @@
     if (i === run.at) run.fraction = p.state === 'done' ? 1 : p.state === 'progress' ? (p.fraction ?? 0) : run.fraction
   }
   $effect(() => window.api.onProgress(heard))
+  // A meeting recorded in its own window comes here to be written out.
+  $effect(() => window.api.onJob(start))
 
   function dismiss(id: number): void {
     runs = runs.filter((r) => r.id !== id)
@@ -210,7 +211,7 @@
   /** A choice in the application menu, or its shortcut. The menu greys out what cannot run; this refuses it too. */
   function command(c: Command): void {
     if (c === 'sidebar') return showSidebar(!sidebar)
-    if (held || !settings?.setUp) return
+    if (!settings?.setUp) return
     if (PROTOCOL.includes(c)) return view.name === 'protocol' ? protocol?.command(c) : undefined
     const first = project?.series[0]
     if (c === 'settings') go({ name: 'settings' })
@@ -222,13 +223,13 @@
     else if (c === 'points') go({ name: 'points' })
     else if (!first) return
     else if (c === 'agenda') go({ name: 'agenda', series: first })
-    else if (c === 'record') recorder?.show(first)
+    else if (c === 'record') live ? void window.api.recordShow() : recorder?.show(first)
     else if (c === 'addRecording') void addRecording(first)
   }
   $effect(() => window.api.onCommand(command))
   $effect(() => {
     void window.api.menuState({
-      ready: loaded && Boolean(settings?.setUp), held, project: Boolean(project), series: Boolean(project?.series.length),
+      ready: loaded && Boolean(settings?.setUp), held: false, project: Boolean(project), series: Boolean(project?.series.length),
       connected: Boolean(stommen?.connected), sidebar, ...doc, meeting: view.name === 'protocol',
       ...(view.name === 'protocol' ? {} : { protocol: false, free: false, sendable: false })
     })
@@ -247,7 +248,7 @@
 
     {#if projects.length}
       <label class="sr-only" for="project">Projekt</label>
-      <select id="project" class="field" value={project?.id} disabled={held}
+      <select id="project" class="field" value={project?.id}
         onchange={(e) => {
           if (e.currentTarget.value === NEW) {
             e.currentTarget.value = project?.id ?? ''
@@ -265,26 +266,33 @@
       {#if projects.length}
         <p class="side-head">Projektet</p>
         <button class="item" class:current={view.name === 'overview'} aria-current={view.name === 'overview' ? 'page' : undefined}
-          disabled={held} onclick={() => go({ name: 'overview' })}>
+          onclick={() => go({ name: 'overview' })}>
           <Icon name="home" size={16} /> Översikt
         </button>
         <button class="item" class:current={view.name === 'points'} aria-current={view.name === 'points' ? 'page' : undefined}
-          disabled={held} onclick={() => go({ name: 'points' })}>
+          onclick={() => go({ name: 'points' })}>
           <Icon name="clock" size={16} /> Öppna punkter {#if open}<span class="n">{open}</span>{/if}
         </button>
         {#each project?.series ?? [] as s (s.id)}
           {@const here = view.name === 'agenda' && view.series.id === s.id}
-          <button class="item" class:current={here} aria-current={here ? 'page' : undefined} disabled={held} onclick={() => go({ name: 'agenda', series: s })}>
+          <button class="item" class:current={here} aria-current={here ? 'page' : undefined} onclick={() => go({ name: 'agenda', series: s })}>
             <Icon name="list" size={16} /> <span class="clip">Dagordning inför {s.name.toLowerCase()} {s.next}</span>
           </button>
         {/each}
 
         <div class="library">
+          {#if live}
+            <p class="side-head"><span>Spelas in</span></p>
+            <button class="meeting" onclick={() => window.api.recordShow()}>
+              <span class="l1"><span class="name">{live.title}</span><span class="when">{clock(live.seconds)}</span></span>
+              <span class="l2">{live.phase === 'paused' ? 'Pausad' : live.phase === 'saving' ? 'Sparar inspelningen' : live.phase === 'idle' ? 'Inte igång' : 'Spelar in'}{live.heading ? ` · ${live.heading}` : ''}</span>
+            </button>
+          {/if}
           {#if runs.length}
             <p class="side-head"><span>Skrivs ut</span></p>
             {#each runs as r (r.id)}
               {@const here = view.name === 'working' && shown === r.id}
-              <button class="meeting" class:current={here} aria-current={here ? 'page' : undefined} disabled={held}
+              <button class="meeting" class:current={here} aria-current={here ? 'page' : undefined}
                 onclick={() => { shown = r.id; view = { name: 'working', job: r.job } }}>
                 <span class="l1"><span class="name">{r.job.title}</span></span>
                 <span class="l2">{r.problem ? 'Gick inte att skriva ut' : r === runs.find((x) => !x.problem) ? `${STEPS[r.at]} · steg ${r.at + 1} av ${STEPS.length}` : 'Väntar på sin tur'}</span>
@@ -296,7 +304,7 @@
             <p class="side-head"><span>{g.name}</span><span class="count">{g.rows.length === 1 ? '1 möte' : `${g.rows.length} möten`}</span></p>
             {#each g.rows as r (r.dir)}
               {@const here = view.name === 'protocol' && view.dir === r.dir}
-              <button class="meeting" class:current={here} aria-current={here ? 'page' : undefined} disabled={held}
+              <button class="meeting" class:current={here} aria-current={here ? 'page' : undefined}
                 onclick={() => go({ name: 'protocol', dir: r.dir })}>
                 <span class="l1"><span class="name">{r.title}</span><span class="when">{shortDate(r.recorded_at)}</span></span>
                 <span class="l2">{standing(r).text} · {minutes(r.duration)}</span>
@@ -323,7 +331,7 @@
         {/if}
       </p>
       <p class="status"><Icon name="lock" size={13} /> Ljud och utskrift stannar på den här datorn</p>
-      <button class="item" class:current={elsewhere} aria-current={elsewhere ? 'page' : undefined} disabled={held}
+      <button class="item" class:current={elsewhere} aria-current={elsewhere ? 'page' : undefined}
         onclick={() => go({ name: 'settings' })}>
         <Icon name="gear" size={16} /> Inställningar
       </button>
@@ -348,7 +356,9 @@
       <span class="grow"></span>
       <!-- A view puts what is done in it here (Protocol.svelte). -->
       <div id="tools"></div>
-      {#if project?.series.length && !held && !elsewhere}
+      {#if live}
+        <button class="btn rec" onclick={() => window.api.recordShow()}>{live.phase === 'paused' ? 'Pausad' : 'Spelar in'} {clock(live.seconds)}</button>
+      {:else if project?.series.length && !elsewhere}
         <button class="btn rec" onclick={() => recorder?.show(project.series[0])}>Spela in</button>
       {/if}
     </header>
@@ -391,13 +401,11 @@
         {#key project.id}
           {#if view.name === 'overview'}
             <Overview {project} rows={read ? rows : null} {agendas} {go} refresh={load} gone={() => (view = { name: 'overview' })}
-              record={(s) => recorder?.show(s)} add={addRecording} />
+              record={(s) => (live ? void window.api.recordShow() : recorder?.show(s))} add={addRecording} />
           {:else if view.name === 'points'}
             <OpenPoints {rows} {agendas} {go} />
           {:else if view.name === 'agenda'}
             <Agenda {project} series={view.series} {go} />
-          {:else if view.name === 'recording'}
-            <Recording {project} series={view.series} agenda={view.agenda} {go} />
           {:else if view.name === 'working'}
             {@const run = runs.find((r) => r.id === shown)}
             {#if run}<Working {run} waiting={run !== runs.find((r) => !r.problem) && !run.problem} dismiss={() => dismiss(run.id)} />{/if}
@@ -414,7 +422,7 @@
 </div>
 {/if}
 
-<RecordDialog bind:this={recorder} {go} />
+{#if project}<RecordDialog bind:this={recorder} {project} />{/if}
 
 <dialog bind:this={dialog} aria-labelledby="new-title" onclose={() => (naming = false)}>
   <h2 id="new-title">Nytt projekt</h2>

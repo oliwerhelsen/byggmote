@@ -10,6 +10,7 @@ import * as kept from './settings'
 import { toDocx, toPdf, type Sheet } from './export'
 import * as stommen from './stommen'
 import { buildMenu, setMenuState } from './menu'
+import * as rec from './recording'
 
 // The tests give the app a folder of its own for what it keeps, so a run never reads or writes the person's.
 if (process.env['BYGGMOTE_USER_DATA']) app.setPath('userData', process.env['BYGGMOTE_USER_DATA'])
@@ -107,7 +108,7 @@ const correct = async (args: string[], fields?: PointFields | NewPoint): Promise
   await call(['correct', ...args], fields)
 }
 
-function handlers(tell: (p: Progress) => void, tellModels: (e: ModelEvent) => void): { [K in Exclude<keyof Api, 'onProgress' | 'onModels' | 'onCommand' | 'platform'>]: (...args: Parameters<Api[K]>) => ReturnType<Api[K]> } {
+function handlers(tell: (p: Progress) => void, tellModels: (e: ModelEvent) => void): { [K in Exclude<keyof Api, 'onProgress' | 'onModels' | 'onCommand' | 'onRecording' | 'onJob' | 'onRecordCommand' | 'platform'>]: (...args: Parameters<Api[K]>) => ReturnType<Api[K]> } {
   return {
     projects: () => call<{ folder: string; projects: Project[] }>(['projects']),
 
@@ -354,11 +355,34 @@ function handlers(tell: (p: Progress) => void, tellModels: (e: ModelEvent) => vo
 
     async menuState(state) {
       setMenuState(state)
+    },
+
+    async recordOpen(spec) {
+      const series = { id: String(spec.series.id), name: String(spec.series.name), next: Number(spec.series.next) }
+      rec.open({ projectId: projectId(spec.projectId), projectName: String(spec.projectName), series, agenda: Boolean(spec.agenda) }, join(__dirname, '../preload/index.js'), process.env['BYGGMOTE_HIDDEN'] === '1')
+    },
+    async recordStatus(status) {
+      rec.heard(status)
+    },
+    // The recording goes to the main window, which writes it out; with no main window (the Mac keeps the app when it
+    // is closed) one is opened for it.
+    async recordDone(job) {
+      rec.close()
+      const send = (w: BrowserWindow): void => w.webContents.send('job', job)
+      const main = BrowserWindow.getAllWindows().find((w) => w !== rec.recordingWindow())
+      if (main) send(main)
+      else open().webContents.once('did-finish-load', function (this: Electron.WebContents) { setTimeout(() => this.send('job', job), 1500) })
+    },
+    async recordClose() {
+      rec.close()
+    },
+    async recordShow() {
+      rec.show()
     }
   }
 }
 
-function open(): void {
+function open(): BrowserWindow {
   // BYGGMOTE_HIDDEN=1: the tests drive the window without showing it, so a run neither takes the screen nor gets a
   // stray click from whoever sits at the computer.
   const hidden = process.env['BYGGMOTE_HIDDEN'] === '1'
@@ -386,6 +410,7 @@ function open(): void {
   win.webContents.on('will-navigate', (e) => e.preventDefault())
   if (process.env['ELECTRON_RENDERER_URL']) void win.loadURL(process.env['ELECTRON_RENDERER_URL'])
   else void win.loadFile(join(__dirname, '../renderer/index.html'))
+  return win
 }
 
 void app.whenReady().then(() => {
@@ -403,9 +428,12 @@ void app.whenReady().then(() => {
     ipcMain.handle(name, (_e, ...args: unknown[]) => (fn as (...a: unknown[]) => unknown)(...args))
   }
   buildMenu(open)
+  rec.setUp((s) => {
+    for (const w of BrowserWindow.getAllWindows()) if (w !== rec.recordingWindow()) w.webContents.send('recording', s)
+  }, () => buildMenu())
   open()
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) open()
+    if (!BrowserWindow.getAllWindows().some((w) => w !== rec.recordingWindow())) open()
   })
 })
 

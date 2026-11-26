@@ -92,7 +92,7 @@
   {/if}
 </div>
 
-<RecordDialog bind:this={recorder} {go} />
+<RecordDialog bind:this={recorder} {project} />
 
 <style>
   .headings > li { padding: 14px 0; border-bottom: 1px solid var(--line); }
