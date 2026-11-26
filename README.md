@@ -131,7 +131,7 @@ models and several minutes, and has been run by hand with a sound clip played in
 
 ### Word and PDF
 
-A protocol is saved as Word (`.docx`), PDF or Markdown from its page ("Spara som Word", "Spara som PDF"), to send as it
+A protocol is saved as Word (`.docx`), PDF or Markdown from its page (the "Spara som" menu), to send as it
 is or to open and edit. Both are made from `protocol.md`, so the headings, numbers and points are the window's own, and
 `app/tests/export.spec.ts` compares them. Neither needs Word: the `.docx` is written by the `docx` library and the PDF
 is printed by the app's own hidden window, so it is the same on Windows, Linux and Mac.
