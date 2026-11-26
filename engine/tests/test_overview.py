@@ -1,6 +1,6 @@
 import json
 
-from byggmote import overview, protocol
+from byggmote import meeting, naming, overview, people, protocol, voice
 
 from test_protocol import SAID, point
 
@@ -30,5 +30,22 @@ def test_one_meeting_has_its_lines_and_its_protocol(project, held):
     got = overview.detail(d)
     assert got["lines"][3] == {"id": 4, "at": 1062.0, "speaker": "S3", "who": "Anders Holm",
                                "text": "Beställaren godkänner ÄTA 14 till fast pris åttiosex och fem."}
-    assert got["speakers"][0] == {"id": "S1", "name": "Maria Lindqvist", "person": "maria-lindqvist"}
+    assert got["speakers"][0] == {"id": "S1", "name": "Maria Lindqvist", "person": "maria-lindqvist", "voice": None}
     assert (got["no"], got["audio"], got["protocol"]["points"][0]["no"]) == (3, False, "3.4.1")
+
+
+def test_an_unnamed_speaker_comes_with_whom_their_voice_matched(held):
+    voice.turn(True)  # a new knowledge base has Recognise Voices off; the app turns it on before a run
+    sara = people.add({"name": "Sara Nyberg"})["id"]  # from another project: the voice is matched across them
+    d = held("Byggmöte 4", SAID[:1] + [(30, "Talare 2", "Vi har en fråga om måtten.")])
+    m = meeting.load(d)
+    m["speakers"][1]["voice"] = {"person": sara, "score": 0.81}  # as the run left it
+    meeting.save(d, m)
+    assert overview.detail(d)["speakers"][1]["voice"] == {"person": sara, "name": "Sara Nyberg"}
+
+    voice.turn(False)  # Recognise Voices off: no one is offered
+    assert overview.detail(d)["speakers"][1]["voice"] is None
+    voice.turn(True)
+
+    naming.name(d, "S2", "@" + sara)  # named: nothing left to offer
+    assert overview.detail(d)["speakers"][1]["voice"] is None

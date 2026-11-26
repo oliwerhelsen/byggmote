@@ -154,6 +154,9 @@ function handlers(tell: (p: Progress) => void, tellModels: (e: ModelEvent) => vo
       }
       busy(true)
       try {
+        // Känn igen röster is the window's setting, and a new knowledge base starts with it off in the engine: the
+        // engine is told before each run, or it keeps no voice prints and recognises no one while the box says it does.
+        await call(['voices', (await kept.read()).voices ? 'on' : 'off'])
         const dir = await run([job.file, '--area', job.projectId, '--title', job.title], (e) => {
           if (e.event === 'step' && e.step) tell({ step: e.step, state: e.status === 'done' ? 'done' : 'start' })
           if (e.event === 'progress' && e.step) tell({ step: e.step, state: 'progress', fraction: e.fraction })
@@ -180,9 +183,12 @@ function handlers(tell: (p: Progress) => void, tellModels: (e: ModelEvent) => vo
       await call(['protocol', known(dir), '--series', seriesId, ...(discard ? ['--discard'] : [])])
     },
 
-    async nameSpeaker(dir, speaker, personId) {
+    // A person from the list by id, or a name as typed: the engine links it to the person with that name, else makes one.
+    async nameSpeaker(dir, speaker, who) {
       if (!/^\w+$/.test(speaker)) throw new Error('unknown speaker')
-      await call(['name', known(dir), speaker, person(personId)])
+      const typed = 'name' in who ? words(who.name, 'Namn') : null
+      if (typed && /^[-@]/.test(typed)) throw new Error('Ett namn kan inte börja med - eller @') // read as an option or an id
+      await call(['name', known(dir), speaker, typed ?? person((who as { person: string }).person)])
     },
 
     async setTitle(dir, title) {

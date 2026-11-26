@@ -77,7 +77,8 @@ export type Line = { id: number; at: number; speaker: string; who: string; text:
 export type MeetingDetail = Omit<MeetingRow, 'protocol'> & {
   project: string
   audio: boolean
-  speakers: { id: string; name: string; person: string | null }[]
+  /** `voice`: who an unnamed speaker sounds like, from an earlier meeting, when Känn igen röster is on. */
+  speakers: { id: string; name: string; person: string | null; voice: { person: string; name: string } | null }[]
   lines: Line[]
   protocol: Protocol | null
   /** How much of the protocol a person has set right: lost if it is written again. */
@@ -147,7 +148,7 @@ export interface Api {
   process(job: Job): Promise<Done>
   /** `discard`: the protocol has a person's corrections, and they may go. */
   writeProtocol(dir: string, seriesId: string, discard?: boolean): Promise<void>
-  nameSpeaker(dir: string, speaker: string, personId: string): Promise<void>
+  nameSpeaker(dir: string, speaker: string, who: { person: string } | { name: string }): Promise<void>
   /** The meeting's title, as the person words it. */
   setTitle(dir: string, title: string): Promise<void>
   changePoint(dir: string, no: string, fields: PointFields): Promise<void>

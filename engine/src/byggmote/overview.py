@@ -52,14 +52,28 @@ def detail(d: Path) -> dict:
     (then it is neither corrected nor written again), and `stommen`, where the protocol stands with Stommen."""
     d = Path(d).expanduser()
     m = meeting.load(d)
-    area = areas.get(areas.load(), m["area"])
+    cfg = areas.load()
+    area = areas.get(cfg, m["area"])
     p = protocol.load(d)
     names = {s["id"]: s for s in m["speakers"]}
     said = list(dict.fromkeys(g["speaker"] for g in m["segments"]))
     return _row(d, m, _filed(area).get(d.resolve())) | {
         "project": area["id"], "audio": (d / "audio.m4a").is_file(),
-        "speakers": [{"id": i, "name": names[i]["name"], "person": names[i].get("person")} for i in said if names[i]["name"] != meeting.IGNORED],
+        "speakers": [{"id": i, "name": names[i]["name"], "person": names[i].get("person"), "voice": _heard(m, names[i], cfg)}
+                     for i in said if names[i]["name"] != meeting.IGNORED],
         "lines": [{"id": g["id"], "at": g["start"], "speaker": g["speaker"], "who": names[g["speaker"]]["name"], "text": g["text"]}
                   for g in m["segments"] if names[g["speaker"]]["name"] != meeting.IGNORED],
         "protocol": p, "corrections": protocol.corrections(p or {}), "stommen": stommen.sending(d, p, area) if p else None,
         "later": protocol.later(area, series.get(series.load(area), p["series"]), p["no"]) if p else None}
+
+
+def _heard(m: dict, s: dict, cfg: dict) -> dict | None:
+    """Who an unnamed speaker's voice is, as the engine matched it when the meeting was run: {"person", "name"}. Not
+    with Recognise Voices off, and not someone the meeting has named since, since picking them would merge two speakers."""
+    from .voice import on  # voice brings the models and numpy, which listing a meeting does not need otherwise
+
+    pid = (s.get("voice") or {}).get("person")
+    if not pid or s.get("person") or not on(cfg) or meeting.links(m, pid):
+        return None
+    name = next((p["name"] for p in people.load() if p["id"] == pid), None)
+    return {"person": pid, "name": name} if name else None
