@@ -277,7 +277,7 @@
   .marked { margin-top: 16px; }
   .marked li { display: flex; align-items: center; gap: 16px; border-top: 1px solid var(--line); }
   .headings { margin-top: 12px; display: flex; flex-direction: column; gap: 2px; }
-  .heading { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 44px; padding: 6px 12px; border: 0; border-radius: var(--radius-sm);
+  .heading { display: flex; align-items: center; gap: 12px; width: 100%; min-height: var(--ctl-h); padding: 6px 12px; border: 0; border-radius: var(--radius-sm);
     background: transparent; text-align: left; }
   .heading:hover:not(:disabled) { background: var(--sunken); }
   .heading.current { background: var(--coral-100); font-weight: 600; }

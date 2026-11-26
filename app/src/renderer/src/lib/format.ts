@@ -1,4 +1,4 @@
-import type { Kind } from '../../../shared/types'
+import type { Kind, MeetingRow } from '../../../shared/types'
 
 /** What the protocol calls each kind: the engine's code names are Stommen's. */
 export const KINDS: Record<Kind, string> = {
@@ -49,3 +49,18 @@ export const count = (n: number, one: string, many: string): string => `${n} ${n
 
 /** What went wrong, for a person: the engine's own words are a developer's, so they come after a plain sentence. */
 export const failure = (e: unknown): string => (e instanceof Error ? e.message : String(e)).replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
+
+type Tone = '' | 'ok' | 'warn' | 'bad'
+/** Where a meeting stands, as the list of meetings and the sidebar say it. */
+export function standing(r: MeetingRow): { tone: Tone; icon: 'clock' | 'alert' | 'file' | 'check'; text: string } {
+  if (r.status === 'processing') return { tone: '', icon: 'clock', text: 'Skrivs ut' }
+  if (r.status === 'failed') return { tone: 'bad', icon: 'alert', text: 'Gick inte att skriva ut' }
+  if (!r.protocol) return { tone: '', icon: 'file', text: 'Utskrift utan protokoll' }
+  if (r.protocol.status === 'unreadable') return { tone: 'bad', icon: 'alert', text: 'Protokollet går inte att läsa' }
+  if (r.protocol.status !== 'draft') return { tone: 'ok', icon: 'check', text: 'Justerat' }
+  return r.protocol.checks ? { tone: 'warn', icon: 'alert', text: `Utkast, ${r.protocol.checks} att kontrollera` } : { tone: '', icon: 'file', text: 'Utkast' }
+}
+
+const SHORT = new Intl.DateTimeFormat('sv-SE', { day: 'numeric', month: 'short' })
+/** `5 nov.`, for a narrow list. */
+export const shortDate = (iso: string | null): string => (iso ? SHORT.format(new Date(iso)) : '')

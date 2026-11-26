@@ -62,7 +62,7 @@ test('the agenda has the open point under its heading', async () => {
 })
 
 test('a protocol: who was there, the points with their checks, and the transcript', async () => {
-  await win.getByRole('button', { name: 'Byggmöte 4' }).click()
+  await win.getByRole('button', { name: 'Byggmöte 4', exact: true }).click()
   await expect(win.getByRole('heading', { name: 'Protokoll, byggmöte 4' })).toBeVisible()
   await expect(win.locator('.attendees li').first()).toHaveText('Maria Lindqvist, Projektledare')
 
@@ -115,7 +115,7 @@ test('a meeting can be recorded without an agenda', async () => {
 })
 
 const protocol4 = async (): Promise<void> => {
-  await win.getByRole('button', { name: 'Byggmöte 4' }).click()
+  await win.getByRole('button', { name: 'Byggmöte 4', exact: true }).click()
   await expect(win.getByRole('heading', { name: 'Protokoll, byggmöte 4' })).toBeVisible()
 }
 
@@ -215,11 +215,43 @@ test('someone who was there and said nothing is added, and taken off again', asy
 })
 
 test('a protocol the next meeting builds on is read, not changed', async () => {
-  await win.getByRole('button', { name: 'Byggmöte 3' }).click()
+  await win.getByRole('button', { name: 'Byggmöte 3', exact: true }).click()
   await expect(win.getByRole('heading', { name: 'Protokoll, byggmöte 3' })).toBeVisible()
   await expect(win.getByText('Byggmöte 4 bygger på det här protokollet, så punkterna går inte att ändra längre.')).toBeVisible()
   await expect(win.locator('.point').filter({ hasText: '3.4.1' })).toBeVisible()
   await expect(win.getByRole('button', { name: /^Ändra punkt/ })).toHaveCount(0)
   await expect(win.getByRole('button', { name: /^Lägg till punkt under/ })).toHaveCount(0)
   await expect(win.getByRole('button', { name: 'Skriv om protokollet' })).toHaveCount(0)
+})
+
+// The application menu is the Mac's menu bar and the window's own on Windows and Linux: a choice in it, or its
+// shortcut, reaches the window as a command.
+const menu = (id: string): Promise<void> => app.evaluate(({ Menu }, item) => Menu.getApplicationMenu()!.getMenuItemById(item)!.click(), id)
+const enabled = (id: string): Promise<boolean> => app.evaluate(({ Menu }, item) => Menu.getApplicationMenu()!.getMenuItemById(item)!.enabled, id)
+
+test('the application menu opens the views, and greys out what cannot run', async () => {
+  await menu('overview')
+  await expect(win.getByRole('heading', { name: 'Kv. Eken kontorshus', level: 1 })).toBeVisible()
+  await menu('agenda')
+  await expect(win.getByRole('heading', { name: 'Dagordning, byggmöte 5' })).toBeVisible()
+  await menu('record')
+  await expect(win.getByRole('heading', { name: 'Nytt möte' })).toBeVisible()
+  await win.getByRole('button', { name: 'Avbryt' }).click()
+  await menu('settings')
+  await expect(win.getByRole('heading', { name: 'Inställningar', level: 1 })).toBeVisible()
+  expect(await enabled('sync')).toBe(false) // nothing to fetch from: Stommen is not connected
+  expect(await enabled('record')).toBe(true)
+  await menu('meetings')
+})
+
+test('the sidebar lists the meetings of the project, opens one, and can be put away', async () => {
+  const side = win.getByRole('navigation', { name: 'Huvudmeny' })
+  await expect(side.getByText('2 möten')).toBeVisible()
+  await side.getByRole('button', { name: /Byggmöte 4/ }).click()
+  await expect(win.getByRole('heading', { name: 'Protokoll, byggmöte 4' })).toBeVisible()
+  await expect(side.getByRole('button', { name: /Byggmöte 4/ })).toHaveAttribute('aria-current', 'page')
+  await menu('sidebar')
+  await expect(side).toHaveCount(0)
+  await win.getByRole('button', { name: 'Visa sidopanelen' }).click()
+  await expect(side).toBeVisible()
 })

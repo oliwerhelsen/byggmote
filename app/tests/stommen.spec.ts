@@ -272,7 +272,7 @@ test('a protocol goes to Stommen when the person sends it, with its points and w
   await expect(win.getByRole('heading', { name: 'Inloggad som Maria Lindqvist' })).toBeVisible()
   await win.getByLabel('Projekt', { exact: true }).selectOption({ label: 'Kv. Eken kontorshus' })
   await win.getByRole('button', { name: 'Möten', exact: true }).click() // choosing a project opens its overview
-  await win.getByRole('button', { name: 'Byggmöte 4' }).click()
+  await win.getByRole('button', { name: 'Byggmöte 4', exact: true }).click()
   const card = win.getByRole('region', { name: 'Till Stommen' })
   await expect(card).toContainText('Protokollet är inte skickat.')
   await expect(card).toContainText('En sak ska kontrolleras innan protokollet kan skickas.')
@@ -337,7 +337,7 @@ test('the meeting asks Stommen when it is opened, and Stommen wins', async () =>
   adjusted = { on: '2026-11-24', method: 'signed', by: 'Maria Lindqvist och Elin Sjöberg' } // registered again in Stommen
   await win.getByRole('button', { name: 'Till möten' }).click()
   const before = seen.length
-  await win.getByRole('button', { name: 'Byggmöte 4' }).click()
+  await win.getByRole('button', { name: 'Byggmöte 4', exact: true }).click()
   const card = win.getByRole('region', { name: 'Till Stommen' })
   await expect(card).toContainText('Justerat 24 november 2026, signerat, av Maria Lindqvist och Elin Sjöberg.')
   expect(seen.slice(before).map((r) => `${r.method} ${r.path}`)).toEqual([`GET /api/mobile/v1/projects/${EKEN}/minutes`])
@@ -357,7 +357,7 @@ test('a Stommen that cannot say yet is quiet when the meeting opens, and says wh
   older = true
   try {
     await win.getByRole('button', { name: 'Till möten' }).click()
-    await win.getByRole('button', { name: 'Byggmöte 4' }).click()
+    await win.getByRole('button', { name: 'Byggmöte 4', exact: true }).click()
     const card = win.getByRole('region', { name: 'Till Stommen' })
     // what was known last stays, and nothing alarms
     await expect(card).toContainText('Justerat 24 november 2026, signerat, av Maria Lindqvist och Elin Sjöberg.')

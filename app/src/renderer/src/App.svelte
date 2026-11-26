@@ -1,11 +1,12 @@
 <script lang="ts">
-  import type { Project, Settings as Kept, StommenState } from '../../shared/types'
+  import type { Command, MeetingRow, Project, SeriesRef, Settings as Kept, StommenState } from '../../shared/types'
   import Icon from './lib/Icon.svelte'
-  import { failure } from './lib/format'
+  import { failure, minutes, shortDate, standing } from './lib/format'
   import type { View } from './lib/view'
   import Agenda from './views/Agenda.svelte'
   import Meetings from './views/Meetings.svelte'
   import NewProject from './lib/NewProject.svelte'
+  import RecordDialog from './lib/RecordDialog.svelte'
   import Overview from './views/Overview.svelte'
   import Protocol from './views/Protocol.svelte'
   import Onboarding from './views/Onboarding.svelte'
@@ -38,6 +39,11 @@
   let folder = $state('')
   let naming = $state(false)
   let dialog = $state<HTMLDialogElement>()
+  let recorder = $state<{ show: (s: SeriesRef, agenda?: boolean) => void }>()
+  // The sidebar is the project's library: its meetings, read again when something in them may have changed.
+  let rows = $state<MeetingRow[]>([])
+  let stale = $state(0)
+  let sidebar = $state(localStorage.getItem('sidebar') !== 'hidden')
   void window.api.settings().then((s) => (settings = s))
 
   const project = $derived(projects.find((p) => p.id === chosen) ?? projects[0])
@@ -56,9 +62,27 @@
       problem = failure(e)
     } finally {
       loaded = true
+      stale++
     }
   }
   void load()
+
+  $effect(() => {
+    const id = project?.id
+    void stale
+    if (!id) {
+      rows = []
+      return
+    }
+    void window.api.meetings(id).then((r) => { if (project?.id === id) rows = r }).catch(() => {})
+  })
+  // A meeting with no series of the project's (one removed, or a recording from before there were series) comes last.
+  const groups = $derived.by(() => {
+    if (!project) return []
+    const named = project.series.map((s) => ({ id: s.id, name: s.name, rows: rows.filter((r) => r.series === s.id) }))
+    const rest = rows.filter((r) => !project.series.some((s) => s.id === r.series))
+    return rest.length ? [...named, { id: '', name: 'Övriga möten', rows: rest }] : named
+  })
 
   /** Where the app stands with Stommen, and when it is signed in, what Stommen has now: Stommen wins. */
   async function connect(): Promise<void> {
@@ -96,19 +120,58 @@
   }
 
   const go = (to: View): void => {
+    if (view.name === 'working') stale++ // the job left a meeting behind
     view = to
   }
+
+  function showSidebar(on: boolean): void {
+    sidebar = on
+    localStorage.setItem('sidebar', on ? 'shown' : 'hidden')
+  }
+
+  async function addRecording(s: SeriesRef): Promise<void> {
+    const file = await window.api.pickRecording()
+    if (file && project) go({ name: 'working', job: { projectId: project.id, seriesId: s.id, file, title: `${s.name} ${s.next}` } })
+  }
+
+  /** A choice in the application menu, or its shortcut. The menu greys out what cannot run; this refuses it too. */
+  function command(c: Command): void {
+    if (c === 'sidebar') return showSidebar(!sidebar)
+    if (held || !settings?.setUp) return
+    const first = project?.series[0]
+    if (c === 'settings') go({ name: 'settings' })
+    else if (c === 'newProject') openNew()
+    else if (c === 'sync') void connect()
+    else if (c === 'intro') void window.api.setUp(false).then((s) => (settings = s))
+    else if (!project) return
+    else if (c === 'overview') go({ name: 'overview' })
+    else if (c === 'meetings') go({ name: 'meetings' })
+    else if (!first) return
+    else if (c === 'agenda') go({ name: 'agenda', series: first })
+    else if (c === 'record') recorder?.show(first)
+    else if (c === 'addRecording') void addRecording(first)
+  }
+  $effect(() => window.api.onCommand(command))
+  $effect(() => {
+    void window.api.menuState({
+      ready: loaded && Boolean(settings?.setUp), held, project: Boolean(project), series: Boolean(project?.series.length),
+      connected: Boolean(stommen?.connected), sidebar
+    })
+  })
 </script>
 
 {#if settings && !settings.setUp}
+  <div class="strip drag"></div>
   <Onboarding {settings} {stommen} changed={(s) => (settings = s)} stommenChanged={(s) => (stommen = s)} refresh={load} done={() => (view = { name: 'overview' })} />
 {:else}
 <div class="shell">
+  {#if sidebar}
   <aside>
-    <div class="brand"><Icon name="wave" size={22} /><span><b>B</b>YGGMÖTE</span></div>
+    <!-- On the Mac the window's three buttons sit here, and the strip moves the window. -->
+    <div class="side-top drag"></div>
 
     {#if projects.length}
-      <label class="small muted" for="project">Projekt</label>
+      <label class="sr-only" for="project">Projekt</label>
       <select id="project" class="field" value={project?.id} disabled={held}
         onchange={(e) => {
           if (e.currentTarget.value === NEW) {
@@ -125,45 +188,69 @@
 
     <nav aria-label="Huvudmeny">
       {#if projects.length}
+        <p class="side-head">Projektet</p>
         <button class="item" class:current={view.name === 'overview'} aria-current={view.name === 'overview' ? 'page' : undefined}
           disabled={held} onclick={() => go({ name: 'overview' })}>
-          <Icon name="home" /> Översikt
+          <Icon name="home" size={16} /> Översikt
         </button>
-        <button class="item" class:current={!elsewhere && view.name !== 'overview'} aria-current={!elsewhere && view.name !== 'overview' ? 'page' : undefined}
+        <button class="item" class:current={view.name === 'meetings' || view.name === 'agenda'} aria-current={view.name === 'meetings' || view.name === 'agenda' ? 'page' : undefined}
           disabled={held} onclick={() => go({ name: 'meetings' })}>
-          <Icon name="list" /> Möten
+          <Icon name="list" size={16} /> Möten
         </button>
+
+        <div class="library">
+          {#each groups as g (g.id)}
+            <p class="side-head"><span>{g.name}</span><span class="count">{g.rows.length === 1 ? '1 möte' : `${g.rows.length} möten`}</span></p>
+            {#each g.rows as r (r.dir)}
+              {@const here = view.name === 'protocol' && view.dir === r.dir}
+              <button class="meeting" class:current={here} aria-current={here ? 'page' : undefined} disabled={held}
+                onclick={() => go({ name: 'protocol', dir: r.dir })}>
+                <span class="l1"><span class="name">{r.title}</span><span class="when">{shortDate(r.recorded_at)}</span></span>
+                <span class="l2">{standing(r).text} · {minutes(r.duration)}</span>
+              </button>
+            {/each}
+          {/each}
+        </div>
       {:else if loaded && !problem}
         <!-- Without a project the menu is otherwise empty, and this is the way back from Inställningar. -->
         <button class="item" class:current={!elsewhere} aria-current={!elsewhere ? 'page' : undefined}
           onclick={() => go({ name: 'overview' })}>
-          <Icon name="plus" /> Nytt projekt
+          <Icon name="plus" size={16} /> Nytt projekt
         </button>
       {/if}
-      <div class="account">
-        <p class="small muted">
-          {#if stommen?.connected}
-            Kopplad till Stommen som {stommen.user}.
-          {:else}
-            Stommen är inte kopplat än. Projekt och personer ligger på den här datorn.
-          {/if}
-        </p>
-        <button class="item" class:current={elsewhere} aria-current={elsewhere ? 'page' : undefined} disabled={held}
-          onclick={() => go({ name: 'settings' })}>
-          <Icon name="gear" /> Inställningar
-        </button>
-      </div>
     </nav>
 
+    <div class="foot">
+      <p class="status">
+        <span class="dot" class:on={stommen?.connected}></span>
+        {#if stommen?.connected}
+          Kopplad till Stommen som {stommen.user}.
+        {:else}
+          Stommen är inte kopplat än. Projekt och personer ligger på den här datorn.
+        {/if}
+      </p>
+      <p class="status"><Icon name="lock" size={13} /> Ljud och utskrift stannar på den här datorn</p>
+      <button class="item" class:current={elsewhere} aria-current={elsewhere ? 'page' : undefined} disabled={held}
+        onclick={() => go({ name: 'settings' })}>
+        <Icon name="gear" size={16} /> Inställningar
+      </button>
+    </div>
   </aside>
+  {/if}
 
   <div class="content">
-    <header>
-      <p class="crumbs">
-        {#if project && !elsewhere}<span class="muted">{project.name}</span><span class="muted" aria-hidden="true">/</span>{/if}
-        <span>{TITLES[view.name]}</span>
-      </p>
-      <p class="promise small"><Icon name="lock" size={16} /> Ljud och utskrift stannar på den här datorn</p>
+    <header class="drag" class:alone={!sidebar}>
+      <button class="tool" aria-label={sidebar ? 'Dölj sidopanelen' : 'Visa sidopanelen'} aria-pressed={sidebar} onclick={() => showSidebar(!sidebar)}>
+        <Icon name="sidebar" size={17} />
+      </button>
+      <div class="titles">
+        <p class="title">{TITLES[view.name]}</p>
+        {#if project && !elsewhere}<p class="sub">{project.name}</p>{/if}
+      </div>
+      <span class="grow"></span>
+      {#if project?.series.length && !held && !elsewhere}
+        <button class="btn rec" onclick={() => recorder?.show(project.series[0])}>Spela in</button>
+      {/if}
     </header>
 
     <main>
@@ -224,6 +311,8 @@
 </div>
 {/if}
 
+<RecordDialog bind:this={recorder} {go} />
+
 <dialog bind:this={dialog} aria-labelledby="new-title" onclose={() => (naming = false)}>
   <h2 id="new-title">Nytt projekt</h2>
   {#if naming}<NewProject created={made} cancel={closeNew} />{/if}
@@ -235,27 +324,54 @@
   dialog h2 { margin-bottom: 16px; }
   .narrow { max-width: 680px; }
   .shell { display: flex; height: 100%; }
-  aside { flex: 0 0 248px; display: flex; flex-direction: column; gap: 8px; padding: 20px 16px; background: var(--surface); border-right: 1px solid var(--line); }
-  .brand { display: flex; align-items: center; gap: 10px; height: 24px; margin-bottom: 20px; color: var(--coral-500); }
-  .brand span { font: 300 17px var(--font-display); letter-spacing: 0.24em; color: var(--coral-700); padding-top: 3px; }
-  .brand b { font-weight: 600; }
-  select { width: 100%; margin-bottom: 12px; }
-  nav { flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px; }
-  .item { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px; border: 0; border-radius: var(--radius-sm); background: transparent; text-align: left; font-weight: 500; }
-  .item.current { background: var(--coral-50); }
-  .item :global(svg) { color: var(--coral-700); }
-  .account { margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
-  .content { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
-  header { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 64px; padding: 0 clamp(16px, 4vw, 40px);
-    background: var(--surface); border-bottom: 1px solid var(--line); }
-  .crumbs { display: flex; gap: 8px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .promise { display: flex; align-items: center; gap: 8px; color: var(--ink-700); white-space: nowrap; }
-  .promise :global(svg) { color: var(--ok); }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+  /* The sidebar: the project's library on the pane colour, in the rows of a source list. */
+  aside { flex: 0 0 264px; display: flex; flex-direction: column; min-height: 0; padding: 8px; background: var(--pane); border-right: 1px solid var(--line); }
+  .side-top { flex: none; height: 0; }
+  :global(:root[data-platform='mac']) .side-top { height: 40px; }
+  select { width: 100%; font-weight: 600; margin-bottom: 4px; }
+  nav { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 1px; }
+  .side-head { display: flex; align-items: center; justify-content: space-between; height: 24px; margin-top: 8px; padding: 0 8px; font-size: var(--ui-small); font-weight: 600; color: var(--ink-500); }
+  .side-head .count { font-weight: 400; }
+  .item { display: flex; align-items: center; gap: 8px; flex: none; height: var(--row-h); padding: 0 8px; border: 0; border-radius: var(--ctl-r); background: transparent; text-align: left; white-space: nowrap; }
+  .item :global(svg) { flex: none; color: var(--coral-700); }
+  .item:hover:not(:disabled):not(.current) { background: rgb(0 0 0 / 0.045); }
+  .library { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; margin: 0 -8px; padding: 0 8px; }
+  .meeting { display: flex; flex-direction: column; gap: 1px; flex: none; padding: 6px 8px; border: 0; border-radius: var(--ctl-r); background: transparent; text-align: left; }
+  .meeting:hover:not(:disabled):not(.current) { background: rgb(0 0 0 / 0.045); }
+  .meeting .l1 { display: flex; align-items: baseline; gap: 8px; font-weight: 600; white-space: nowrap; }
+  .meeting .name { overflow: hidden; text-overflow: ellipsis; }
+  .meeting .when { margin-left: auto; font-weight: 400; font-size: var(--ui-small); color: var(--ink-500); }
+  .meeting .l2 { font-size: var(--ui-small); color: var(--ink-500); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* The chosen row: the Mac's solid accent, Windows' tint with the accent bar at its edge. */
+  .item.current, .meeting.current { background: rgb(201 58 66 / 0.1); box-shadow: inset 3px 0 0 var(--coral-700); }
+  :global(:root[data-platform='mac']) .item.current, :global(:root[data-platform='mac']) .meeting.current { background: var(--coral-700); box-shadow: none; color: #fff; }
+  :global(:root[data-platform='mac']) .item.current :global(svg) { color: #fff; }
+  :global(:root[data-platform='mac']) .meeting.current .when, :global(:root[data-platform='mac']) .meeting.current .l2 { color: rgb(255 255 255 / 0.85); }
+  .foot { flex: none; display: flex; flex-direction: column; gap: 4px; margin: 0 -8px; padding: 8px 8px 0; border-top: 1px solid var(--line); }
+  .status { display: flex; align-items: baseline; gap: 6px; padding: 0 8px; font-size: var(--ui-small); color: var(--ink-500); }
+  .status :global(svg) { flex: none; align-self: center; }
+  .dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-300); }
+  .dot.on { background: var(--ok); }
+
+  /* The toolbar: what the window shows, and the one thing that is always at hand. */
+  .content { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; background: var(--canvas); }
+  header { flex: none; display: flex; align-items: center; gap: 8px; height: var(--bar-h); padding: 0 12px; background: var(--surface); border-bottom: 1px solid var(--line); }
+  /* Without the sidebar, the Mac's three buttons are over the toolbar. */
+  :global(:root[data-platform='mac']) header.alone { padding-left: 84px; }
+  .tool { display: inline-grid; place-items: center; flex: none; width: 32px; height: 28px; border: 0; border-radius: var(--ctl-r); background: transparent; color: var(--ink-700); }
+  .tool:hover { background: rgb(0 0 0 / 0.06); }
+  .titles { min-width: 0; }
+  .title { font-weight: 700; font-size: calc(var(--ui) + 1px); line-height: 1.2; white-space: nowrap; }
+  .sub { font-size: var(--ui-small); color: var(--ink-500); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rec::before { content: ''; width: 9px; height: 9px; border-radius: 50%; background: #fff; }
+  .rec { background: var(--coral-700); border-color: var(--coral-800); color: #fff; font-weight: 600; }
   main { flex: 1 1 auto; overflow: auto; }
-  @media (max-width: 760px) {
-    .shell { flex-direction: column; }
-    aside { flex: none; border-right: 0; border-bottom: 1px solid var(--line); }
-    .account > p { display: none; }
-    .promise { display: none; }
-  }
+
+  .strip { position: fixed; inset: 0 0 auto 0; height: 0; z-index: 1; }
+  :global(:root[data-platform='mac']) .strip { height: 40px; }
+  /* The Mac's window has no title bar: these move it. A control inside one still takes its click. */
+  :global(:root[data-platform='mac']) .drag { -webkit-app-region: drag; }
+  :global(:root[data-platform='mac']) .drag :global(button) { -webkit-app-region: no-drag; }
 </style>

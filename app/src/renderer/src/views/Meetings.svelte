@@ -2,7 +2,7 @@
   import type { Agenda, MeetingRow, OpenPoint, Project, SeriesRef } from '../../../shared/types'
   import Icon from '../lib/Icon.svelte'
   import RecordDialog from '../lib/RecordDialog.svelte'
-  import { date, failure, KINDS, minutes, overdue } from '../lib/format'
+  import { date, failure, KINDS, minutes, overdue, standing } from '../lib/format'
   import type { Go } from '../lib/view'
 
   let { project, go, refresh }: { project: Project; go: Go; refresh: () => Promise<void> } = $props()
@@ -41,16 +41,6 @@
     if (!pts.length) return 'Inga öppna punkter från tidigare möten.'
     const first = pts.length === 1 ? 'En öppen punkt följer med från tidigare möten.' : `${pts.length} öppna punkter följer med från tidigare möten.`
     return late ? `${first} ${late === 1 ? 'En' : late} har passerat sitt datum.` : first
-  }
-
-  type Tone = '' | 'ok' | 'warn' | 'bad'
-  function standing(r: MeetingRow): { tone: Tone; icon: 'clock' | 'alert' | 'file' | 'check'; text: string } {
-    if (r.status === 'processing') return { tone: '', icon: 'clock', text: 'Skrivs ut' }
-    if (r.status === 'failed') return { tone: 'bad', icon: 'alert', text: 'Gick inte att skriva ut' }
-    if (!r.protocol) return { tone: '', icon: 'file', text: 'Utskrift utan protokoll' }
-    if (r.protocol.status === 'unreadable') return { tone: 'bad', icon: 'alert', text: 'Protokollet går inte att läsa' }
-    if (r.protocol.status !== 'draft') return { tone: 'ok', icon: 'check', text: 'Justerat' }
-    return r.protocol.checks ? { tone: 'warn', icon: 'alert', text: `Utkast, ${r.protocol.checks} att kontrollera` } : { tone: '', icon: 'file', text: 'Utkast' }
   }
 
   async function add(s: SeriesRef): Promise<void> {
@@ -174,7 +164,7 @@
   th { text-align: left; font-size: 13px; font-weight: 500; color: var(--ink-500); padding: 0 12px 8px 0; border-bottom: 1px solid var(--line); }
   td { padding: 6px 12px 6px 0; border-bottom: 1px solid var(--line); vertical-align: middle; }
   tr:last-child td { border-bottom: 0; }
-  .open { min-height: 44px; padding: 0; border: 0; background: transparent; color: var(--coral-700); font-weight: 500; text-align: left; }
+  .open { min-height: var(--ctl-h); padding: 0; border: 0; background: transparent; color: var(--coral-700); font-weight: 500; text-align: left; }
   .open:hover { color: var(--coral-800); text-decoration: underline; }
   .points li { padding: 12px 0; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 4px; }
   .points li:first-child { padding-top: 0; }
