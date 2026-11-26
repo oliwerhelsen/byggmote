@@ -49,7 +49,9 @@ test('with no project it asks for one, and says nothing about needing Stommen', 
 
 test('with no project, Inställningar opens in a window of its own and the main window still asks for one', async () => {
   sw = await settings()
-  await expect(sw.getByRole('heading', { name: 'Inställningar', level: 1 })).toBeVisible()
+  await expect(sw.getByRole('tablist', { name: 'Inställningar' })).toBeVisible()
+  await expect(sw.getByRole('tab', { name: 'Allmänt' })).toHaveAttribute('aria-selected', 'true') // the pane's name is the heading
+  await expect(sw.getByRole('heading', { name: 'Allmänt', level: 1 })).toHaveCount(1)
   await expect(win.getByRole('heading', { name: 'Skapa ditt första projekt' })).toBeVisible()
   await sw.close()
 })

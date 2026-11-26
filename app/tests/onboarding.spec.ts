@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test'
 
+declare const window: { api: import('../src/shared/types').Api }
+
 const here = join(__dirname, '..')
 
 let config: string
@@ -76,8 +78,8 @@ test('the settings keep a name and a choice, and say where the meetings are', as
   await expect(sw.getByLabel('Ditt namn')).toHaveValue('Anna Berg')
   await expect(sw.getByText(join(config, 'transcripts'))).toBeVisible()
   await sw.getByLabel('Ditt namn').fill('Anna Maria Berg')
-  await sw.getByRole('button', { name: 'Spara namn' }).click()
-  await expect(sw.getByText('Sparat.')).toBeVisible()
+  await sw.getByLabel('Ditt namn').press('Enter') // kept as it is made: there is no Save
+  await expect.poll(() => win.evaluate(() => window.api.settings().then((s) => s.name))).toBe('Anna Maria Berg')
   await sw.getByRole('tab', { name: 'Inspelning' }).click()
   const voices = sw.getByLabel('Känn igen röster')
   await expect(voices).toBeChecked()
