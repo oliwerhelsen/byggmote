@@ -1,8 +1,8 @@
 // The application menu: the Mac's menu bar, the menu bar in the window on Windows and Linux. A command is a message
 // to the window (`Command`), which does it the same way as its own button would. Each has the platform's shortcut.
-import { app, BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron'
+import { app, Menu, type BrowserWindow, type MenuItemConstructorOptions } from 'electron'
 import { COMMANDS, type Command, type MenuState } from '../shared/types'
-import { commands as recordCommands, recording, recordingWindow } from './recording'
+import { commands as recordCommands, recording } from './recording'
 
 const mac = process.platform === 'darwin'
 
@@ -25,12 +25,17 @@ function can(c: Command): boolean {
 }
 
 let reopen: () => void = () => {}
+let mains: () => BrowserWindow[] = () => []
+let settingsWindow: () => void = () => {}
 
 /** Draw the menu again: the recording's commands in Möte follow where the recording stands. */
-export function buildMenu(open: () => void = reopen): void {
+export function buildMenu(open: () => void = reopen, mainWindows: () => BrowserWindow[] = mains, openSettings: () => void = settingsWindow): void {
   reopen = open
+  mains = mainWindows
+  settingsWindow = openSettings
   const send = (c: Command): void => {
-    const win = BrowserWindow.getAllWindows().find((w) => w !== recordingWindow()) // the main window, not the recording's
+    if (c === 'settings') return settingsWindow() // a window of its own, whatever else is open
+    const win = mains()[0] // the main window, not the recording's or Inställningar
     if (!win) return reopen() // the Mac keeps the app when its window is closed: the choice brings the window back
     if (win.isMinimized()) win.restore()
     win.webContents.send('command', c)
@@ -84,6 +89,8 @@ export function buildMenu(open: () => void = reopen): void {
         line,
         { ...item('sidebar', 'Visa sidopanelen', mac ? 'Ctrl+Cmd+S' : 'Ctrl+B'), type: 'checkbox', checked: state.sidebar },
         { ...item('inspector', 'Visa utskriften', mac ? 'Alt+Cmd+I' : 'Ctrl+I'), type: 'checkbox', checked: state.inspector && state.meeting },
+        line,
+        item('palette', 'Kommandopalett…', 'CmdOrCtrl+K'),
         line,
         { role: 'togglefullscreen', label: 'Helskärm' },
         // A checkout run from a terminal, never the installed app.

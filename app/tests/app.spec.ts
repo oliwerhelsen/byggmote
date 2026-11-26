@@ -266,8 +266,9 @@ test('the application menu opens the views, and greys out what cannot run', asyn
   await menu('record')
   await expect(win.getByRole('heading', { name: 'Nytt möte' })).toBeVisible()
   await win.getByRole('button', { name: 'Avbryt', exact: true }).click()
-  await menu('settings')
-  await expect(win.getByRole('heading', { name: 'Inställningar', level: 1 })).toBeVisible()
+  const [sw] = await Promise.all([app.waitForEvent('window'), menu('settings')]) // Inställningar is a window of its own
+  await expect(sw.getByRole('heading', { name: 'Inställningar', level: 1 })).toBeVisible()
+  await sw.close()
   expect(await enabled('sync')).toBe(false) // nothing to fetch from: Stommen is not connected
   expect(await enabled('record')).toBe(true)
   await menu('points')
@@ -318,6 +319,25 @@ test('the open points of the project are a list of their own, and one opens in i
   await expect(win.getByRole('heading', { name: 'Protokoll, byggmöte 3' })).toBeVisible()
   await side.getByRole('button', { name: /Dagordning inför byggmöte 5/ }).click()
   await expect(win.getByRole('heading', { name: 'Dagordning, byggmöte 5' })).toBeVisible()
+})
+
+test('the palette runs a command and opens a meeting or a point from a few letters', async () => {
+  await menu('palette')
+  const ask = win.getByRole('combobox', { name: 'Sök kommando, möte eller punkt' })
+  await expect(ask).toBeFocused()
+  await ask.fill('öppna p')
+  await expect(win.getByRole('listbox', { name: 'Träffar' }).getByRole('option').first()).toContainText('Öppna punkter')
+  await ask.press('Enter')
+  await expect(win.getByRole('button', { name: 'Öppna i protokollet' })).toBeVisible()
+  await menu('palette')
+  await ask.fill('byggmöte 4')
+  await ask.press('Enter')
+  await expect(win.getByRole('heading', { name: 'Protokoll, byggmöte 4' })).toBeVisible()
+  await menu('palette')
+  await ask.fill('finns inte alls')
+  await expect(win.getByText('Inget stämmer med det du skrev.')).toBeVisible()
+  await ask.press('Escape')
+  await expect(ask).toBeHidden()
 })
 
 // Last: it leaves a recording that could not be written out among the project's meetings.

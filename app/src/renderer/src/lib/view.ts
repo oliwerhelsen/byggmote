@@ -7,7 +7,5 @@ export type View =
   | { name: 'working'; job: Job }
   | { name: 'protocol'; dir: string; problem?: string }
   | { name: 'overview' }
-  | { name: 'stommen' }
-  | { name: 'settings' }
 
 export type Go = (to: View) => void

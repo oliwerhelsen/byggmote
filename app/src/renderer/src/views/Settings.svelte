@@ -5,28 +5,33 @@
   import Icon from '../lib/Icon.svelte'
   import Microphone from '../lib/Microphone.svelte'
   import Models from '../lib/Models.svelte'
+  import Stommen from './Stommen.svelte'
   import { failure } from '../lib/format'
-  import type { Go } from '../lib/view'
 
-  let { settings, stommen, folder, changed, intro, go, moved }: {
+  // `first`: the tab to open on. `connection`: Stommen's state changed. `fetched`: what Stommen has was fetched.
+  let { settings, stommen, folder, first, changed, intro, moved, connection, fetched }: {
     settings: Settings
     stommen: StommenState | null
     folder: string
+    first: string
     changed: (s: Settings) => void
     intro: () => void
-    go: Go
     moved: () => Promise<void>
+    connection: (s: StommenState) => void
+    fetched: () => Promise<void>
   } = $props()
 
   const TABS = [
     { id: 'general', name: 'Allmänt' },
     { id: 'recording', name: 'Inspelning' },
     { id: 'models', name: 'Modeller' },
+    { id: 'stommen', name: 'Stommen' },
     { id: 'about', name: 'Om Byggmöte' }
   ] as const
   type Tab = (typeof TABS)[number]['id']
 
-  let tab = $state<Tab>('general')
+  // svelte-ignore state_referenced_locally
+  let tab = $state<Tab>(TABS.some((t) => t.id === first) ? (first as Tab) : 'general')
   // svelte-ignore state_referenced_locally
   let name = $state(settings.name)
   let problem = $state('')
@@ -121,7 +126,7 @@
           <h2>Stommen</h2>
           <p>{stommen?.connected ? `Kopplad som ${stommen.user}.` : 'Inte kopplad. Projekt och personer ligger på den här datorn.'}</p>
           <div class="row" style="margin-top: 12px">
-            <button class="btn" onclick={() => go({ name: 'stommen' })}><Icon name="link" /> {stommen?.connected ? 'Hantera kopplingen' : 'Koppla till Stommen'}</button>
+            <button class="btn" onclick={() => (tab = 'stommen')}><Icon name="link" /> {stommen?.connected ? 'Hantera kopplingen' : 'Koppla till Stommen'}</button>
           </div>
         </section>
 
@@ -151,6 +156,12 @@
             <span>Öppna Byggmöte när jag loggar in</span>
           </label>
         </section>
+      {:else if tab === 'stommen'}
+        {#if stommen}
+          <Stommen {stommen} changed={connection} refresh={fetched} />
+        {:else}
+          <p class="muted">Läser in kopplingen till Stommen.</p>
+        {/if}
       {:else if tab === 'models'}
         <section class="card">
           <h2>AI-modeller för inspelning och protokoll</h2>
@@ -181,11 +192,12 @@
 </div>
 
 <style>
-  .settings { display: flex; gap: 32px; align-items: flex-start; }
-  .tabs { flex: 0 0 200px; display: flex; flex-direction: column; gap: 2px; }
-  .tab { min-height: var(--ctl-h); padding: 0 14px; border: 0; border-radius: var(--radius-sm); background: transparent; text-align: left; font-weight: 500; }
+  .settings { display: flex; gap: 20px; align-items: flex-start; }
+  .tabs { flex: 0 0 168px; display: flex; flex-direction: column; gap: 1px; }
+  .tab { height: var(--row-h); padding: 0 10px; border: 0; border-radius: var(--ctl-r); background: transparent; text-align: left; }
+  .panel :global(.page) { padding: 0; }
   .tab:hover { background: var(--sunken); }
-  .tab[aria-selected='true'] { background: var(--coral-50); color: var(--coral-800); }
+  .tab[aria-selected='true'] { background: rgb(201 58 66 / 0.12); font-weight: 600; }
   .panel { flex: 1 1 auto; min-width: 0; max-width: 680px; }
   .line { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
   .credits li { display: flex; justify-content: space-between; gap: 16px; padding: 8px 0; border-bottom: 1px solid var(--line); }

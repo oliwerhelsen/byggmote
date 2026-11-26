@@ -203,6 +203,10 @@ export interface Api {
   recordClose(): Promise<void>
   /** Bring the recording window forward. */
   recordShow(): Promise<void>
+  /** Inställningar, in a window of its own, on the tab named (general, recording, models, stommen, about). */
+  settingsOpen(tab?: string): Promise<void>
+  /** From the settings window: something the main window shows was changed, so it reads it again. */
+  changed(): Promise<void>
   /** What the window can do now, so the application menu greys out the rest. */
   menuState(state: MenuState): Promise<void>
   onProgress(listener: (p: Progress) => void): () => void
@@ -211,6 +215,8 @@ export interface Api {
   onCommand(listener: (c: Command) => void): () => void
   /** In the main window: the recording in the other window, or null when there is none. */
   onRecording(listener: (s: RecordStatus | null) => void): () => void
+  /** In the main window: the settings, the connection to Stommen or the projects were changed in another window. */
+  onChanged(listener: () => void): () => void
   /** In the main window: a recording to write out. */
   onJob(listener: (job: Job) => void): () => void
   /** In the recording window: a choice in the menu, by the icon beside the clock, or a shortcut pressed in any program. */
@@ -228,7 +234,7 @@ export const RECORD_COMMANDS = ['pause', 'next', 'decision', 'todo', 'changeOrde
 export type RecordCommand = (typeof RECORD_COMMANDS)[number]
 
 /** What the application menu asks the window to do. Each is also a shortcut (app/src/main/menu.ts). */
-export const COMMANDS = ['settings', 'newProject', 'addRecording', 'sync', 'overview', 'points', 'agenda', 'record', 'sidebar', 'intro',
+export const COMMANDS = ['settings', 'newProject', 'addRecording', 'sync', 'overview', 'points', 'agenda', 'record', 'sidebar', 'intro', 'palette',
   // about the protocol in the window
   'saveDocx', 'savePdf', 'saveMd', 'copyText', 'find', 'inspector', 'newPoint', 'nextCheck', 'rename', 'rewrite', 'send'] as const
 export type Command = (typeof COMMANDS)[number]
@@ -238,4 +244,4 @@ export type MenuState = { ready: boolean; held: boolean; project: boolean; serie
   meeting: boolean; protocol: boolean; free: boolean; sendable: boolean; inspector: boolean }
 
 export const CHANNELS = ['projects', 'meetings', 'agenda', 'meeting', 'audio', 'startSeries', 'pickRecording', 'process',
-  'writeProtocol', 'nameSpeaker', 'setTitle', 'changePoint', 'addPoint', 'removePoint', 'restorePoint', 'confirmCheck', 'attend', 'stommenState', 'stommenSignIn', 'stommenSync', 'stommenSignOut', 'stommenSend', 'stommenConfirmation', 'projectAdd', 'projectRename', 'projectDelete', 'personAdd', 'personRemove', 'protocolSave', 'protocolCopy', 'recordingStart', 'recordingChunk', 'recordingStop', 'recordingDiscard', 'settings', 'settingsSet', 'setUp', 'models', 'modelsDownload', 'modelsCancel', 'computer', 'folderShow', 'folderChoose', 'menuState', 'recordOpen', 'recordStatus', 'recordDone', 'recordClose', 'recordShow'] as const
+  'writeProtocol', 'nameSpeaker', 'setTitle', 'changePoint', 'addPoint', 'removePoint', 'restorePoint', 'confirmCheck', 'attend', 'stommenState', 'stommenSignIn', 'stommenSync', 'stommenSignOut', 'stommenSend', 'stommenConfirmation', 'projectAdd', 'projectRename', 'projectDelete', 'personAdd', 'personRemove', 'protocolSave', 'protocolCopy', 'recordingStart', 'recordingChunk', 'recordingStop', 'recordingDiscard', 'settings', 'settingsSet', 'setUp', 'models', 'modelsDownload', 'modelsCancel', 'computer', 'folderShow', 'folderChoose', 'menuState', 'recordOpen', 'recordStatus', 'recordDone', 'recordClose', 'recordShow', 'settingsOpen', 'changed'] as const
