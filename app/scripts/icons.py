@@ -60,5 +60,40 @@ def main() -> None:
     mac.save(BUILD / "icon-mac.png")
 
 
+
+
+def tray() -> None:
+    """The icons beside the clock while a meeting is recorded, written into the main process's code (the installed app
+    carries no loose image files): the wave in black for the Mac's menu bar, which tints it itself, and the app's own
+    tile for the notification area on Windows and Linux."""
+    import base64
+    import io
+
+    def wave(size: int) -> Image.Image:
+        s = size * SS
+        im = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+        d = ImageDraw.Draw(im)
+        w = round(s * 0.085)
+        for x, h in ((0.2, 0.22), (0.35, 0.5), (0.5, 0.78), (0.65, 0.42), (0.8, 0.22)):
+            cx, half = round(s * x), round(s * h / 2)
+            d.rounded_rectangle([cx - w // 2, s // 2 - half, cx + w // 2, s // 2 + half], radius=w // 2, fill=(0, 0, 0, 255))
+        return im.resize((size, size), Image.LANCZOS)
+
+    def b64(im: Image.Image) -> str:
+        out = io.BytesIO()
+        im.save(out, "PNG", optimize=True)
+        return base64.b64encode(out.getvalue()).decode()
+
+    tile = Image.open(BUILD / "icon.png").convert("RGBA").resize((32, 32), Image.LANCZOS)
+    target = BUILD.parent / "src" / "main" / "tray-icons.ts"
+    target.write_text(
+        "// Written by scripts/icons.py (tray). The Mac's is drawn at twice the size of its 18 points.\n"
+        f"export const MAC_TEMPLATE_2X = '{b64(wave(36))}'\n"
+        f"export const TILE_32 = '{b64(tile)}'\n",
+        encoding="utf8",
+    )
+
+
 if __name__ == "__main__":
     main()
+    tray()

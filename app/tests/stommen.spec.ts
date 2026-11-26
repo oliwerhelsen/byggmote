@@ -9,7 +9,7 @@ import { createServer, type IncomingHttpHeaders, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test'
+import { _electron as electron, expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 
 // What the functions handed to `evaluate` see: they run in the app's window, not here.
 declare const window: { api: import('../src/shared/types').Api }
@@ -43,6 +43,15 @@ let config: string
 let userData: string
 let app: ElectronApplication
 let win: Page
+
+// Inställningar is a window of its own. It is opened afresh each time, so it shows what the app has now.
+let sw: Page
+async function settings(): Promise<Page> {
+  for (const p of app.windows()) if (p !== win) await p.close()
+  const [p] = await Promise.all([app.waitForEvent('window'), win.getByRole('button', { name: 'Inställningar' }).click()])
+  await p.waitForLoadState()
+  return p
+}
 
 function answer(method: string, path: string, headers: IncomingHttpHeaders, body: string): [number, unknown, Record<string, string>?] {
   if (method === 'POST' && path === '/api/auth/sign-in/email') {
@@ -124,7 +133,7 @@ test.beforeAll(async () => {
   app = await electron.launch({ args, cwd: here, env: { ...process.env, ...none, BYGGMOTE_CONFIG: config, BYGGMOTE_HIDDEN: '1',
     BYGGMOTE_USER_DATA: userData, BYGGMOTE_NO_KEYCHAIN: '1', BYGGMOTE_SETUP: '1' } })
   win = await app.firstWindow()
-  await expect(win.getByRole('heading', { name: 'Tidigare möten' })).toBeVisible()
+  await expect(win.getByRole('heading', { name: 'Senaste möten' })).toBeVisible()
 })
 
 test.afterAll(async () => {
@@ -133,42 +142,59 @@ test.afterAll(async () => {
   for (const d of [config, userData]) rmSync(d, { recursive: true, force: true })
 })
 
+// Where a protocol stands with Stommen is the inspector's Stommen tab, and in a few words on the status line; the
+// toolbar's one prominent button sends it.
+async function stommenTab(): Promise<Locator> {
+  await win.getByRole('tab', { name: 'Stommen' }).click()
+  return win.getByRole('tabpanel', { name: 'Stommen' })
+}
+const status = (): Locator => win.locator('footer.status')
+const toolbarSend = (): Locator => win.locator('.tools').getByRole('button', { name: 'Skicka till Stommen' })
+/** A point's text is corrected where it stands on the page. */
+async function retext(no: string, text: string): Promise<void> {
+  await win.locator('.point').filter({ hasText: no }).locator('.txt').click()
+  const field = win.getByRole('textbox', { name: `Punkt ${no}` })
+  await field.fill(text)
+  await field.press('Enter')
+  await expect(win.locator('.point').filter({ hasText: no })).toContainText(text)
+}
+
 /** Stommen is reached from Inställningar, where the connection is kept. */
 async function openStommen(): Promise<void> {
-  await win.getByRole('button', { name: 'Inställningar' }).click()
-  await win.getByRole('button', { name: /Koppla till Stommen|Hantera kopplingen/ }).click()
+  sw = await settings()
+  await sw.getByRole('button', { name: /Koppla till Stommen|Hantera kopplingen/ }).click()
 }
 
 async function signIn(password: string, to = address): Promise<void> {
-  const server = win.getByLabel('Adress till Stommen')
-  if (!(await server.isVisible())) await win.getByText('Avancerat').click() // the address sits under Avancerat
+  const server = sw.getByLabel('Adress till Stommen')
+  if (!(await server.isVisible())) await sw.getByText('Avancerat').click() // the address sits under Avancerat
   await server.fill(to)
-  await win.getByLabel('E-post').fill(EMAIL)
-  await win.getByLabel('Lösenord').fill(password)
-  await win.getByRole('button', { name: 'Logga in' }).click()
+  await sw.getByLabel('E-post').fill(EMAIL)
+  await sw.getByLabel('Lösenord').fill(password)
+  await sw.getByRole('button', { name: 'Logga in' }).click()
 }
 
 test('the address is Stommen over https, and a wrong password is said plainly', async () => {
   await openStommen()
-  await expect(win.getByRole('heading', { name: 'Stommen', level: 1 })).toBeVisible()
+  await expect(sw.getByRole('heading', { name: 'Stommen', level: 1 })).toBeVisible()
   await expect(win.getByText('Stommen är inte kopplat än.')).toBeVisible()
 
   await signIn(PASSWORD, 'http://stommen.example')
-  await expect(win.getByRole('alert')).toHaveText('Adressen till Stommen ska börja med https://.')
+  await expect(sw.getByRole('alert')).toHaveText('Adressen till Stommen ska börja med https://.')
   expect(seen).toHaveLength(0) // nothing went anywhere
 
   await signIn('fel-losenord')
-  await expect(win.getByRole('alert')).toHaveText('E-postadressen eller lösenordet stämmer inte.')
-  await expect(win.getByRole('heading', { name: 'Logga in i Stommen' })).toBeVisible()
+  await expect(sw.getByRole('alert')).toHaveText('E-postadressen eller lösenordet stämmer inte.')
+  await expect(sw.getByRole('heading', { name: 'Logga in i Stommen' })).toBeVisible()
 })
 
 test('signing in brings the Projekt with its Roller and Kontakter, and the session stays out of sight', async () => {
   await signIn(PASSWORD)
-  await expect(win.getByRole('heading', { name: 'Inloggad som Maria Lindqvist' })).toBeVisible()
-  await expect(win.getByText('Norrstaden Fastigheter AB, på ' + address + '.')).toBeVisible()
-  await expect(win.getByText('Ett Projekt hämtade, med 3 Kontakter. En Roll är vakant.')).toBeVisible()
+  await expect(sw.getByRole('heading', { name: 'Inloggad som Maria Lindqvist' })).toBeVisible()
+  await expect(sw.getByText('Norrstaden Fastigheter AB, på ' + address + '.')).toBeVisible()
+  await expect(sw.getByText('Ett Projekt hämtade, med 3 Kontakter. En Roll är vakant.')).toBeVisible()
   await expect(win.getByText('Kopplad till Stommen som Maria Lindqvist.')).toBeVisible()
-  await expect(win.getByText('Du loggar in igen nästa gång appen startar.')).toBeVisible() // this run has no keychain
+  await expect(sw.getByText('Du loggar in igen nästa gång appen startar.')).toBeVisible() // this run has no keychain
   await expect(win.getByLabel('Projekt', { exact: true }).locator('option')).toHaveText(['Kv. Eken kontorshus', 'Kv. Linden', 'Nytt projekt…'])
 
   // what the engine now has: Stommen's Projekt, the vacant Roll too, and the one person who is in both projects once
@@ -198,25 +224,38 @@ test('signing in brings the Projekt with its Roller and Kontakter, and the sessi
   const onDisk = readFileSync(join(userData, 'stommen.json'), 'utf8')
   expect(onDisk).not.toContain(TOKEN)
   expect(onDisk).not.toContain(PASSWORD)
-  await expect(win.getByLabel('Lösenord')).toHaveCount(0)
+  await expect(sw.getByLabel('Lösenord')).toHaveCount(0)
+})
+
+test('the overview says where the project comes from, and fetches from Stommen again', async () => {
+  await expect(win.getByRole('heading', { name: 'Kv. Eken kontorshus', level: 1 })).toBeVisible()
+  await expect(win.getByText('Från Stommen', { exact: true })).toBeVisible()
+  const facts = win.getByRole('region', { name: 'Stommen', exact: true })
+  await expect(facts).toContainText('Inloggad som Maria Lindqvist')
+  await expect(facts).toContainText('Norrstaden Fastigheter AB')
+  await expect(facts).toContainText(/Hämtat senast \d{4}-\d\d-\d\d \d\d:\d\d/)
+  const fetched = (): number => seen.filter((r) => r.path === '/api/mobile/v1/projects').length
+  const before = fetched()
+  await win.getByRole('button', { name: 'Hämta från Stommen' }).click()
+  await expect.poll(fetched).toBe(before + 1)
 })
 
 test('a session Stommen has ended shows as signed out, with the address kept', async () => {
   ended = true
-  await win.getByRole('button', { name: 'Hämta från Stommen' }).click()
-  await expect(win.getByRole('alert')).toHaveText('Inloggningen i Stommen gäller inte längre. Logga in igen.')
-  await expect(win.getByRole('heading', { name: 'Logga in i Stommen' })).toBeVisible()
-  await expect(win.getByLabel('Adress till Stommen')).toHaveValue(address)
+  await sw.getByRole('button', { name: 'Hämta från Stommen' }).click()
+  await expect(sw.getByRole('alert')).toHaveText('Inloggningen i Stommen gäller inte längre. Logga in igen.')
+  await expect(sw.getByRole('heading', { name: 'Logga in i Stommen' })).toBeVisible()
+  await expect(sw.getByLabel('Adress till Stommen')).toHaveValue(address)
   await expect(win.getByText('Stommen är inte kopplat än.')).toBeVisible()
   await expect(win.getByLabel('Projekt', { exact: true }).locator('option')).toHaveText(['Kv. Eken kontorshus', 'Kv. Linden', 'Nytt projekt…']) // what was fetched stays
 })
 
 test('signing out ends the session in Stommen too', async () => {
   await signIn(PASSWORD)
-  await expect(win.getByRole('heading', { name: 'Inloggad som Maria Lindqvist' })).toBeVisible()
-  await expect(win.getByText(/hämtade, med/)).toBeVisible()
-  await win.getByRole('button', { name: 'Logga ut' }).click()
-  await expect(win.getByRole('heading', { name: 'Logga in i Stommen' })).toBeVisible()
+  await expect(sw.getByRole('heading', { name: 'Inloggad som Maria Lindqvist' })).toBeVisible()
+  await expect(sw.getByText(/hämtade, med/)).toBeVisible()
+  await sw.getByRole('button', { name: 'Logga ut' }).click()
+  await expect(sw.getByRole('heading', { name: 'Logga in i Stommen' })).toBeVisible()
   const out = seen.filter((r) => r.path === '/api/auth/sign-out')
   expect(out).toHaveLength(1)
   expect(out[0].headers.authorization).toBe(`Bearer ${TOKEN}`)
@@ -226,7 +265,7 @@ test('signing out ends the session in Stommen too', async () => {
 
 test('signing out while a fetch is still running leaves nothing of the session behind', async () => {
   await signIn(PASSWORD)
-  await expect(win.getByText(/hämtade, med/)).toBeVisible()
+  await expect(sw.getByText(/hämtade, med/)).toBeVisible()
   slow = 600
   try {
     // as when the app has just started and fetches by itself, and the person signs out before it is done
@@ -249,17 +288,17 @@ test('a Byggmöte that Stommen finds too old is told so, and leaves no session b
   // the test before signed out behind the view's back: the window starts again, as when the app does
   await win.reload()
   await openStommen()
-  await expect(win.getByRole('heading', { name: 'Logga in i Stommen' })).toBeVisible()
+  await expect(sw.getByRole('heading', { name: 'Logga in i Stommen' })).toBeVisible()
   tooOld = true
   const before = seen.length
   try {
     await signIn(PASSWORD)
-    await expect(win.getByRole('alert')).toHaveText(
+    await expect(sw.getByRole('alert')).toHaveText(
       'Stommen svarar: Uppdatera Byggmöte. Den här versionen av Byggmöte är för gammal. Hämta den senaste versionen av Byggmöte.')
   } finally {
     tooOld = false
   }
-  await expect(win.getByRole('heading', { name: 'Logga in i Stommen' })).toBeVisible()
+  await expect(sw.getByRole('heading', { name: 'Logga in i Stommen' })).toBeVisible()
   expect(seen.slice(before).map((r) => r.path)).toEqual(['/api/auth/sign-in/email', '/api/mobile/v1/me', '/api/auth/sign-out'])
   expect(ended).toBe(true)
   expect(await win.evaluate(() => window.api.stommenState())).toMatchObject({ connected: false })
@@ -269,22 +308,25 @@ test('a protocol goes to Stommen when the person sends it, with its points and w
   await win.reload()
   await openStommen()
   await signIn(PASSWORD)
-  await expect(win.getByRole('heading', { name: 'Inloggad som Maria Lindqvist' })).toBeVisible()
+  await expect(sw.getByRole('heading', { name: 'Inloggad som Maria Lindqvist' })).toBeVisible()
   await win.getByLabel('Projekt', { exact: true }).selectOption({ label: 'Kv. Eken kontorshus' })
-  await win.getByRole('button', { name: 'Möten', exact: true }).click() // choosing a project opens its overview
-  await win.getByRole('button', { name: 'Byggmöte 4' }).click()
-  const card = win.getByRole('region', { name: 'Till Stommen' })
+  await win.getByRole('button', { name: 'Byggmöte 4', exact: true }).click()
+  await expect(status()).toContainText('Inte skickat till Stommen')
+  await expect(toolbarSend()).toBeDisabled() // nothing unread goes
+  const card = await stommenTab()
   await expect(card).toContainText('Protokollet är inte skickat.')
   await expect(card).toContainText('En sak ska kontrolleras innan protokollet kan skickas.')
   await expect(card.getByRole('button')).toHaveCount(0) // nothing unread goes
 
   await win.getByRole('button', { name: 'Beloppet 86 500 kr i punkt 4.4.1 stämmer' }).click()
-  await card.getByRole('button', { name: 'Skicka till Stommen' }).click()
+  await toolbarSend().click() // the one prominent button opens the question in the inspector
   await expect(card).toContainText('Ljudet och resten av utskriften stannar på den här datorn.')
   expect(seen.filter((r) => r.path.endsWith('/minutes'))).toHaveLength(0) // asked first, not sent yet
   await card.getByRole('button', { name: 'Skicka', exact: true }).click()
   await expect(card).toContainText(/Skickat .* version 1\./)
   await expect(card.getByRole('button', { name: /Skicka/ })).toHaveCount(0)
+  await expect(toolbarSend()).toBeDisabled()
+  await expect(status()).toContainText('Skickat till Stommen, version 1')
   // sent, the person can ask whether it is justerat yet
   await card.getByRole('button', { name: 'Se efter om det är justerat' }).click()
   await expect(card.getByRole('status')).toHaveText('Inte justerat i Stommen än.')
@@ -306,9 +348,8 @@ test('a protocol goes to Stommen when the person sends it, with its points and w
   expect(sent.body).not.toContain('Välkomna till byggmötet')
 
   // changed after it was sent, it says so and goes again as a later version
-  await win.getByRole('button', { name: 'Ändra punkt 4.3.1' }).click()
-  await win.getByRole('form', { name: 'Ändra punkt 4.3.1' }).getByLabel('Punkten', { exact: true }).fill('Stommen på plan tre är klar och avsynad.')
-  await win.getByRole('button', { name: 'Spara', exact: true }).click()
+  await retext('4.3.1', 'Stommen på plan tre är klar och avsynad.')
+  await stommenTab()
   await expect(card).toContainText('Protokollet har ändrats sedan dess.')
   await card.getByRole('button', { name: 'Skicka igen' }).click()
   await card.getByRole('button', { name: 'Skicka', exact: true }).click()
@@ -317,10 +358,8 @@ test('a protocol goes to Stommen when the person sends it, with its points and w
 })
 
 test('a protocol justerat in Stommen meanwhile is not replaced, and the meeting says by whom and when', async () => {
-  const card = win.getByRole('region', { name: 'Till Stommen' })
-  await win.getByRole('button', { name: 'Ändra punkt 4.3.1' }).click()
-  await win.getByRole('form', { name: 'Ändra punkt 4.3.1' }).getByLabel('Punkten', { exact: true }).fill('Stommen på plan tre är klar.')
-  await win.getByRole('button', { name: 'Spara', exact: true }).click()
+  await retext('4.3.1', 'Stommen på plan tre är klar.')
+  const card = await stommenTab()
   adjusted = { on: '2026-11-21', method: 'email', by: 'Båda parter' }
   await card.getByRole('button', { name: 'Skicka igen' }).click()
   await card.getByRole('button', { name: 'Skicka', exact: true }).click()
@@ -329,16 +368,24 @@ test('a protocol justerat in Stommen meanwhile is not replaced, and the meeting 
   await expect(card).toContainText(/version 2\. Protokollet har ändrats sedan dess\./) // what Stommen has is still version 2
   await expect(card).toContainText('be om en ny version i Stommen')
   await expect(card.getByRole('button', { name: /Skicka/ })).toHaveCount(0)
-  await expect(win.getByRole('button', { name: /^Ändra punkt/ })).toHaveCount(0)
-  await expect(win.getByRole('button', { name: /Skriv om protokollet|Lägg till punkt/ })).toHaveCount(0)
+  // nothing in it is changed any more: a click chooses a point and opens no field, and the menu has greyed out the rest
+  await win.locator('.point').filter({ hasText: '4.3.1' }).locator('.txt').click()
+  await expect(win.getByRole('textbox', { name: /^Punkt / })).toHaveCount(0)
+  await expect(win.getByRole('tabpanel', { name: 'Punkt' }).getByLabel('Typ')).toBeDisabled()
+  await expect(win.getByRole('button', { name: /^Ny punkt under/ })).toHaveCount(0)
+  await expect(win.getByText('Protokollet är justerat i Stommen, så punkterna går inte att ändra här längre.')).toBeVisible()
+  await expect(status()).toContainText('Justerat i Stommen')
+  for (const c of ['newPoint', 'editPoint', 'rewrite', 'send']) {
+    expect(await app.evaluate(({ Menu }, id) => Menu.getApplicationMenu()!.getMenuItemById(id)!.enabled, c)).toBe(false)
+  }
 })
 
 test('the meeting asks Stommen when it is opened, and Stommen wins', async () => {
   adjusted = { on: '2026-11-24', method: 'signed', by: 'Maria Lindqvist och Elin Sjöberg' } // registered again in Stommen
-  await win.getByRole('button', { name: 'Till möten' }).click()
+  await win.getByRole('navigation', { name: 'Huvudmeny' }).getByRole('button', { name: 'Översikt' }).click()
   const before = seen.length
-  await win.getByRole('button', { name: 'Byggmöte 4' }).click()
-  const card = win.getByRole('region', { name: 'Till Stommen' })
+  await win.getByRole('button', { name: 'Byggmöte 4', exact: true }).click()
+  const card = await stommenTab()
   await expect(card).toContainText('Justerat 24 november 2026, signerat, av Maria Lindqvist och Elin Sjöberg.')
   expect(seen.slice(before).map((r) => `${r.method} ${r.path}`)).toEqual([`GET /api/mobile/v1/projects/${EKEN}/minutes`])
 
@@ -356,9 +403,9 @@ test('a Stommen that cannot say yet is quiet when the meeting opens, and says wh
   adjusted = null
   older = true
   try {
-    await win.getByRole('button', { name: 'Till möten' }).click()
-    await win.getByRole('button', { name: 'Byggmöte 4' }).click()
-    const card = win.getByRole('region', { name: 'Till Stommen' })
+    await win.getByRole('navigation', { name: 'Huvudmeny' }).getByRole('button', { name: 'Översikt' }).click()
+    await win.getByRole('button', { name: 'Byggmöte 4', exact: true }).click()
+    const card = await stommenTab()
     // what was known last stays, and nothing alarms
     await expect(card).toContainText('Justerat 24 november 2026, signerat, av Maria Lindqvist och Elin Sjöberg.')
     await expect(card.getByRole('button', { name: 'Se efter om det är justerat' })).toBeEnabled()

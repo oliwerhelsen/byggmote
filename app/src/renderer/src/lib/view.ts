@@ -1,14 +1,15 @@
 import type { Job, SeriesRef } from '../../../shared/types'
 
-/** Where the window is. A recording and a job in progress are views of their own, so nothing else can be opened over them. */
+/** Where the window is. A meeting is recorded in a window of its own (views/RecordWindow.svelte), not in a view here. */
 export type View =
-  | { name: 'meetings' }
+  | { name: 'points' }
   | { name: 'agenda'; series: SeriesRef }
-  | { name: 'recording'; series: SeriesRef; agenda: boolean }
   | { name: 'working'; job: Job }
   | { name: 'protocol'; dir: string; problem?: string }
   | { name: 'overview' }
-  | { name: 'stommen' }
-  | { name: 'settings' }
 
 export type Go = (to: View) => void
+
+/** What the toolbar says of the meeting in the window: its title, whether a person has corrected its protocol, and
+ * whether that is a draft or justerat (nothing without a protocol). */
+export type About = { title: string; edited: boolean; standing: '' | 'draft' | 'done' }

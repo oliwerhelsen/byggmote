@@ -9,6 +9,8 @@ import { call, run, stopAll, stream } from './engine'
 import * as kept from './settings'
 import { toDocx, toPdf, type Sheet } from './export'
 import * as stommen from './stommen'
+import { buildMenu, setMenuState } from './menu'
+import * as rec from './recording'
 
 // The tests give the app a folder of its own for what it keeps, so a run never reads or writes the person's.
 if (process.env['BYGGMOTE_USER_DATA']) app.setPath('userData', process.env['BYGGMOTE_USER_DATA'])
@@ -106,7 +108,7 @@ const correct = async (args: string[], fields?: PointFields | NewPoint): Promise
   await call(['correct', ...args], fields)
 }
 
-function handlers(tell: (p: Progress) => void, tellModels: (e: ModelEvent) => void): { [K in Exclude<keyof Api, 'onProgress' | 'onModels'>]: (...args: Parameters<Api[K]>) => ReturnType<Api[K]> } {
+function handlers(tell: (p: Progress) => void, tellModels: (e: ModelEvent) => void): { [K in Exclude<keyof Api, 'onProgress' | 'onModels' | 'onCommand' | 'onRecording' | 'onJob' | 'onChanged' | 'onRecordCommand' | 'platform'>]: (...args: Parameters<Api[K]>) => ReturnType<Api[K]> } {
   return {
     projects: () => call<{ folder: string; projects: Project[] }>(['projects']),
 
@@ -146,25 +148,34 @@ function handlers(tell: (p: Progress) => void, tellModels: (e: ModelEvent) => vo
 
     async process(job: Job): Promise<Done> {
       if (!recordings.has(job.file)) throw new Error('unknown recording')
-      // Känn igen röster is the window's setting, and a new knowledge base starts with it off in the engine: the
-      // engine is told before each run, or it keeps no voice prints and recognises no one while the box says it does.
-      await call(['voices', (await kept.read()).voices ? 'on' : 'off'])
-      const dir = await run([job.file, '--area', job.projectId, '--title', job.title], (e) => {
-        if (e.event === 'step' && e.step) tell({ step: e.step, state: e.status === 'done' ? 'done' : 'start' })
-        if (e.event === 'progress' && e.step) tell({ step: e.step, state: 'progress', fraction: e.fraction })
-      })
-      meetings.add(resolve(dir))
-      if (job.file.startsWith(scratch())) await rm(job.file, { force: true }) // the meeting has its own copy now
-      recordings.delete(job.file)
-      if (job.marks) await writeFile(join(dir, 'marks.json'), JSON.stringify(job.marks, null, 1) + '\n', 'utf8')
-      tell({ step: 'protocol', state: 'start' })
+      // The Dock's icon and the taskbar's button show that work is going on, also with the window behind another.
+      const busy = (on: boolean): void => {
+        for (const w of BrowserWindow.getAllWindows()) w.setProgressBar(on ? 2 : -1) // above 1: at work, how far is not said
+      }
+      busy(true)
       try {
-        await call(['protocol', dir, '--series', job.seriesId])
-        return { dir, protocolError: null }
-      } catch (e) {
-        return { dir, protocolError: (e as Error).message } // the transcript is there: the protocol can be written again
+        // Känn igen röster is the window's setting, and a new knowledge base starts with it off in the engine: the
+        // engine is told before each run, or it keeps no voice prints and recognises no one while the box says it does.
+        await call(['voices', (await kept.read()).voices ? 'on' : 'off'])
+        const dir = await run([job.file, '--area', job.projectId, '--title', job.title], (e) => {
+          if (e.event === 'step' && e.step) tell({ step: e.step, state: e.status === 'done' ? 'done' : 'start' })
+          if (e.event === 'progress' && e.step) tell({ step: e.step, state: 'progress', fraction: e.fraction })
+        })
+        meetings.add(resolve(dir))
+        if (job.file.startsWith(scratch())) await rm(job.file, { force: true }) // the meeting has its own copy now
+        recordings.delete(job.file)
+        if (job.marks) await writeFile(join(dir, 'marks.json'), JSON.stringify(job.marks, null, 1) + '\n', 'utf8')
+        tell({ step: 'protocol', state: 'start' })
+        try {
+          await call(['protocol', dir, '--series', job.seriesId])
+          return { dir, protocolError: null }
+        } catch (e) {
+          return { dir, protocolError: (e as Error).message } // the transcript is there: the protocol can be written again
+        } finally {
+          tell({ step: 'protocol', state: 'done' })
+        }
       } finally {
-        tell({ step: 'protocol', state: 'done' })
+        busy(false)
       }
     },
 
@@ -304,6 +315,11 @@ function handlers(tell: (p: Progress) => void, tellModels: (e: ModelEvent) => vo
         next.openAtLogin = patch.openAtLogin
       }
       if (typeof patch.microphone === 'string') next.microphone = patch.microphone.slice(0, 500)
+      if (patch.shortcuts && typeof patch.shortcuts === 'object') {
+        const wanted = { ...cur.shortcuts }
+        for (const k of ['pause', 'next', 'mark'] as const) if (typeof patch.shortcuts[k] === 'string') wanted[k] = patch.shortcuts[k].slice(0, 40)
+        next.shortcuts = rec.choose(wanted)
+      }
       return kept.write(next)
     },
 
@@ -346,11 +362,120 @@ function handlers(tell: (p: Progress) => void, tellModels: (e: ModelEvent) => vo
       const got = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
       if (got.canceled || !got.filePaths[0]) return null
       return (await call<{ folder: string }>(['folder', got.filePaths[0]])).folder
+    },
+
+    async menuState(state) {
+      setMenuState(state)
+    },
+
+    async recordOpen(spec) {
+      const series = { id: String(spec.series.id), name: String(spec.series.name), next: Number(spec.series.next) }
+      rec.open({ projectId: projectId(spec.projectId), projectName: String(spec.projectName), series, agenda: Boolean(spec.agenda) }, join(__dirname, '../preload/index.js'), process.env['BYGGMOTE_HIDDEN'] === '1')
+    },
+    async recordStatus(status) {
+      rec.heard(status)
+    },
+    // The recording goes to the main window, which writes it out; with no main window (the Mac keeps the app when it
+    // is closed) one is opened for it.
+    async recordDone(job) {
+      rec.close()
+      const send = (w: BrowserWindow): void => w.webContents.send('job', job)
+      const main = mainWindows()[0]
+      if (main) send(main)
+      else open().webContents.once('did-finish-load', function (this: Electron.WebContents) { setTimeout(() => this.send('job', job), 1500) })
+    },
+    async recordClose() {
+      rec.close()
+    },
+    async recordShow() {
+      rec.show()
+    },
+
+    async settingsOpen(tab) {
+      openSettings(/^[a-z]+$/.test(String(tab ?? '')) ? String(tab) : 'general')
+    },
+    async changed() {
+      for (const w of [...mainWindows(), rec.recordingWindow()]) w?.webContents.send('changed')
+    },
+    async shortcutListen(on) {
+      settingsWindow?.webContents.setIgnoreMenuShortcuts(Boolean(on))
+      rec.listen(Boolean(on))
+    },
+    async settingsFit(height) {
+      const h = Math.round(Number(height))
+      if (!settingsWindow || !macLook || !(h >= 120 && h <= 2000)) return
+      settingsWindow.setContentSize(MAC_WIDTH, h, settingsWindow.isVisible())
     }
   }
 }
 
-function open(): void {
+let settingsWindow: BrowserWindow | null = null
+let aboutWindow: BrowserWindow | null = null
+/** The windows that are the app itself: not the recording's, not Inställningar, not Om Byggmöte. */
+const mainWindows = (): BrowserWindow[] => BrowserWindow.getAllWindows().filter((w) => w !== rec.recordingWindow() && w !== settingsWindow && w !== aboutWindow)
+
+// The Mac's settings window or Windows': the same choice as the window's own (app/src/preload/index.ts).
+const macLook = (process.env['BYGGMOTE_PLATFORM'] || process.platform) === 'darwin'
+const MAC_WIDTH = 620
+
+/** A small window that is the app's and nothing else: a link opens in the browser, and nothing navigates away. */
+function small(options: Electron.BrowserWindowConstructorOptions, hash: string): BrowserWindow {
+  const hidden = process.env['BYGGMOTE_HIDDEN'] === '1'
+  const win = new BrowserWindow({
+    show: false,
+    fullscreenable: false,
+    maximizable: false,
+    ...options,
+    webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: !hidden }
+  })
+  if (process.platform !== 'darwin') win.removeMenu() // Windows and Linux: no menu bar of its own, not behind Alt either
+  win.once('ready-to-show', () => {
+    if (!hidden) win.show()
+  })
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('https://')) void shell.openExternal(url)
+    return { action: 'deny' }
+  })
+  win.webContents.on('will-navigate', (e) => e.preventDefault())
+  if (process.env['ELECTRON_RENDERER_URL']) void win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#${hash}`)
+  else void win.loadFile(join(__dirname, '../renderer/index.html'), { hash })
+  return win
+}
+
+/**
+ * Inställningar is a window of its own, as on any desktop: one of them, brought forward if it is open. On the Mac it
+ * is a fixed, compact window named after its pane, as tall as the pane (`settingsFit`); on Windows and Linux it is
+ * the size of a settings window there, with pages down its left side.
+ */
+function openSettings(tab: string): void {
+  if (tab === 'about' && macLook) return openAbout() // on the Mac that is the app menu's Om Byggmöte, not a pane
+  if (settingsWindow) {
+    if (settingsWindow.isMinimized()) settingsWindow.restore()
+    settingsWindow.focus()
+    return
+  }
+  const win = (settingsWindow = small(
+    macLook
+      ? { width: MAC_WIDTH, height: 506, useContentSize: true, resizable: false, title: 'Inställningar', backgroundColor: '#f3f2f6',
+          // The title is drawn in the window, over the toolbar of panes, with the three buttons where a title bar has them.
+          ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden' as const } : {}) }
+      : { width: 860, height: 600, minWidth: 720, minHeight: 480, title: 'Inställningar', backgroundColor: '#f3f3f5' },
+    `settings=${tab}&v=${app.getVersion()}`
+  ))
+  win.on('closed', () => {
+    settingsWindow = null
+    rec.listen(false)
+  })
+}
+
+/** Om Byggmöte on the Mac: a small window of the app's own, with what the Om page says on Windows. */
+function openAbout(): void {
+  if (aboutWindow) return aboutWindow.focus()
+  aboutWindow = small({ width: 440, height: 448, useContentSize: true, resizable: false, minimizable: false, title: 'Om Byggmöte', backgroundColor: '#f3f2f6' }, `about&v=${app.getVersion()}`)
+  aboutWindow.on('closed', () => (aboutWindow = null))
+}
+
+function open(): BrowserWindow {
   // BYGGMOTE_HIDDEN=1: the tests drive the window without showing it, so a run neither takes the screen nor gets a
   // stray click from whoever sits at the computer.
   const hidden = process.env['BYGGMOTE_HIDDEN'] === '1'
@@ -362,7 +487,9 @@ function open(): void {
     show: false,
     title: 'Byggmöte',
     backgroundColor: '#faf9fb',
-    autoHideMenuBar: true,
+    // The Mac's window has no title bar of its own: the sidebar and the toolbar reach the top, with the three
+    // buttons over the sidebar. Windows and Linux keep theirs, with the menu bar under it.
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 18, y: 19 } } : {}),
     webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: !hidden }
   })
   win.once('ready-to-show', () => {
@@ -376,9 +503,11 @@ function open(): void {
   win.webContents.on('will-navigate', (e) => e.preventDefault())
   if (process.env['ELECTRON_RENDERER_URL']) void win.loadURL(process.env['ELECTRON_RENDERER_URL'])
   else void win.loadFile(join(__dirname, '../renderer/index.html'))
+  return win
 }
 
-void app.whenReady().then(() => {
+void app.whenReady().then(async () => {
+  rec.keep((await kept.read()).shortcuts)
   // In dev the app runs inside Electron's own bundle, whose icon is Electron's; the installed app has its own.
   if (!app.isPackaged && process.platform === 'darwin') app.dock?.setIcon(join(__dirname, '../../build/icon-mac.png'))
   // The microphone, for recording a meeting, and nothing else a page can ask for.
@@ -392,9 +521,13 @@ void app.whenReady().then(() => {
   for (const [name, fn] of Object.entries(handlers(tell, tellModels))) {
     ipcMain.handle(name, (_e, ...args: unknown[]) => (fn as (...a: unknown[]) => unknown)(...args))
   }
+  buildMenu(open, mainWindows, (tab = 'general') => openSettings(tab))
+  rec.setUp((s) => {
+    for (const w of mainWindows()) w.webContents.send('recording', s)
+  }, () => buildMenu())
   open()
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) open()
+    if (!mainWindows().length) open()
   })
 })
 

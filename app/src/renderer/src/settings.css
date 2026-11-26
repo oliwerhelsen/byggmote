@@ -1,0 +1,95 @@
+/* Inställningar, as each computer draws a settings window (views/SettingsWindow.svelte, lib/Row.svelte). The Mac: a
+   toolbar of panes under the title, and each pane a form with its labels in a left column. Windows: the pages down
+   the left side, and each page a list of rows. The lines are a shade darker here than in the main window. */
+body:has(.prefs) { background: var(--pane); }
+.prefs { --line: #e4e3e9; --line-soft: #efeef3; color: var(--ink-900); }
+.prefs.mac { font: 13px/1.35 var(--font-ui); display: flex; flex-direction: column; }
+.prefs.win { font: 14px/1.4 var(--font-ui); display: flex; height: 100%; background: var(--pane); }
+.prefs .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.prefs h2 { font: inherit; letter-spacing: 0; }
+.prefs.mac h2 { font-weight: 600; }
+.prefs .d { font-size: var(--ui-small); line-height: 1.4; color: var(--ink-500); }
+.prefs .d a { color: inherit; }
+.prefs .bad-text { color: var(--bad); }
+.prefs .mono { font-size: var(--ui-small); overflow-wrap: anywhere; }
+
+/* The Mac's window: the title, the panes as icons with their names under, and the form. */
+.prefs.mac .titlebar { flex: none; height: 28px; display: flex; align-items: center; justify-content: center; background: #ecebf0; font-weight: 600; color: var(--ink-700); -webkit-app-region: drag; user-select: none; }
+.prefs.mac .panes { flex: none; display: flex; justify-content: center; gap: 4px; padding: 0 0 8px; background: #ecebf0; border-bottom: 1px solid var(--line); -webkit-app-region: drag; }
+.prefs.mac .pane { width: 76px; height: 54px; padding: 0; border: 0; border-radius: 8px; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 11px; color: var(--ink-900); -webkit-app-region: no-drag; }
+.prefs.mac .pane svg { color: var(--ink-500); }
+.prefs.mac .pane[aria-selected='true'] { background: rgb(0 0 0 / 0.09); font-weight: 600; }
+.prefs.mac .pane[aria-selected='true'] svg { color: var(--coral-700); }
+.prefs.mac .form { display: grid; grid-template-columns: 116px 1fr; column-gap: 14px; row-gap: 18px; padding: 24px 30px 28px 24px; background: var(--pane); }
+.prefs.mac .form > form { display: contents; }
+.prefs.mac .lbl { text-align: right; padding-top: 5px; }
+.prefs.mac .val { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.prefs.mac .val:has(> .check) { gap: 4px; }
+.prefs.mac .val > h2 { padding-top: 5px; }
+.prefs.mac .val > p:not(.d) { padding-top: 5px; }
+.prefs.mac .val > .d { max-width: 400px; }
+.prefs.mac .d.in { padding-left: 22px; }
+.prefs.mac .wide { grid-column: 1 / -1; }
+.prefs.mac .check { display: flex; align-items: center; gap: 8px; padding-top: 2px; min-height: 20px; }
+.prefs.mac .check input { appearance: none; flex: none; width: 14px; height: 14px; margin: 0; border-radius: 3.5px; border: 1px solid #b9b8c2; background: #fff; }
+.prefs.mac .check input:checked { border-color: var(--coral-800); background: var(--coral-700) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m2 5.2 2 2L8 3'/%3E%3C/svg%3E") center / 10px 10px no-repeat; }
+
+/* Windows' window: the pages, the page's title and its rows. */
+.prefs.win .nav { flex: none; width: 220px; display: flex; flex-direction: column; padding: 8px 4px 4px; }
+.prefs.win .pane { position: relative; flex: none; display: flex; align-items: center; gap: 12px; height: 36px; padding: 0 12px; border: 0; border-radius: 4px; background: transparent; text-align: left; white-space: nowrap; }
+.prefs.win .pane svg { flex: none; color: var(--coral-700); }
+.prefs.win .pane:hover { background: rgb(0 0 0 / 0.035); }
+.prefs.win .pane[aria-selected='true'] { background: rgb(0 0 0 / 0.055); }
+.prefs.win .pane[aria-selected='true']::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 2px; background: var(--coral-700); }
+.prefs.win .content { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; padding: 22px 32px 0; overflow-y: auto; background: #fbfbfc; border: 1px solid var(--line); border-right: 0; border-bottom: 0; border-top-left-radius: 8px; }
+.prefs.win .content::after { content: ''; flex: none; height: 18px; }
+.prefs.win .content > form { display: contents; }
+.prefs.win .content > h1 { font: 600 28px/1.3 var(--font-ui); letter-spacing: 0; margin-bottom: 14px; }
+.prefs.win .srow { flex: none; display: flex; align-items: center; gap: 16px; min-height: 60px; padding: 8px 16px; background: #fff; border: 1px solid var(--line); border-radius: 4px; }
+.prefs.win .srow.top { align-items: flex-start; padding-top: 12px; padding-bottom: 12px; }
+.prefs.win .srow.top > .ic { margin-top: 6px; }
+.prefs.win .srow.top > .tx { padding-top: 4px; }
+.prefs.win .srow .ic { flex: none; width: 20px; color: var(--ink-700); display: grid; place-items: center; }
+.prefs.win .srow .tx { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.prefs.win .srow .t { font-size: 14px; font-weight: 400; }
+.prefs.win .srow .ctl { flex: none; display: flex; align-items: center; gap: 12px; }
+.prefs.win .exp { flex: none; background: #fff; border: 1px solid var(--line); border-radius: 4px; }
+.prefs.win .exp .srow { border: 0; background: transparent; width: 100%; text-align: left; }
+.prefs.win .exp > summary { list-style: none; }
+.prefs.win .exp > summary::-webkit-details-marker { display: none; }
+.prefs.win .exp-body { padding: 12px 16px 14px 52px; border-top: 1px solid var(--line-soft); }
+.prefs.win .sc-row { display: flex; align-items: center; gap: 4px; width: 100%; min-height: 30px; padding: 0 16px 0 52px; border: 0; border-top: 1px solid var(--line-soft); background: transparent; text-align: left; }
+.prefs.win .sc-row .name { flex: 1; }
+.prefs.win .sc-row.hint { padding-top: 8px; padding-bottom: 10px; gap: 12px; }
+.prefs.win button.sc-row:hover { background: rgb(0 0 0 / 0.03); }
+.prefs.win .plus { color: var(--ink-400); font-size: 12px; }
+.prefs.win .actions { flex: none; display: flex; justify-content: flex-end; gap: 8px; padding-top: 8px; }
+.prefs.win .switch { appearance: none; flex: none; position: relative; width: 40px; height: 20px; margin: 0; border-radius: 10px; border: 1px solid var(--ink-500); background: transparent; }
+.prefs.win .switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 50%; background: var(--ink-700); transition: left 0.1s; }
+.prefs.win .switch:checked { background: var(--coral-700); border-color: var(--coral-700); }
+.prefs.win .switch:checked::after { left: 23px; background: #fff; }
+
+/* The controls, as the drawings have them. */
+.prefs .btn, .prefs .field { height: var(--ctl-h); min-height: 0; }
+.prefs.win .field:not(select) { border-bottom-color: #8e8d99; }
+.prefs select.field { appearance: none; padding: 0 26px 0 10px; border-bottom-color: #b9b8c2; background-color: #fff; background-repeat: no-repeat; text-overflow: ellipsis; }
+.prefs.mac select.field { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 12' fill='none' stroke='%236b6a77' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 4.5 5 1.5l3 3M2 7.5l3 3 3-3'/%3E%3C/svg%3E"); background-position: right 8px center; background-size: 10px 12px; }
+.prefs.win select.field { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 6' fill='none' stroke='%236b6a77' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m1 1.5 3 3 3-3'/%3E%3C/svg%3E"); background-position: right 10px center; background-size: 8px 6px; }
+.prefs .badge { height: 18px; padding: 0 7px; gap: 5px; border-radius: 9px; font-size: var(--ui-small); font-weight: 500; }
+.prefs .dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-400); }
+.prefs .dot.ok { background: var(--ok); }
+.prefs .dot.bad { background: var(--bad); }
+.prefs .kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 4px; border: 1px solid #d5d4dc; border-bottom-width: 2px; background: #fff; font: 500 11px/1 var(--font-mono); color: var(--ink-700); white-space: nowrap; }
+.prefs .keys { display: flex; gap: 4px; align-items: center; }
+.prefs progress { display: block; width: 100%; height: 6px; accent-color: var(--coral-700); }
+
+/* The microphone: the choice, whether the computer lets the app use it, and how loud it hears now. */
+.prefs .mic { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.prefs .mic-line { display: flex; align-items: center; gap: 10px; }
+.prefs.mac .mic select { width: 220px; }
+.prefs.win .mic { align-items: flex-end; max-width: 330px; text-align: right; }
+.prefs.win .mic-line { flex-direction: row-reverse; gap: 12px; }
+.prefs.win .mic select { width: 200px; }
+.prefs .meter { display: flex; align-items: center; gap: 2px; height: 20px; }
+.prefs .meter i { width: 3px; border-radius: 2px; background: var(--ink-300); }
+.prefs .meter i.on { background: var(--coral-600); }

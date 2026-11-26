@@ -13,6 +13,15 @@ let userData: string
 let app: ElectronApplication
 let win: Page
 
+// Inställningar is a window of its own. It is opened afresh each time, so it shows what the app has now.
+let sw: Page
+async function settings(): Promise<Page> {
+  for (const p of app.windows()) if (p !== win) await p.close()
+  const [p] = await Promise.all([app.waitForEvent('window'), win.getByRole('button', { name: 'Inställningar' }).click()])
+  await p.waitForLoadState()
+  return p
+}
+
 test.beforeAll(async () => {
   config = mkdtempSync(join(tmpdir(), 'byggmote-alone-'))
   userData = mkdtempSync(join(tmpdir(), 'byggmote-alone-user-'))
@@ -38,19 +47,20 @@ test('with no project it asks for one, and says nothing about needing Stommen', 
   await expect(win.getByText('Projekt och Roller hämtas från Stommen')).toHaveCount(0)
 })
 
-test('with no project, Inställningar has a way back to making one', async () => {
-  await win.getByRole('button', { name: 'Inställningar' }).click()
-  await expect(win.getByRole('heading', { name: 'Inställningar', level: 1 })).toBeVisible()
-  await win.getByRole('button', { name: 'Nytt projekt' }).click()
+test('with no project, Inställningar opens in a window of its own and the main window still asks for one', async () => {
+  sw = await settings()
+  await expect(sw.getByRole('tablist', { name: 'Inställningar' })).toBeVisible()
+  await expect(sw.getByRole('tab', { name: 'Allmänt' })).toHaveAttribute('aria-selected', 'true') // the pane's name is the heading
+  await expect(sw.getByRole('heading', { name: 'Allmänt', level: 1 })).toHaveCount(1)
   await expect(win.getByRole('heading', { name: 'Skapa ditt första projekt' })).toBeVisible()
+  await sw.close()
 })
 
 test('a project is made and opens on its overview, from which the meetings are one click away', async () => {
   await win.getByLabel('Projektets namn').fill('Kv. Björken')
   await win.getByRole('button', { name: 'Skapa projekt' }).click()
   await expect(win.getByRole('heading', { name: 'Kv. Björken', level: 1 })).toBeVisible()
-  await win.getByRole('button', { name: 'Gå till mötena' }).click()
-  await expect(win.getByRole('heading', { name: 'Spela in ett möte' })).toBeVisible()
+  await expect(win.getByRole('heading', { name: 'Nästa möte' })).toBeVisible()
   await expect(win.getByRole('button', { name: 'Spela in möte' })).toBeVisible()
 })
 
@@ -78,10 +88,10 @@ test('the window never offered to send anything to Stommen', async () => {
   await expect(win.getByText('Skicka till Stommen')).toHaveCount(0)
 })
 
-test('a computer not yet signed in reaches the Stommen view from Inställningar', async () => {
-  await win.getByRole('button', { name: 'Inställningar' }).click()
-  await win.getByRole('button', { name: 'Koppla till Stommen' }).click()
-  await expect(win.getByRole('heading', { name: 'Stommen', level: 1 })).toBeVisible()
-  await expect(win.getByRole('heading', { name: 'Logga in i Stommen' })).toBeVisible()
-  await expect(win.getByRole('button', { name: 'Logga in' })).toHaveCount(1) // the form's own
+test('a computer not yet signed in reaches Stommen from Inställningar', async () => {
+  sw = await settings()
+  await sw.getByRole('button', { name: 'Koppla till Stommen' }).click()
+  await expect(sw.getByRole('heading', { name: 'Stommen', level: 1 })).toBeVisible()
+  await expect(sw.getByRole('heading', { name: 'Logga in i Stommen' })).toBeVisible()
+  await expect(sw.getByRole('button', { name: 'Logga in' })).toHaveCount(1) // the form's own
 })

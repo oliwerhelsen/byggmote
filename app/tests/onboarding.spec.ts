@@ -6,12 +6,23 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test'
 
+declare const window: { api: import('../src/shared/types').Api }
+
 const here = join(__dirname, '..')
 
 let config: string
 let userData: string
 let app: ElectronApplication
 let win: Page
+
+// Inställningar is a window of its own. It is opened afresh each time, so it shows what the app has now.
+let sw: Page
+async function settings(): Promise<Page> {
+  for (const p of app.windows()) if (p !== win) await p.close()
+  const [p] = await Promise.all([app.waitForEvent('window'), win.getByRole('button', { name: 'Inställningar' }).click()])
+  await p.waitForLoadState()
+  return p
+}
 
 test.beforeAll(async () => {
   config = mkdtempSync(join(tmpdir(), 'byggmote-first-'))
@@ -63,30 +74,30 @@ test('finishing opens the app, and the first run is not shown again', async () =
 })
 
 test('the settings keep a name and a choice, and say where the meetings are', async () => {
-  await win.getByRole('button', { name: 'Inställningar' }).click()
-  await expect(win.getByLabel('Ditt namn')).toHaveValue('Anna Berg')
-  await expect(win.getByText(join(config, 'transcripts'))).toBeVisible()
-  await win.getByLabel('Ditt namn').fill('Anna Maria Berg')
-  await win.getByRole('button', { name: 'Spara namn' }).click()
-  await expect(win.getByText('Sparat.')).toBeVisible()
-  await win.getByRole('tab', { name: 'Inspelning' }).click()
-  const voices = win.getByLabel('Känn igen röster')
+  sw = await settings()
+  await expect(sw.getByLabel('Ditt namn')).toHaveValue('Anna Berg')
+  await expect(sw.getByText(join(config, 'transcripts'))).toBeVisible()
+  await sw.getByLabel('Ditt namn').fill('Anna Maria Berg')
+  await sw.getByLabel('Ditt namn').press('Enter') // kept as it is made: there is no Save
+  await expect.poll(() => win.evaluate(() => window.api.settings().then((s) => s.name))).toBe('Anna Maria Berg')
+  await sw.getByRole('tab', { name: 'Inspelning' }).click()
+  const voices = sw.getByLabel('Känn igen röster')
   await expect(voices).toBeChecked()
   await voices.uncheck()
   // Kept when the main process says so, not when the box looks unticked.
   await expect.poll(() => win.evaluate(async () => (await (globalThis as unknown as { api: { settings(): Promise<{ voices: boolean }> } }).api.settings()).voices)).toBe(false)
   await win.reload()
-  await win.getByRole('button', { name: 'Inställningar' }).click()
-  await expect(win.getByLabel('Ditt namn')).toHaveValue('Anna Maria Berg')
-  await win.getByRole('tab', { name: 'Inspelning' }).click()
-  await expect(win.getByLabel('Känn igen röster')).not.toBeChecked()
+  sw = await settings()
+  await expect(sw.getByLabel('Ditt namn')).toHaveValue('Anna Maria Berg')
+  await sw.getByRole('tab', { name: 'Inspelning' }).click()
+  await expect(sw.getByLabel('Känn igen röster')).not.toBeChecked()
 })
 
 test('the models tab shows how many are installed, and the first run can be shown again', async () => {
-  await win.getByRole('tab', { name: 'Modeller' }).click()
-  await expect(win.getByText(/av \d+ modeller installerade/)).toBeVisible()
-  await win.getByRole('tab', { name: 'Allmänt' }).click()
-  await win.getByRole('button', { name: 'Visa introduktionen' }).click()
+  await sw.getByRole('tab', { name: 'Modeller' }).click()
+  await expect(sw.getByText(/av \d+ modeller installerade/)).toBeVisible()
+  await sw.getByRole('tab', { name: 'Allmänt' }).click()
+  await sw.getByRole('button', { name: 'Visa introduktionen' }).click() // closes Inställningar: the first run is the main window's
   await expect(win.getByRole('heading', { name: 'Välkommen till Byggmöte' })).toBeVisible()
   await expect(win.getByLabel('Ditt namn')).toHaveValue('Anna Maria Berg')
 })

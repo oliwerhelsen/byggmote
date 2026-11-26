@@ -46,9 +46,10 @@ test.afterAll(async () => {
 })
 
 test('a recognised voice is a name to click, and a written name is saved with Enter', async () => {
-  await win.getByRole('button', { name: 'Byggmöte 4' }).click()
-  const card = win.getByRole('region', { name: '2 talare har inget namn' })
-  await expect(card).toBeVisible()
+  await win.getByRole('button', { name: 'Byggmöte 4', exact: true }).first().click()
+  await win.getByRole('button', { name: 'Sätt namn på talare' }).click()
+  const card = win.getByRole('dialog', { name: 'Sätt namn på talare' })
+  await expect(card).toContainText('2 talare har inget namn.')
 
   // Talare 1 sounds like Sara Nyberg, who is offered on her own and not again among the project's people
   const heard = card.getByRole('group', { name: 'Rösten känns igen från ett tidigare möte' })
@@ -56,16 +57,20 @@ test('a recognised voice is a name to click, and a written name is saved with En
   const people = card.getByRole('group', { name: 'I projektet' }).first()
   await expect(people.getByRole('button')).toHaveText(['Maria Lindqvist', 'Anders Holm', 'Jonas Bergström'])
   await heard.getByRole('button', { name: 'Sara Nyberg' }).click()
-  await expect(win.locator('#line-81')).toContainText('Sara Skyddsronden i fredags gick bra.')
+  await expect(card.getByRole('textbox', { name: 'Vem är Talare 1?' })).toHaveCount(0)
+  await expect(card).toContainText('En talare har inget namn.')
 
   // the next one without a name has the focus: a name nobody has is written, and Enter saves it
-  const left = win.getByRole('region', { name: 'En talare har inget namn' })
+  const left = card
+  await expect(left).toContainText('En talare har inget namn.')
   const who = left.getByRole('textbox', { name: 'Vem är Talare 2?' })
   await expect(who).toBeFocused()
   await who.fill('Erik Ek')
   await expect(left).toContainText('Enter sparar ”Erik Ek” som en ny person i projektet.')
   await expect(left.getByRole('group', { name: 'I projektet' })).toHaveCount(0) // nobody in the project is called that
   await who.press('Enter')
+  await expect(card).toBeHidden() // the last name closes the sheet
+  await win.getByRole('tab', { name: 'Utskrift' }).click()
   await expect(win.locator('#line-82')).toContainText('Erik Vi från elfirman har en fråga om schaktet.')
-  await expect(win.getByRole('region', { name: /har inget namn/ })).toHaveCount(0)
+  await expect(win.locator('#line-81')).toContainText('Sara Skyddsronden i fredags gick bra.')
 })

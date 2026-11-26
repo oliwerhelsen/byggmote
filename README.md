@@ -120,6 +120,36 @@ It uses the engine of the checkout (`engine/.venv`), so install that first, or n
 Start it from a terminal: the engine needs `ffmpeg` on the path. Projects are made in the app (Projekt), or come from Stommen when the
 person signs in there; a project from Stommen is Stommen's, and its people and Roller are read, not changed, in the app.
 
+The window keeps to the computer's conventions. Its commands are in the application menu (`app/src/main/menu.ts`: the
+Mac's menu bar, the window's own menu bar on Windows and Linux), each with a shortcut, and a choice there reaches the
+window as a `Command`; what cannot run now is greyed out. On the Mac the window has no title bar of its own, and the
+sidebar and the toolbar reach its top. The sidebar is the project's library: its overview (the next meeting, what is
+open, the meetings, who is in it), the open points as a list of their own, each mötesserie's agenda, and the meetings.
+Text, controls and rows have the Mac's measures or Windows' (`data-platform` in `app.css`); `BYGGMOTE_PLATFORM=win32`
+shows Windows' on a Mac. Inställningar is a window of its own (⌘, / Ctrl+,), drawn as the computer draws one (`views/Settings.svelte`,
+`lib/Row.svelte`, `settings.css`): on the Mac a compact window named after its pane, with the panes as a toolbar of
+icons and each pane a form, and what the app is made of under Om Byggmöte in the app menu (`views/About.svelte`); on
+Windows and Linux the pages down the left side, Om Byggmöte among them, and each page a list of rows with switches.
+The connection to Stommen is one of its panes; a change is kept as it is made, and the other windows read it again. The palette (⌘K / Ctrl+K) runs a command or opens a meeting, an open point
+or another project from a few letters. Nytt möte asks with or without the agenda and that everyone knows, names the
+microphone and shows that it hears (it listens only while the dialog is open); from an agenda the agenda is chosen. A meeting is recorded in a small window of its own that stays over other programs
+(`app/src/main/recording.ts`, `views/RecordWindow.svelte`), with an icon beside the clock that has its commands, and
+shortcuts that work in any program (⌃⌥N for the next heading, ⌃⌥1 to 4 for a mark, ⌃⌥P to pause; Alt+Shift with the
+same keys on Windows and Linux). Those keys are the person's to change under Inspelning in Inställningar
+(`app/src/shared/keys.ts`, `choose` in `recording.ts`): a click on a command, then the new keys, kept in
+`settings.json`; keys another command has, or that the system does not give the app, are refused in words. The main window is free meanwhile, and writes the recording out when the meeting is
+ended. A recording is written out behind the window: it is listed in the sidebar with the step it is
+at, the Dock's icon or the taskbar's button shows that work goes on, several wait their turn, and one that failed
+stays in the list until it has been looked at. A protocol is a document in the window. Its headings are an outline beside the page, and its points are one table on
+the page (number, kind, text, time, Ansvarig, Senast). A click chooses a point: its text is corrected where it stands
+(Enter or leaving the field saves it, Escape puts it back), and its other properties are in the inspector's Punkt tab,
+each saved as it is changed, with the line it was said in and what the engine knows of its history. The inspector's
+other tabs are the transcript (searched from the toolbar) and where the protocol stands with Stommen; the recording is
+a strip under both, with a mark where each point is said, and a status line is at the window's foot. What is done to
+the protocol is in the toolbar (the Mac's icons, a command bar with labels on Windows) and in the Protokoll and Arkiv
+menus. The keys a text field needs for itself (Enter, the space bar, the arrows) are taken by the page when no field
+has the focus (`Protocol.svelte`), and shown in the menu.
+
     npm run check     the types, main process and views
     npm test          builds the app and drives it against a knowledge base the engine writes (no model runs)
 

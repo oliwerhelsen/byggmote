@@ -126,7 +126,10 @@ export type StommenState = { server: string; connected: boolean; user: string; o
 export type StommenSync = { projects: number; people: number; vacant: number }
 
 /** What the person has set in the app itself, kept in the app's own folder. `setUp`: the first-run steps are done. */
-export type Settings = { setUp: boolean; name: string; voices: boolean; openAtLogin: boolean; microphone: string }
+export type Settings = { setUp: boolean; name: string; voices: boolean; openAtLogin: boolean; microphone: string; shortcuts: Shortcuts }
+/** The person's own keys for the recording's shortcuts, as Electron writes a combination (`Control+Alt+P`). One that is
+ * missing is the standard one (app/src/shared/keys.ts). `mark` is the first of the four marks: the others are 2 to 4. */
+export type Shortcuts = Partial<Record<'pause' | 'next' | 'mark', string>>
 /** A model the engine knows, as `byggmote models --json` lists it. */
 export type ModelRow = { id: string; type: 'asr' | 'diarize' | 'llm'; name: string; langs: string[]; model: string; size: number; license: string; downloaded: boolean; min_ram_gb?: number }
 /** This computer as far as the models care: its memory and the free space where the models go, in bytes. */
@@ -182,7 +185,9 @@ export interface Api {
   recordingStop(id: string): Promise<string>
   recordingDiscard(id: string): Promise<void>
   settings(): Promise<Settings>
-  /** Any of the settings but `setUp`. The name and Recognise Voices go on to the engine; opening at login to the system. */
+  /** Any of the settings but `setUp`. The name and Recognise Voices go on to the engine; opening at login to the system.
+   * Of `shortcuts`, the ones named: an empty one goes back to the standard keys. Keys another command has, or that the
+   * system does not give the app, are refused with a sentence for the person. */
   settingsSet(patch: Partial<Omit<Settings, 'setUp'>>): Promise<Settings>
   /** The first-run steps are done, or (`false`) are to be shown again. */
   setUp(done: boolean): Promise<Settings>
@@ -194,9 +199,67 @@ export interface Api {
   /** Where the meetings are kept now, and a way to show or change it. `folderChoose` resolves null when cancelled. */
   folderShow(): Promise<void>
   folderChoose(): Promise<string | null>
+  /** A meeting is recorded in a small window of its own, which stays over other programs. One at a time. */
+  recordOpen(spec: RecordSpec): Promise<void>
+  /** From the recording window: where the recording stands, for the menu, the icon beside the clock and the main window. */
+  recordStatus(status: RecordStatus): Promise<void>
+  /** From the recording window: the recording is saved. The main window writes it out, and the recording window closes. */
+  recordDone(job: Job): Promise<void>
+  /** From the recording window: close it (the recording is thrown away, or never began). */
+  recordClose(): Promise<void>
+  /** Bring the recording window forward. */
+  recordShow(): Promise<void>
+  /** Inställningar, in a window of its own, on the tab named (general, recording, models, stommen, about). */
+  settingsOpen(tab?: string): Promise<void>
+  /** From the settings window: something the other windows show was changed, so they read it again. */
+  changed(): Promise<void>
+  /** From the settings window: the next keys pressed are a shortcut being chosen, so no menu and no recording takes them. */
+  shortcutListen(on: boolean): Promise<void>
+  /** From the settings window on the Mac: how tall its pane is, so the window is as tall. */
+  settingsFit(height: number): Promise<void>
+  /** What the window can do now, so the application menu greys out the rest. */
+  menuState(state: MenuState): Promise<void>
   onProgress(listener: (p: Progress) => void): () => void
   onModels(listener: (e: ModelEvent) => void): () => void
+  /** A choice in the application menu, or its shortcut. */
+  onCommand(listener: (c: Command) => void): () => void
+  /** In the main window: the recording in the other window, or null when there is none. */
+  onRecording(listener: (s: RecordStatus | null) => void): () => void
+  /** In the main and the recording window: the settings, the connection to Stommen or the projects were changed in another window. */
+  onChanged(listener: () => void): () => void
+  /** In the main window: a recording to write out. */
+  onJob(listener: (job: Job) => void): () => void
+  /** In the recording window: a choice in the menu, by the icon beside the clock, or a shortcut pressed in any program. */
+  onRecordCommand(listener: (c: RecordCommand) => void): () => void
+  /** The computer's kind (`process.platform`): the window keeps to its conventions. */
+  platform: string
 }
 
+/** What a recording window is opened for. */
+export type RecordSpec = { projectId: string; projectName: string; series: SeriesRef; agenda: boolean }
+/** Where a recording stands. `seconds`: of recorded sound. `heading` and `next`: the agenda's, as "3. Tidplan". */
+export type RecordStatus = { title: string; phase: 'idle' | 'recording' | 'paused' | 'saving'; seconds: number; heading: string | null; next: string | null }
+/** What is done to a recording from outside its window. `cancel` asks first. */
+export const RECORD_COMMANDS = ['pause', 'next', 'decision', 'todo', 'changeOrder', 'question', 'finish', 'cancel'] as const
+export type RecordCommand = (typeof RECORD_COMMANDS)[number]
+
+/** What the application menu asks the window to do. Each is also a shortcut (app/src/main/menu.ts). */
+export const COMMANDS = ['settings', 'newProject', 'addRecording', 'sync', 'overview', 'points', 'agenda', 'record', 'sidebar', 'intro', 'palette',
+  // about the protocol in the window
+  'saveDocx', 'savePdf', 'saveMd', 'copyText', 'find', 'inspector', 'newPoint', 'nextCheck', 'rename', 'rewrite', 'send',
+  'editPoint', 'removePoint', 'nameSpeakers', 'attend', 'play', 'listen', 'back', 'forward', 'confirmation'] as const
+export type Command = (typeof COMMANDS)[number]
+/** What the menu can do with the meeting in the window. `protocol`: it has one; `free`: that can be corrected;
+ * `sendable`: it can go to Stommen; `inspector`: the panel beside the page is shown; `point`: a point is chosen and can
+ * be changed; `own`: and removed; `said`: and listened to; `sound`: the recording can be played; `unnamed`: a speaker
+ * has no name; `absent`: someone can be added as närvarande; `sent`: Stommen can be asked whether it is justerat. */
+export type DocState = { protocol: boolean; free: boolean; sendable: boolean; inspector: boolean; point: boolean; own: boolean; said: boolean
+  sound: boolean; unnamed: boolean; absent: boolean; sent: boolean }
+export const NO_DOC: DocState = { protocol: false, free: false, sendable: false, inspector: true, point: false, own: false, said: false, sound: false, unnamed: false, absent: false, sent: false }
+/** `ready`: past the first run. `held`: a recording or a job is in the window. `sidebar`: it is shown. `meeting`: one is
+ * open. `typing`: the keys go to a field or a button, or to another window. */
+export type MenuState = { ready: boolean; held: boolean; project: boolean; series: boolean; connected: boolean; sidebar: boolean
+  meeting: boolean; typing: boolean } & DocState
+
 export const CHANNELS = ['projects', 'meetings', 'agenda', 'meeting', 'audio', 'startSeries', 'pickRecording', 'process',
-  'writeProtocol', 'nameSpeaker', 'setTitle', 'changePoint', 'addPoint', 'removePoint', 'restorePoint', 'confirmCheck', 'attend', 'stommenState', 'stommenSignIn', 'stommenSync', 'stommenSignOut', 'stommenSend', 'stommenConfirmation', 'projectAdd', 'projectRename', 'projectDelete', 'personAdd', 'personRemove', 'protocolSave', 'protocolCopy', 'recordingStart', 'recordingChunk', 'recordingStop', 'recordingDiscard', 'settings', 'settingsSet', 'setUp', 'models', 'modelsDownload', 'modelsCancel', 'computer', 'folderShow', 'folderChoose'] as const
+  'writeProtocol', 'nameSpeaker', 'setTitle', 'changePoint', 'addPoint', 'removePoint', 'restorePoint', 'confirmCheck', 'attend', 'stommenState', 'stommenSignIn', 'stommenSync', 'stommenSignOut', 'stommenSend', 'stommenConfirmation', 'projectAdd', 'projectRename', 'projectDelete', 'personAdd', 'personRemove', 'protocolSave', 'protocolCopy', 'recordingStart', 'recordingChunk', 'recordingStop', 'recordingDiscard', 'settings', 'settingsSet', 'setUp', 'models', 'modelsDownload', 'modelsCancel', 'computer', 'folderShow', 'folderChoose', 'menuState', 'recordOpen', 'recordStatus', 'recordDone', 'recordClose', 'recordShow', 'settingsOpen', 'changed', 'shortcutListen', 'settingsFit'] as const
