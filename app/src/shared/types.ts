@@ -236,12 +236,20 @@ export type RecordCommand = (typeof RECORD_COMMANDS)[number]
 /** What the application menu asks the window to do. Each is also a shortcut (app/src/main/menu.ts). */
 export const COMMANDS = ['settings', 'newProject', 'addRecording', 'sync', 'overview', 'points', 'agenda', 'record', 'sidebar', 'intro', 'palette',
   // about the protocol in the window
-  'saveDocx', 'savePdf', 'saveMd', 'copyText', 'find', 'inspector', 'newPoint', 'nextCheck', 'rename', 'rewrite', 'send'] as const
+  'saveDocx', 'savePdf', 'saveMd', 'copyText', 'find', 'inspector', 'newPoint', 'nextCheck', 'rename', 'rewrite', 'send',
+  'editPoint', 'removePoint', 'nameSpeakers', 'attend', 'play', 'listen', 'back', 'forward', 'confirmation'] as const
 export type Command = (typeof COMMANDS)[number]
+/** What the menu can do with the meeting in the window. `protocol`: it has one; `free`: that can be corrected;
+ * `sendable`: it can go to Stommen; `inspector`: the panel beside the page is shown; `point`: a point is chosen and can
+ * be changed; `own`: and removed; `said`: and listened to; `sound`: the recording can be played; `unnamed`: a speaker
+ * has no name; `absent`: someone can be added as närvarande; `sent`: Stommen can be asked whether it is justerat. */
+export type DocState = { protocol: boolean; free: boolean; sendable: boolean; inspector: boolean; point: boolean; own: boolean; said: boolean
+  sound: boolean; unnamed: boolean; absent: boolean; sent: boolean }
+export const NO_DOC: DocState = { protocol: false, free: false, sendable: false, inspector: true, point: false, own: false, said: false, sound: false, unnamed: false, absent: false, sent: false }
 /** `ready`: past the first run. `held`: a recording or a job is in the window. `sidebar`: it is shown. `meeting`: one is
- * open; `protocol`: it has one; `free`: that can be corrected; `sendable`: it can go to Stommen; `inspector`: the transcript is shown. */
+ * open. `typing`: the keys go to a field or a button, or to another window. */
 export type MenuState = { ready: boolean; held: boolean; project: boolean; series: boolean; connected: boolean; sidebar: boolean
-  meeting: boolean; protocol: boolean; free: boolean; sendable: boolean; inspector: boolean }
+  meeting: boolean; typing: boolean } & DocState
 
 export const CHANNELS = ['projects', 'meetings', 'agenda', 'meeting', 'audio', 'startSeries', 'pickRecording', 'process',
   'writeProtocol', 'nameSpeaker', 'setTitle', 'changePoint', 'addPoint', 'removePoint', 'restorePoint', 'confirmCheck', 'attend', 'stommenState', 'stommenSignIn', 'stommenSync', 'stommenSignOut', 'stommenSend', 'stommenConfirmation', 'projectAdd', 'projectRename', 'projectDelete', 'personAdd', 'personRemove', 'protocolSave', 'protocolCopy', 'recordingStart', 'recordingChunk', 'recordingStop', 'recordingDiscard', 'settings', 'settingsSet', 'setUp', 'models', 'modelsDownload', 'modelsCancel', 'computer', 'folderShow', 'folderChoose', 'menuState', 'recordOpen', 'recordStatus', 'recordDone', 'recordClose', 'recordShow', 'settingsOpen', 'changed'] as const

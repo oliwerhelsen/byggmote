@@ -1,12 +1,12 @@
 // The application menu: the Mac's menu bar, the menu bar in the window on Windows and Linux. A command is a message
 // to the window (`Command`), which does it the same way as its own button would. Each has the platform's shortcut.
 import { app, Menu, type BrowserWindow, type MenuItemConstructorOptions } from 'electron'
-import { COMMANDS, type Command, type MenuState } from '../shared/types'
+import { COMMANDS, NO_DOC, type Command, type MenuState } from '../shared/types'
 import { commands as recordCommands, recording } from './recording'
 
 const mac = process.platform === 'darwin'
 
-let state: MenuState = { ready: false, held: false, project: false, series: false, connected: false, sidebar: true, meeting: false, protocol: false, free: false, sendable: false, inspector: true }
+let state: MenuState = { ready: false, held: false, project: false, series: false, connected: false, sidebar: true, meeting: false, typing: true, ...NO_DOC }
 
 /** Whether the window can do it now. A recording or a job in the window is not left by a shortcut. */
 function can(c: Command): boolean {
@@ -17,6 +17,13 @@ function can(c: Command): boolean {
   if (c === 'saveDocx' || c === 'savePdf' || c === 'saveMd' || c === 'copyText' || c === 'nextCheck' || c === 'rename') return state.protocol
   if (c === 'newPoint' || c === 'rewrite') return state.free
   if (c === 'send') return state.sendable
+  if (c === 'editPoint') return state.point
+  if (c === 'removePoint') return state.own
+  if (c === 'listen') return state.said
+  if (c === 'play' || c === 'back' || c === 'forward') return state.sound
+  if (c === 'nameSpeakers') return state.unnamed
+  if (c === 'attend') return state.absent
+  if (c === 'confirmation') return state.sent
   if (c === 'sync') return state.connected
   if (c === 'overview' || c === 'points') return state.project
   if (c === 'record') return state.project && state.series && !recording() // one meeting is recorded at a time
@@ -41,6 +48,11 @@ export function buildMenu(open: () => void = reopen, mainWindows: () => BrowserW
     win.webContents.send('command', c)
   }
   const item = (c: Command, label: string, accelerator?: string): MenuItemConstructorOptions => ({ id: c, label, accelerator, enabled: can(c), click: () => send(c) })
+  // A key a field needs for itself (Enter, the space bar, the arrows): the window takes it (Protocol.svelte), which
+  // knows where the keys go. Windows shows it without taking it. The Mac shows only what the menu takes, so there
+  // it is the menu's too, except while something is typed.
+  const key = (c: Command, label: string, onMac: string, elsewhere: string): MenuItemConstructorOptions =>
+    mac ? item(c, label, state.typing ? undefined : onMac) : { ...item(c, label, elsewhere), registerAccelerator: false }
   const line: MenuItemConstructorOptions = { type: 'separator' }
   const settings = item('settings', 'Inställningar…', 'CmdOrCtrl+,')
 
@@ -102,11 +114,22 @@ export function buildMenu(open: () => void = reopen, mainWindows: () => BrowserW
       label: mac ? 'Protokoll' : '&Protokoll',
       submenu: [
         item('newPoint', 'Ny punkt', 'CmdOrCtrl+N'),
+        key('editPoint', 'Ändra punkt', 'Enter', 'F2'),
+        key('removePoint', 'Ta bort punkt', 'Cmd+Backspace', 'Delete'),
+        line,
         item('nextCheck', 'Nästa att kontrollera', 'CmdOrCtrl+J'),
+        item('nameSpeakers', 'Sätt namn på talare…'),
+        item('attend', 'Lägg till som närvarande…'),
+        line,
+        key('play', 'Spela upp', 'Space', 'Space'),
+        key('listen', 'Lyssna från punkten', 'Alt+Space', 'Ctrl+L'),
+        key('back', 'Hoppa 10 s bakåt', 'Alt+Left', 'Ctrl+Left'),
+        key('forward', 'Hoppa 10 s framåt', 'Alt+Right', 'Ctrl+Right'),
         line,
         item('rewrite', 'Skriv om protokollet…'),
         line,
-        item('send', 'Skicka till Stommen…', 'CmdOrCtrl+Enter')
+        item('send', 'Skicka till Stommen…', 'CmdOrCtrl+Enter'),
+        item('confirmation', 'Se efter om det är justerat')
       ]
     },
     ...(mac
@@ -123,11 +146,9 @@ export function buildMenu(open: () => void = reopen, mainWindows: () => BrowserW
 
 /** The window says what it can do now: the commands that cannot run are greyed out, and their shortcuts do nothing. */
 export function setMenuState(next: MenuState): void {
-  state = {
-    ready: Boolean(next.ready), held: Boolean(next.held), project: Boolean(next.project),
-    series: Boolean(next.series), connected: Boolean(next.connected), sidebar: Boolean(next.sidebar),
-    meeting: Boolean(next.meeting), protocol: Boolean(next.protocol), free: Boolean(next.free), sendable: Boolean(next.sendable), inspector: Boolean(next.inspector)
-  }
+  const typed = state.typing
+  state = Object.fromEntries(Object.keys(state).map((k) => [k, Boolean(next[k as keyof MenuState])])) as MenuState
+  if (mac && state.typing !== typed) return buildMenu() // the keys a field needs are the menu's only while nothing is typed
   const menu = Menu.getApplicationMenu()
   if (!menu) return
   for (const c of COMMANDS) {

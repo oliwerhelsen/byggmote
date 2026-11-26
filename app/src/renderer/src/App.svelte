@@ -1,8 +1,8 @@
 <script lang="ts">
-  import type { Agenda as Headings, Command, Job, MeetingRow, Progress, Project, RecordStatus, SeriesRef, Settings as Kept, StommenState } from '../../shared/types'
+  import { NO_DOC, type Agenda as Headings, type Command, type DocState, type Job, type MeetingRow, type Progress, type Project, type RecordStatus, type SeriesRef, type Settings as Kept, type StommenState } from '../../shared/types'
   import Icon from './lib/Icon.svelte'
   import { clock, failure, minutes, shortDate, standing } from './lib/format'
-  import type { View } from './lib/view'
+  import type { About, View } from './lib/view'
   import Agenda from './views/Agenda.svelte'
   import OpenPoints from './views/OpenPoints.svelte'
   import NewProject from './lib/NewProject.svelte'
@@ -43,8 +43,18 @@
   let sidebar = $state(localStorage.getItem('sidebar') !== 'hidden')
   // The meeting in the window: what the toolbar says of it, what the menu can do with it, and the view to tell.
   let protocol = $state<{ command: (c: Command) => void }>()
-  let meeting = $state({ title: '', sub: '' })
-  let doc = $state({ protocol: false, free: false, sendable: false, inspector: localStorage.getItem('inspector') !== 'hidden' })
+  let meeting = $state<About>({ title: '', edited: false, standing: '' })
+  let doc = $state<DocState>({ ...NO_DOC, inspector: localStorage.getItem('inspector') !== 'hidden' })
+  // Where the keys go: the menu leaves a field its own (Enter, the space bar), and another window's keys alone.
+  let typing = $state(true)
+  $effect(() => {
+    // After the event: a field taken off the page loses the focus while the page is being drawn.
+    const see = (): void => queueMicrotask(() => { typing = !document.hasFocus() || Boolean(document.activeElement?.closest('input, textarea, select, button, a, summary, dialog')) })
+    const on = ['focusin', 'focusout', 'focus', 'blur'] as const
+    for (const e of on) window.addEventListener(e, see)
+    see()
+    return () => { for (const e of on) window.removeEventListener(e, see) }
+  })
   void window.api.settings().then((s) => (settings = s))
 
   const project = $derived(projects.find((p) => p.id === chosen) ?? projects[0])
@@ -194,7 +204,7 @@
   const go = (to: View): void => {
     if (to.name === 'working') return start(to.job)
     if (view.name === 'protocol') stale++ // a protocol was corrected
-    if (to.name === 'protocol') meeting = { title: '', sub: '' }
+    if (to.name === 'protocol') meeting = { title: '', edited: false, standing: '' }
     view = to
   }
 
@@ -208,7 +218,8 @@
     if (file && project) go({ name: 'working', job: { projectId: project.id, seriesId: s.id, file, title: `${s.name} ${s.next}` } })
   }
 
-  const PROTOCOL: Command[] = ['saveDocx', 'savePdf', 'saveMd', 'copyText', 'find', 'inspector', 'newPoint', 'nextCheck', 'rename', 'rewrite', 'send']
+  const PROTOCOL: Command[] = ['saveDocx', 'savePdf', 'saveMd', 'copyText', 'find', 'inspector', 'newPoint', 'nextCheck', 'rename', 'rewrite', 'send',
+    'editPoint', 'removePoint', 'nameSpeakers', 'attend', 'play', 'listen', 'back', 'forward', 'confirmation']
 
   /** A choice in the application menu, or its shortcut. The menu greys out what cannot run; this refuses it too. */
   function command(c: Command): void {
@@ -243,11 +254,14 @@
       if (project.series.length) list.push(cmd('Dagordning', 'agenda', k('⌘3', 'Ctrl+3')), cmd(live ? 'Visa inspelningsfönstret' : 'Spela in möte…', 'record', k('⌘R', 'Ctrl+R')), cmd('Lägg till en inspelning…', 'addRecording', k('⌘O', 'Ctrl+O')))
     }
     if (view.name === 'protocol') {
-      list.push(cmd('Sök i utskriften', 'find', k('⌘F', 'Ctrl+F')), cmd(doc.inspector ? 'Dölj utskriften' : 'Visa utskriften', 'inspector', k('⌥⌘I', 'Ctrl+I')))
+      list.push(cmd('Sök i utskriften', 'find', k('⌘F', 'Ctrl+F')), cmd(doc.inspector ? 'Dölj inspektören' : 'Visa inspektören', 'inspector', k('⌥⌘I', 'Ctrl+I')))
       if (doc.protocol) list.push(cmd('Nästa att kontrollera', 'nextCheck', k('⌘J', 'Ctrl+J')), cmd('Spara som Word…', 'saveDocx', k('⇧⌘S', 'Ctrl+Skift+S')), cmd('Spara som PDF…', 'savePdf'), cmd('Spara som Markdown…', 'saveMd'),
         cmd('Kopiera texten', 'copyText', k('⇧⌘C', 'Ctrl+Skift+C')), cmd('Byt namn på mötet…', 'rename'))
       if (doc.free) list.push(cmd('Ny punkt', 'newPoint', k('⌘N', 'Ctrl+N')), cmd('Skriv om protokollet…', 'rewrite'))
       if (doc.sendable) list.push(cmd('Skicka till Stommen…', 'send', k('⌘⏎', 'Ctrl+Enter')))
+      if (doc.unnamed) list.push(cmd('Sätt namn på talare…', 'nameSpeakers'))
+      if (doc.absent) list.push(cmd('Lägg till som närvarande…', 'attend'))
+      if (doc.sent) list.push(cmd('Se efter om det är justerat', 'confirmation'))
     }
     list.push(cmd('Nytt projekt…', 'newProject', k('⇧⌘N', 'Ctrl+Skift+N')), cmd('Inställningar…', 'settings', k('⌘,', 'Ctrl+,')), cmd(sidebar ? 'Dölj sidopanelen' : 'Visa sidopanelen', 'sidebar', k('⌃⌘S', 'Ctrl+B')))
     if (stommen?.connected) list.push(cmd('Hämta från Stommen', 'sync', k('⇧⌘U', 'F5')))
@@ -262,8 +276,8 @@
   $effect(() => {
     void window.api.menuState({
       ready: loaded && Boolean(settings?.setUp), held: false, project: Boolean(project), series: Boolean(project?.series.length),
-      connected: Boolean(stommen?.connected), sidebar, ...doc, meeting: view.name === 'protocol',
-      ...(view.name === 'protocol' ? {} : { protocol: false, free: false, sendable: false })
+      connected: Boolean(stommen?.connected), sidebar, meeting: view.name === 'protocol', typing,
+      ...(view.name === 'protocol' ? doc : { ...NO_DOC, inspector: doc.inspector })
     })
   })
 </script>
@@ -371,25 +385,28 @@
   {/if}
 
   <div class="content">
-    <header class="drag" class:alone={!sidebar}>
+    <header class="drag" class:alone={!sidebar} class:document={view.name === 'protocol'}>
       <button class="tool" aria-label={sidebar ? 'Dölj sidopanelen' : 'Visa sidopanelen'} aria-pressed={sidebar} onclick={() => showSidebar(!sidebar)}>
         <Icon name="sidebar" size={17} />
       </button>
       <div class="titles">
         {#if view.name === 'protocol' && meeting.title}
-          <p class="title">{meeting.title}</p>
-          <p class="sub">{meeting.sub}</p>
+          <p class="title">{meeting.title}{#if meeting.edited}<span class="edited">Redigerat</span>{/if}</p>
+          <p class="sub">{project?.name}</p>
         {:else}
           <p class="title">{TITLES[view.name]}</p>
           {#if project}<p class="sub">{project.name}</p>{/if}
         {/if}
       </div>
+      {#if view.name === 'protocol' && meeting.standing}
+        <span class="standing" class:done={meeting.standing === 'done'}><span></span>{meeting.standing === 'done' ? 'Justerat' : 'Utkast'}</span>
+      {/if}
       <span class="grow"></span>
       <!-- A view puts what is done in it here (Protocol.svelte). -->
       <div id="tools"></div>
       {#if live}
         <button class="btn rec" onclick={() => window.api.recordShow()}>{live.phase === 'paused' ? 'Pausad' : 'Spelar in'} {clock(live.seconds)}</button>
-      {:else if project?.series.length}
+      {:else if project?.series.length && view.name !== 'protocol'}
         <button class="btn rec" onclick={() => recorder?.show(project.series[0])}>Spela in</button>
       {/if}
     </header>
@@ -432,7 +449,7 @@
           {:else if view.name === 'protocol'}
             {#key view.dir}
               <Protocol bind:this={protocol} {project} dir={view.dir} problem={view.problem ?? ''} connected={Boolean(stommen?.connected)} {go} refresh={load}
-                about={(title, sub) => (meeting = { title, sub })} state={(s) => (doc = s)} />
+                about={(a) => (meeting = a)} state={(s) => (doc = s)} />
             {/key}
           {/if}
         {/key}
@@ -507,6 +524,16 @@
   .rec::before { content: ''; width: 9px; height: 9px; border-radius: 50%; background: #fff; }
   .rec { background: var(--coral-700); border-color: var(--coral-800); color: #fff; font-weight: 600; }
   #tools { display: flex; align-items: center; min-width: 0; }
+  /* A protocol is a document: the Mac's toolbar has its title, whether it is corrected and where it stands; on
+     Windows those are in the window's title bar, and the bar is the document's commands from edge to edge. */
+  :global(:root[data-platform='mac']) .document .title { font-size: 15px; }
+  .edited { margin-left: 7px; font-size: 12px; font-weight: 400; color: var(--ink-500); }
+  .standing { display: inline-flex; align-items: center; gap: 5px; flex: none; height: 18px; margin-left: 6px; padding: 0 7px; border-radius: 9px; background: var(--warn-bg); font-size: var(--ui-small); font-weight: 500; white-space: nowrap; }
+  .standing span { width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
+  .standing.done { background: var(--ok-bg); }
+  .standing.done span { background: var(--ok); }
+  :global(:root[data-platform='win']) .document :is(.titles, .standing, .grow) { display: none; }
+  :global(:root[data-platform='win']) .document #tools { flex: 1 1 auto; }
   main { flex: 1 1 auto; min-height: 0; overflow: auto; }
 
   .strip { position: fixed; inset: 0 0 auto 0; height: 0; z-index: 1; }
