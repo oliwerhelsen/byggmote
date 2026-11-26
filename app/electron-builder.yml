@@ -53,5 +53,7 @@ mac:
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
+    # Not CFBundleName: Electron finds its helper apps by it ("<CFBundleName> Helper.app"), and with an ö the app stops
+    # at start (Unable to find helper app). So the menu bar of the installed app says Byggmote.
     CFBundleDisplayName: Byggmöte
     NSMicrophoneUsageDescription: Byggmöte spelar in mötet med mikrofonen. Ljudet stannar på datorn.
