@@ -28,7 +28,6 @@
       <p class="muted">Rubrikerna är seriens. Under dem står de punkter som tidigare möten lämnade öppna.</p>
     </div>
     <div class="row">
-      <button class="btn" onclick={() => go({ name: 'meetings' })}><Icon name="back" /> Till möten</button>
       <button class="btn primary" onclick={() => recorder?.show(series, true)}><Icon name="mic" /> Spela in mötet</button>
     </div>
   </div>

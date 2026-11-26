@@ -204,7 +204,7 @@ export interface Api {
 }
 
 /** What the application menu asks the window to do. Each is also a shortcut (app/src/main/menu.ts). */
-export const COMMANDS = ['settings', 'newProject', 'addRecording', 'sync', 'overview', 'meetings', 'agenda', 'record', 'sidebar', 'intro',
+export const COMMANDS = ['settings', 'newProject', 'addRecording', 'sync', 'overview', 'points', 'agenda', 'record', 'sidebar', 'intro',
   // about the protocol in the window
   'saveDocx', 'savePdf', 'saveMd', 'copyText', 'find', 'inspector', 'newPoint', 'nextCheck', 'rename', 'rewrite', 'send'] as const
 export type Command = (typeof COMMANDS)[number]

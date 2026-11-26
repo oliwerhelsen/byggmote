@@ -17,7 +17,7 @@ function can(c: Command): boolean {
   if (c === 'newPoint' || c === 'rewrite') return state.free
   if (c === 'send') return state.sendable
   if (c === 'sync') return state.connected
-  if (c === 'overview' || c === 'meetings') return state.project
+  if (c === 'overview' || c === 'points') return state.project
   if (c === 'agenda' || c === 'record' || c === 'addRecording') return state.project && state.series
   return true
 }
@@ -73,8 +73,8 @@ export function buildMenu(reopen: () => void): void {
       label: mac ? 'Visa' : '&Visa',
       submenu: [
         item('overview', 'Översikt', 'CmdOrCtrl+1'),
-        item('meetings', 'Möten', 'CmdOrCtrl+2'),
-        item('agenda', 'Dagordning', 'CmdOrCtrl+4'),
+        item('points', 'Öppna punkter', 'CmdOrCtrl+2'),
+        item('agenda', 'Dagordning', 'CmdOrCtrl+3'),
         line,
         { ...item('sidebar', 'Visa sidopanelen', mac ? 'Ctrl+Cmd+S' : 'Ctrl+B'), type: 'checkbox', checked: state.sidebar },
         { ...item('inspector', 'Visa utskriften', mac ? 'Alt+Cmd+I' : 'Ctrl+I'), type: 'checkbox', checked: state.inspector },

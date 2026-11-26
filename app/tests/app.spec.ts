@@ -34,19 +34,19 @@ test.afterAll(async () => {
   rmSync(config, { recursive: true, force: true })
 })
 
-// A protocol is left through the sidebar; the agenda and a recording have their own way back.
-const toMeetings = (): Promise<void> => win.getByRole('navigation', { name: 'Huvudmeny' }).getByRole('button', { name: 'Möten', exact: true }).click()
+// Every test starts on the project's overview, reached through the sidebar; a recording has its own way back.
+const toOverview = (): Promise<void> => win.getByRole('navigation', { name: 'Huvudmeny' }).getByRole('button', { name: 'Översikt' }).click()
 
 test.beforeEach(async () => {
-  if (await win.getByRole('button', { name: 'Till möten' }).count()) await win.getByRole('button', { name: 'Till möten' }).click()
-  else await toMeetings()
-  await expect(win.getByRole('heading', { name: 'Tidigare möten' })).toBeVisible()
+  if (await win.getByRole('button', { name: 'Till översikten' }).count()) await win.getByRole('button', { name: 'Till översikten' }).click()
+  else await toOverview()
+  await expect(win.getByRole('heading', { name: 'Möten', exact: true })).toBeVisible()
 })
 
 test('the meetings of a project, the next one and what is still open', async () => {
-  await expect(win.getByRole('heading', { name: 'Spela in ett möte' })).toBeVisible()
+  await expect(win.getByRole('heading', { name: 'Nästa möte' })).toBeVisible()
   await expect(win.getByText('En öppen punkt följer med från tidigare möten. En har passerat sitt datum.')).toBeVisible()
-  const rows = win.locator('tbody tr')
+  const rows = win.getByRole('region', { name: 'Möten', exact: true }).locator('tbody tr')
   await expect(rows).toHaveCount(2)
   await expect(rows.nth(0)).toContainText('Byggmöte 4')
   await expect(rows.nth(0)).toContainText('Utkast, 1 att kontrollera')
@@ -105,7 +105,7 @@ test('nothing is recorded before everyone knows', async () => {
   await start.click()
   await expect(win.getByRole('heading', { name: 'Byggmöte 5' })).toBeVisible()
   await expect(win.locator('.heading')).toHaveCount(11)
-  await win.getByRole('button', { name: /Till möten|Avbryta inspelningen|Avbryt inspelningen/ }).click()
+  await win.getByRole('button', { name: /Till översikten|Avbryta inspelningen|Avbryt inspelningen/ }).click()
 })
 
 test('a meeting can be recorded without an agenda', async () => {
@@ -130,7 +130,7 @@ test('a person says an amount is right, and takes it back', async () => {
   await expect(decision).toContainText('Beloppet 86 500 kr är kontrollerat mot inspelningen.')
   await expect(win.getByText('En sak ska kontrolleras')).toHaveCount(0)
 
-  await toMeetings()
+  await toOverview()
   const row = win.locator('tbody tr').filter({ hasText: 'Byggmöte 4' })
   await expect(row).toContainText('Utkast')
   await expect(row).not.toContainText('att kontrollera')
@@ -165,7 +165,7 @@ test('a point is changed in its form, and what stays open is on the next agenda'
   await expect(form).toContainText('Modellen skrev: ”Stommen på plan tre är klar.”')
   await form.getByRole('button', { name: 'Avbryt' }).click()
 
-  await toMeetings()
+  await toOverview()
   await expect(win.getByRole('region', { name: 'Öppna punkter' })).toContainText('4.3.1')
 })
 
@@ -245,7 +245,8 @@ test('the application menu opens the views, and greys out what cannot run', asyn
   await expect(win.getByRole('heading', { name: 'Inställningar', level: 1 })).toBeVisible()
   expect(await enabled('sync')).toBe(false) // nothing to fetch from: Stommen is not connected
   expect(await enabled('record')).toBe(true)
-  await menu('meetings')
+  await menu('points')
+  await expect(win.getByRole('button', { name: 'Öppna i protokollet' })).toBeVisible()
 })
 
 test('the sidebar lists the meetings of the project, opens one, and can be put away', async () => {
@@ -274,6 +275,22 @@ test('a protocol is a document: an outline to its headings, and its commands in 
   await expect(win.getByRole('heading', { name: 'Utskrift' })).toHaveCount(0)
   await menu('find') // brings the transcript back, with its search
   await expect(win.getByPlaceholder('Sök i utskriften')).toBeFocused()
-  await toMeetings()
+  await toOverview()
   expect(await enabled('saveDocx')).toBe(false)
+})
+
+test('the open points of the project are a list of their own, and one opens in its protocol', async () => {
+  const side = win.getByRole('navigation', { name: 'Huvudmeny' })
+  await side.getByRole('button', { name: /Öppna punkter/ }).click()
+  const rows = win.locator('tbody tr')
+  await expect(rows.filter({ hasText: '3.4.1' })).toContainText('Byggmöte 3')
+  await win.getByPlaceholder('Sök bland punkterna').fill('finns inte')
+  await expect(win.getByText('Ingen punkt stämmer med urvalet.')).toBeVisible()
+  await win.getByPlaceholder('Sök bland punkterna').fill('')
+  await win.getByRole('button', { name: 'Förfallna' }).click()
+  await expect(rows.filter({ hasText: '3.4.1' })).toBeVisible()
+  await win.getByRole('button', { name: 'Öppna i protokollet' }).click()
+  await expect(win.getByRole('heading', { name: 'Protokoll, byggmöte 3' })).toBeVisible()
+  await side.getByRole('button', { name: /Dagordning inför byggmöte 5/ }).click()
+  await expect(win.getByRole('heading', { name: 'Dagordning, byggmöte 5' })).toBeVisible()
 })

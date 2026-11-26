@@ -124,7 +124,7 @@ test.beforeAll(async () => {
   app = await electron.launch({ args, cwd: here, env: { ...process.env, ...none, BYGGMOTE_CONFIG: config, BYGGMOTE_HIDDEN: '1',
     BYGGMOTE_USER_DATA: userData, BYGGMOTE_NO_KEYCHAIN: '1', BYGGMOTE_SETUP: '1' } })
   win = await app.firstWindow()
-  await expect(win.getByRole('heading', { name: 'Tidigare möten' })).toBeVisible()
+  await expect(win.getByRole('heading', { name: 'Möten', exact: true })).toBeVisible()
 })
 
 test.afterAll(async () => {
@@ -271,7 +271,6 @@ test('a protocol goes to Stommen when the person sends it, with its points and w
   await signIn(PASSWORD)
   await expect(win.getByRole('heading', { name: 'Inloggad som Maria Lindqvist' })).toBeVisible()
   await win.getByLabel('Projekt', { exact: true }).selectOption({ label: 'Kv. Eken kontorshus' })
-  await win.getByRole('button', { name: 'Möten', exact: true }).click() // choosing a project opens its overview
   await win.getByRole('button', { name: 'Byggmöte 4', exact: true }).click()
   const card = win.getByRole('region', { name: 'Till Stommen' })
   await expect(card).toContainText('Protokollet är inte skickat.')
@@ -335,7 +334,7 @@ test('a protocol justerat in Stommen meanwhile is not replaced, and the meeting 
 
 test('the meeting asks Stommen when it is opened, and Stommen wins', async () => {
   adjusted = { on: '2026-11-24', method: 'signed', by: 'Maria Lindqvist och Elin Sjöberg' } // registered again in Stommen
-  await win.getByRole('navigation', { name: 'Huvudmeny' }).getByRole('button', { name: 'Möten', exact: true }).click()
+  await win.getByRole('navigation', { name: 'Huvudmeny' }).getByRole('button', { name: 'Översikt' }).click()
   const before = seen.length
   await win.getByRole('button', { name: 'Byggmöte 4', exact: true }).click()
   const card = win.getByRole('region', { name: 'Till Stommen' })
@@ -356,7 +355,7 @@ test('a Stommen that cannot say yet is quiet when the meeting opens, and says wh
   adjusted = null
   older = true
   try {
-    await win.getByRole('navigation', { name: 'Huvudmeny' }).getByRole('button', { name: 'Möten', exact: true }).click()
+    await win.getByRole('navigation', { name: 'Huvudmeny' }).getByRole('button', { name: 'Översikt' }).click()
     await win.getByRole('button', { name: 'Byggmöte 4', exact: true }).click()
     const card = win.getByRole('region', { name: 'Till Stommen' })
     // what was known last stays, and nothing alarms
