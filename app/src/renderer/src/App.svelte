@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Agenda as Headings, Command, MeetingRow, Project, SeriesRef, Settings as Kept, StommenState } from '../../shared/types'
+  import type { Agenda as Headings, Command, Job, MeetingRow, Progress, Project, SeriesRef, Settings as Kept, StommenState } from '../../shared/types'
   import Icon from './lib/Icon.svelte'
   import { failure, minutes, shortDate, standing } from './lib/format'
   import type { View } from './lib/view'
@@ -13,7 +13,7 @@
   import Recording from './views/Recording.svelte'
   import Settings from './views/Settings.svelte'
   import Stommen from './views/Stommen.svelte'
-  import Working from './views/Working.svelte'
+  import Working, { STEPS, type Run } from './views/Working.svelte'
 
   const TITLES: Record<View['name'], string> = {
     points: 'Öppna punkter',
@@ -53,10 +53,10 @@
   void window.api.settings().then((s) => (settings = s))
 
   const project = $derived(projects.find((p) => p.id === chosen) ?? projects[0])
-  // A recording or a job in progress is not left by a click in the menu.
+  // A recording is not left by a click in the menu. A job is: it goes on behind whatever the window shows.
   // The views that are not about the chosen project's meetings.
   const elsewhere = $derived(view.name === 'stommen' || view.name === 'settings')
-  const held = $derived(view.name === 'recording' || view.name === 'working')
+  const held = $derived(view.name === 'recording')
 
   async function load(): Promise<void> {
     try {
@@ -132,8 +132,65 @@
     choose(id)
   }
 
+  // The recordings being written out, in the order they came. One is worked on at a time, and the window is free
+  // meanwhile; one that failed stays in the list, saying so, until the person has seen it.
+  let runs = $state<Run[]>([])
+  let shown = $state(0) // the run the job view shows
+  let last = 0
+  let working = false
+  const AT: Record<string, number> = { extract: 0, asr: 1, diarize: 2, merge: 3, write: 3, protocol: 4 }
+
+  function start(job: Job): void {
+    runs.push({ id: ++last, job, at: 0, fraction: 0, problem: '' })
+    shown = last
+    view = { name: 'working', job }
+    void work()
+  }
+
+  async function work(): Promise<void> {
+    if (working) return
+    working = true
+    try {
+      for (;;) {
+        const run = runs.find((r) => !r.problem)
+        if (!run) return
+        try {
+          const done = await window.api.process($state.snapshot(run.job))
+          runs = runs.filter((r) => r.id !== run.id)
+          stale++
+          // Whoever is watching the job is taken to its protocol; anyone else finds the meeting in the sidebar.
+          if (view.name === 'working' && shown === run.id && project?.id === run.job.projectId) view = { name: 'protocol', dir: done.dir, problem: done.protocolError ?? undefined }
+        } catch (e) {
+          run.problem = failure(e)
+        }
+      }
+    } finally {
+      working = false
+    }
+  }
+
+  /** The engine's steps, as the job view counts them. It loads a model before the second and the third. */
+  function heard(p: Progress): void {
+    const run = runs.find((r) => !r.problem)
+    if (!run) return
+    const i = AT[p.step.split(':')[0]]
+    if (i === undefined) {
+      if (p.step === 'load' && p.state === 'start' && run.at < 2) (run.at += 1), (run.fraction = 0)
+      return
+    }
+    if (i > run.at) (run.at = i), (run.fraction = 0)
+    if (i === run.at) run.fraction = p.state === 'done' ? 1 : p.state === 'progress' ? (p.fraction ?? 0) : run.fraction
+  }
+  $effect(() => window.api.onProgress(heard))
+
+  function dismiss(id: number): void {
+    runs = runs.filter((r) => r.id !== id)
+    view = { name: 'overview' }
+  }
+
   const go = (to: View): void => {
-    if (view.name === 'working' || view.name === 'protocol') stale++ // a job left a meeting behind, or a protocol was corrected
+    if (to.name === 'working') return start(to.job)
+    if (view.name === 'protocol') stale++ // a protocol was corrected
     if (to.name === 'protocol') meeting = { title: '', sub: '' }
     view = to
   }
@@ -223,6 +280,18 @@
         {/each}
 
         <div class="library">
+          {#if runs.length}
+            <p class="side-head"><span>Skrivs ut</span></p>
+            {#each runs as r (r.id)}
+              {@const here = view.name === 'working' && shown === r.id}
+              <button class="meeting" class:current={here} aria-current={here ? 'page' : undefined} disabled={held}
+                onclick={() => { shown = r.id; view = { name: 'working', job: r.job } }}>
+                <span class="l1"><span class="name">{r.job.title}</span></span>
+                <span class="l2">{r.problem ? 'Gick inte att skriva ut' : r === runs.find((x) => !x.problem) ? `${STEPS[r.at]} · steg ${r.at + 1} av ${STEPS.length}` : 'Väntar på sin tur'}</span>
+                {#if !r.problem}<span class="bar"><span style="width: {((r.at + r.fraction) / STEPS.length) * 100}%"></span></span>{/if}
+              </button>
+            {/each}
+          {/if}
           {#each groups as g (g.id)}
             <p class="side-head"><span>{g.name}</span><span class="count">{g.rows.length === 1 ? '1 möte' : `${g.rows.length} möten`}</span></p>
             {#each g.rows as r (r.dir)}
@@ -330,7 +399,8 @@
           {:else if view.name === 'recording'}
             <Recording {project} series={view.series} agenda={view.agenda} {go} />
           {:else if view.name === 'working'}
-            <Working job={view.job} {go} />
+            {@const run = runs.find((r) => r.id === shown)}
+            {#if run}<Working {run} waiting={run !== runs.find((r) => !r.problem) && !run.problem} dismiss={() => dismiss(run.id)} />{/if}
           {:else if view.name === 'protocol'}
             {#key view.dir}
               <Protocol bind:this={protocol} {project} dir={view.dir} problem={view.problem ?? ''} connected={Boolean(stommen?.connected)} {go} refresh={load}
@@ -379,6 +449,10 @@
   .meeting .l1 { display: flex; align-items: baseline; gap: 8px; font-weight: 600; white-space: nowrap; }
   .meeting .name { overflow: hidden; text-overflow: ellipsis; }
   .meeting .when { margin-left: auto; font-weight: 400; font-size: var(--ui-small); color: var(--ink-500); }
+  .meeting .bar { display: block; height: 3px; margin-top: 4px; border-radius: 2px; background: rgb(0 0 0 / 0.12); overflow: hidden; }
+  .meeting .bar span { display: block; height: 100%; background: var(--coral-700); transition: width 0.3s; }
+  :global(:root[data-platform='mac']) .meeting.current .bar { background: rgb(255 255 255 / 0.35); }
+  :global(:root[data-platform='mac']) .meeting.current .bar span { background: #fff; }
   .meeting .l2 { font-size: var(--ui-small); color: var(--ink-500); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* The chosen row: the Mac's solid accent, Windows' tint with the accent bar at its edge. */
   .item.current, .meeting.current { background: rgb(201 58 66 / 0.1); box-shadow: inset 3px 0 0 var(--coral-700); }

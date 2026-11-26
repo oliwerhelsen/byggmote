@@ -3,7 +3,7 @@
 // person corrects in a protocol is there when the engine is asked again. The tests share the knowledge base and run
 // in order: the later ones correct the protocol the earlier ones read.
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test'
@@ -293,4 +293,24 @@ test('the open points of the project are a list of their own, and one opens in i
   await expect(win.getByRole('heading', { name: 'Protokoll, byggmöte 3' })).toBeVisible()
   await side.getByRole('button', { name: /Dagordning inför byggmöte 5/ }).click()
   await expect(win.getByRole('heading', { name: 'Dagordning, byggmöte 5' })).toBeVisible()
+})
+
+// Last: it leaves a recording that could not be written out among the project's meetings.
+test('a recording is written out behind the window, and one that fails says so until it is seen', async () => {
+  const file = join(config, 'not-sound.m4a')
+  writeFileSync(file, 'not sound')
+  await app.evaluate(({ dialog }, picked) => {
+    dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [picked] })) as unknown as typeof dialog.showOpenDialog
+  }, file)
+  await menu('addRecording')
+  await expect(win.getByRole('heading', { name: 'Byggmöte 5', level: 1 })).toBeVisible()
+  const side = win.getByRole('navigation', { name: 'Huvudmeny' })
+  await expect(side.getByText('Skrivs ut', { exact: true })).toBeVisible()
+  await toOverview() // the window is free meanwhile
+  await expect(win.getByRole('heading', { name: 'Möten', exact: true })).toBeVisible()
+  await expect(side.getByText('Gick inte att skriva ut')).toBeVisible({ timeout: 45_000 })
+  await side.getByRole('button', { name: /Byggmöte 5/ }).click()
+  await expect(win.getByText('Det gick inte att skriva ut inspelningen.')).toBeVisible()
+  await win.getByRole('button', { name: 'Till översikten' }).click()
+  await expect(side.getByText('Skrivs ut', { exact: true })).toHaveCount(0)
 })
