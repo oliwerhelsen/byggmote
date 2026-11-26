@@ -1,37 +1,21 @@
+<script lang="ts" module>
+  import type { Job } from '../../../shared/types'
+
+  // The engine's steps, as a person would name them.
+  export const STEPS = ['Ljudet läses in', 'Talet skrivs ut', 'Talarna skiljs åt', 'Utskriften sparas', 'Protokollet skrivs']
+  /** A recording on its way to a protocol: the step it is at and how far into it, or why it stopped. The window keeps
+   * these (App.svelte), so the work goes on whatever the window shows. */
+  export type Run = { id: number; job: Job; at: number; fraction: number; problem: string }
+</script>
+
 <script lang="ts">
-  import type { Job, Progress } from '../../../shared/types'
   import Icon from '../lib/Icon.svelte'
-  import { failure } from '../lib/format'
-  import type { Go } from '../lib/view'
 
-  let { job, go }: { job: Job; go: Go } = $props()
-
-  // The engine's steps, as a person would name them. It loads a model before the second and the third.
-  const STEPS = ['Ljudet läses in', 'Talet skrivs ut', 'Talarna skiljs åt', 'Utskriften sparas', 'Protokollet skrivs']
-  const AT: Record<string, number> = { extract: 0, asr: 1, diarize: 2, merge: 3, write: 3, protocol: 4 }
-
-  let at = $state(0)
-  let fraction = $state(0)
-  let problem = $state('')
-
-  function heard(p: Progress): void {
-    const i = AT[p.step.split(':')[0]]
-    if (i === undefined) {
-      if (p.step === 'load' && p.state === 'start' && at < 2) (at += 1), (fraction = 0)
-      return
-    }
-    if (i > at) (at = i), (fraction = 0)
-    if (i === at) fraction = p.state === 'done' ? 1 : p.state === 'progress' ? (p.fraction ?? 0) : fraction
-  }
-
-  $effect(() => {
-    const off = window.api.onProgress(heard)
-    window.api
-      .process($state.snapshot(job))
-      .then((done) => go({ name: 'protocol', dir: done.dir, problem: done.protocolError ?? undefined }))
-      .catch((e) => (problem = failure(e)))
-    return off
-  })
+  let { run, waiting, dismiss }: { run: Run; waiting: boolean; dismiss: () => void } = $props()
+  const job = $derived(run.job)
+  const at = $derived(run.at)
+  const fraction = $derived(run.fraction)
+  const problem = $derived(run.problem)
 </script>
 
 <div class="page narrow">
@@ -49,9 +33,11 @@
         <p><strong>Det gick inte att skriva ut inspelningen.</strong> Den ligger kvar där den var, så inget är förlorat.</p>
         <p class="small mono">{problem}</p>
         <p class="small mono">{job.file}</p>
-        <button class="btn" style="margin-top: 12px" onclick={() => go({ name: 'overview' })}>Till översikten</button>
+        <button class="btn" style="margin-top: 12px" onclick={dismiss}>Till översikten</button>
       </div>
     </div>
+  {:else if waiting}
+    <div class="note" role="status"><Icon name="clock" /><p><strong>Väntar på sin tur.</strong> Ett annat möte skrivs ut först. Inspelningen är sparad.</p></div>
   {:else}
     <section class="card" aria-live="polite">
       <ol>
@@ -70,7 +56,7 @@
         {/each}
       </ol>
       <p class="small muted" style="margin-top: 16px">
-        Ett möte på en timme tar några minuter. Låt fönstret vara öppet så länge.
+        Ett möte på en timme tar några minuter. Du kan arbeta vidare i andra möten så länge, men låt Byggmöte vara igång.
       </p>
     </section>
   {/if}

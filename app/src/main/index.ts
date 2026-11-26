@@ -147,22 +147,31 @@ function handlers(tell: (p: Progress) => void, tellModels: (e: ModelEvent) => vo
 
     async process(job: Job): Promise<Done> {
       if (!recordings.has(job.file)) throw new Error('unknown recording')
-      const dir = await run([job.file, '--area', job.projectId, '--title', job.title], (e) => {
-        if (e.event === 'step' && e.step) tell({ step: e.step, state: e.status === 'done' ? 'done' : 'start' })
-        if (e.event === 'progress' && e.step) tell({ step: e.step, state: 'progress', fraction: e.fraction })
-      })
-      meetings.add(resolve(dir))
-      if (job.file.startsWith(scratch())) await rm(job.file, { force: true }) // the meeting has its own copy now
-      recordings.delete(job.file)
-      if (job.marks) await writeFile(join(dir, 'marks.json'), JSON.stringify(job.marks, null, 1) + '\n', 'utf8')
-      tell({ step: 'protocol', state: 'start' })
+      // The Dock's icon and the taskbar's button show that work is going on, also with the window behind another.
+      const busy = (on: boolean): void => {
+        for (const w of BrowserWindow.getAllWindows()) w.setProgressBar(on ? 2 : -1) // above 1: at work, how far is not said
+      }
+      busy(true)
       try {
-        await call(['protocol', dir, '--series', job.seriesId])
-        return { dir, protocolError: null }
-      } catch (e) {
-        return { dir, protocolError: (e as Error).message } // the transcript is there: the protocol can be written again
+        const dir = await run([job.file, '--area', job.projectId, '--title', job.title], (e) => {
+          if (e.event === 'step' && e.step) tell({ step: e.step, state: e.status === 'done' ? 'done' : 'start' })
+          if (e.event === 'progress' && e.step) tell({ step: e.step, state: 'progress', fraction: e.fraction })
+        })
+        meetings.add(resolve(dir))
+        if (job.file.startsWith(scratch())) await rm(job.file, { force: true }) // the meeting has its own copy now
+        recordings.delete(job.file)
+        if (job.marks) await writeFile(join(dir, 'marks.json'), JSON.stringify(job.marks, null, 1) + '\n', 'utf8')
+        tell({ step: 'protocol', state: 'start' })
+        try {
+          await call(['protocol', dir, '--series', job.seriesId])
+          return { dir, protocolError: null }
+        } catch (e) {
+          return { dir, protocolError: (e as Error).message } // the transcript is there: the protocol can be written again
+        } finally {
+          tell({ step: 'protocol', state: 'done' })
+        }
       } finally {
-        tell({ step: 'protocol', state: 'done' })
+        busy(false)
       }
     },
 

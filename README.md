@@ -126,7 +126,9 @@ window as a `Command`; what cannot run now is greyed out. On the Mac the window 
 sidebar and the toolbar reach its top. The sidebar is the project's library: its overview (the next meeting, what is
 open, the meetings, who is in it), the open points as a list of their own, each mötesserie's agenda, and the meetings.
 Text, controls and rows have the Mac's measures or Windows' (`data-platform` in `app.css`); `BYGGMOTE_PLATFORM=win32`
-shows Windows' on a Mac. A protocol is a document in the window: an outline of its headings, the page, the transcript
+shows Windows' on a Mac. A recording is written out behind the window: it is listed in the sidebar with the step it is
+at, the Dock's icon or the taskbar's button shows that work goes on, several wait their turn, and one that failed
+stays in the list until it has been looked at. A protocol is a document in the window: an outline of its headings, the page, the transcript
 beside it (it can be put away) and the recording under both, with what is done to it in the toolbar and in the
 Protokoll and Arkiv menus (Ny punkt, Nästa att kontrollera, Spara som, Skicka till Stommen).
 
