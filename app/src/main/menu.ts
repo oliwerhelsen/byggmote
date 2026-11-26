@@ -33,10 +33,10 @@ function can(c: Command): boolean {
 
 let reopen: () => void = () => {}
 let mains: () => BrowserWindow[] = () => []
-let settingsWindow: () => void = () => {}
+let settingsWindow: (tab?: string) => void = () => {}
 
 /** Draw the menu again: the recording's commands in Möte follow where the recording stands. */
-export function buildMenu(open: () => void = reopen, mainWindows: () => BrowserWindow[] = mains, openSettings: () => void = settingsWindow): void {
+export function buildMenu(open: () => void = reopen, mainWindows: () => BrowserWindow[] = mains, openSettings: (tab?: string) => void = settingsWindow): void {
   reopen = open
   mains = mainWindows
   settingsWindow = openSettings
@@ -55,13 +55,15 @@ export function buildMenu(open: () => void = reopen, mainWindows: () => BrowserW
     mac ? item(c, label, state.typing ? undefined : onMac) : { ...item(c, label, elsewhere), registerAccelerator: false }
   const line: MenuItemConstructorOptions = { type: 'separator' }
   const settings = item('settings', 'Inställningar…', 'CmdOrCtrl+,')
+  // What the app is and what it is made of: a small window on the Mac, a page of Inställningar elsewhere.
+  const about: MenuItemConstructorOptions = { id: 'about', label: 'Om Byggmöte', click: () => settingsWindow('about') }
 
   const template: MenuItemConstructorOptions[] = [
     ...(mac
       ? [{
           label: app.name,
           submenu: [
-            { role: 'about', label: 'Om Byggmöte' }, line, settings, line,
+            about, line, settings, line,
             { role: 'services', label: 'Tjänster' }, line,
             { role: 'hide', label: 'Göm Byggmöte' }, { role: 'hideOthers', label: 'Göm övriga' }, { role: 'unhide', label: 'Visa alla' }, line,
             { role: 'quit', label: 'Avsluta Byggmöte' }
@@ -138,7 +140,7 @@ export function buildMenu(open: () => void = reopen, mainWindows: () => BrowserW
     {
       role: 'help',
       label: mac ? 'Hjälp' : '&Hjälp',
-      submenu: [item('intro', 'Visa introduktionen'), ...(mac ? [] : [line, { role: 'about', label: 'Om Byggmöte' } satisfies MenuItemConstructorOptions])]
+      submenu: [item('intro', 'Visa introduktionen'), ...(mac ? [] : [line, about])]
     }
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))

@@ -1137,7 +1137,7 @@
     .paper { max-width: calc(100% - 20px); padding: 20px 16px 28px; }
     .colstrip { padding: 0 10px; }
     .colstrip .prow { padding: 0 22px; }
-    .prow { grid-template-columns: 42px 52px minmax(0, 1fr) 46px 84px 72px; column-gap: 6px; }
+    .prow { grid-template-columns: 42px 52px minmax(0, 1fr) 46px 76px 80px; column-gap: 6px; }
   }
   .after { margin-top: 22px; padding-top: 10px; border-top: 1px solid var(--rule); }
   .after h3, .after summary { font: 600 12px/1.4 var(--font-body); color: var(--ink-700); cursor: default; }

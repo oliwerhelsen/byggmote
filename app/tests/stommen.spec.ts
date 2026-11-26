@@ -133,7 +133,7 @@ test.beforeAll(async () => {
   app = await electron.launch({ args, cwd: here, env: { ...process.env, ...none, BYGGMOTE_CONFIG: config, BYGGMOTE_HIDDEN: '1',
     BYGGMOTE_USER_DATA: userData, BYGGMOTE_NO_KEYCHAIN: '1', BYGGMOTE_SETUP: '1' } })
   win = await app.firstWindow()
-  await expect(win.getByRole('heading', { name: 'Möten', exact: true })).toBeVisible()
+  await expect(win.getByRole('heading', { name: 'Senaste möten' })).toBeVisible()
 })
 
 test.afterAll(async () => {
@@ -225,6 +225,19 @@ test('signing in brings the Projekt with its Roller and Kontakter, and the sessi
   expect(onDisk).not.toContain(TOKEN)
   expect(onDisk).not.toContain(PASSWORD)
   await expect(sw.getByLabel('Lösenord')).toHaveCount(0)
+})
+
+test('the overview says where the project comes from, and fetches from Stommen again', async () => {
+  await expect(win.getByRole('heading', { name: 'Kv. Eken kontorshus', level: 1 })).toBeVisible()
+  await expect(win.getByText('Från Stommen', { exact: true })).toBeVisible()
+  const facts = win.getByRole('region', { name: 'Stommen', exact: true })
+  await expect(facts).toContainText('Inloggad som Maria Lindqvist')
+  await expect(facts).toContainText('Norrstaden Fastigheter AB')
+  await expect(facts).toContainText(/Hämtat senast \d{4}-\d\d-\d\d \d\d:\d\d/)
+  const fetched = (): number => seen.filter((r) => r.path === '/api/mobile/v1/projects').length
+  const before = fetched()
+  await win.getByRole('button', { name: 'Hämta från Stommen' }).click()
+  await expect.poll(fetched).toBe(before + 1)
 })
 
 test('a session Stommen has ended shows as signed out, with the address kept', async () => {

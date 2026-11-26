@@ -218,6 +218,13 @@
     if (file && project) go({ name: 'working', job: { projectId: project.id, seriesId: s.id, file, title: `${s.name} ${s.next}` } })
   }
 
+  /** Nytt möte, or the recording window when a meeting is being recorded. From an agenda it is that agenda's meeting. */
+  function record(): void {
+    if (live) void window.api.recordShow()
+    else if (view.name === 'agenda') recorder?.show(view.series, true)
+    else if (project?.series.length) recorder?.show(project.series[0])
+  }
+
   const PROTOCOL: Command[] = ['saveDocx', 'savePdf', 'saveMd', 'copyText', 'find', 'inspector', 'newPoint', 'nextCheck', 'rename', 'rewrite', 'send',
     'editPoint', 'removePoint', 'nameSpeakers', 'attend', 'play', 'listen', 'back', 'forward', 'confirmation']
 
@@ -237,7 +244,7 @@
     else if (c === 'points') go({ name: 'points' })
     else if (!first) return
     else if (c === 'agenda') go({ name: 'agenda', series: first })
-    else if (c === 'record') live ? void window.api.recordShow() : recorder?.show(first)
+    else if (c === 'record') record()
     else if (c === 'addRecording') void addRecording(first)
   }
   $effect(() => window.api.onCommand(command))
@@ -398,6 +405,8 @@
           {#if project}<p class="sub">{project.name}</p>{/if}
         {/if}
       </div>
+      <!-- A view with a title of its own puts it here, and the window's is put away. -->
+      <div id="title"></div>
       {#if view.name === 'protocol' && meeting.standing}
         <span class="standing" class:done={meeting.standing === 'done'}><span></span>{meeting.standing === 'done' ? 'Justerat' : 'Utkast'}</span>
       {/if}
@@ -407,7 +416,7 @@
       {#if live}
         <button class="btn rec" onclick={() => window.api.recordShow()}>{live.phase === 'paused' ? 'Pausad' : 'Spelar in'} {clock(live.seconds)}</button>
       {:else if project?.series.length && view.name !== 'protocol'}
-        <button class="btn rec" onclick={() => recorder?.show(project.series[0])}>Spela in</button>
+        <button class="btn rec" onclick={record}>Spela in</button>
       {/if}
     </header>
 
@@ -437,15 +446,15 @@
       {:else}
         {#key project.id}
           {#if view.name === 'overview'}
-            <Overview {project} rows={read ? rows : null} {agendas} {go} refresh={load} gone={() => (view = { name: 'overview' })}
-              record={(s) => (live ? void window.api.recordShow() : recorder?.show(s))} add={addRecording} />
+            <Overview {project} rows={read ? rows : null} {agendas} {go} refresh={load} gone={() => (view = { name: 'overview' })} {stommen} sync={connect}
+              record={(s) => (live ? void window.api.recordShow() : recorder?.show(s))} />
           {:else if view.name === 'points'}
-            <OpenPoints {rows} {agendas} {go} />
+            <OpenPoints {project} {rows} {agendas} {go} />
           {:else if view.name === 'agenda'}
-            <Agenda {project} series={view.series} {go} />
+            <Agenda {project} series={view.series} />
           {:else if view.name === 'working'}
             {@const run = runs.find((r) => r.id === shown)}
-            {#if run}<Working {run} waiting={run !== runs.find((r) => !r.problem) && !run.problem} dismiss={() => dismiss(run.id)} />{/if}
+            {#if run}<Working {run} {project} waiting={run !== runs.find((r) => !r.problem) && !run.problem} dismiss={() => dismiss(run.id)} />{/if}
           {:else if view.name === 'protocol'}
             {#key view.dir}
               <Protocol bind:this={protocol} {project} dir={view.dir} problem={view.problem ?? ''} connected={Boolean(stommen?.connected)} {go} refresh={load}
@@ -519,6 +528,8 @@
   .tool { display: inline-grid; place-items: center; flex: none; width: 32px; height: 28px; border: 0; border-radius: var(--ctl-r); background: transparent; color: var(--ink-700); }
   .tool:hover { background: rgb(0 0 0 / 0.06); }
   .titles { min-width: 0; }
+  .titles:has(+ #title:not(:empty)) { display: none; }
+  #title { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .title { font-weight: 700; font-size: calc(var(--ui) + 1px); line-height: 1.2; white-space: nowrap; }
   .sub { font-size: var(--ui-small); color: var(--ink-500); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .rec::before { content: ''; width: 9px; height: 9px; border-radius: 50%; background: #fff; }
