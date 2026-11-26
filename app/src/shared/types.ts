@@ -208,6 +208,12 @@ export interface Api {
   recordClose(): Promise<void>
   /** Bring the recording window forward. */
   recordShow(): Promise<void>
+  /** From the main window: something done to the recording in the other window, as its own button would (the palette). */
+  recordCommand(command: RecordCommand): Promise<void>
+  /** From the recording window: how tall what it shows is, so the window is as tall. */
+  recordFit(height: number): Promise<void>
+  /** The open meeting's folder, shown in Finder or Utforskaren. Only a folder the app itself listed. */
+  meetingShow(dir: string): Promise<void>
   /** Inställningar, in a window of its own, on the tab named (general, recording, models, stommen, about). */
   settingsOpen(tab?: string): Promise<void>
   /** From the settings window: something the other windows show was changed, so they read it again. */
@@ -243,9 +249,9 @@ export const RECORD_COMMANDS = ['pause', 'next', 'decision', 'todo', 'changeOrde
 export type RecordCommand = (typeof RECORD_COMMANDS)[number]
 
 /** What the application menu asks the window to do. Each is also a shortcut (app/src/main/menu.ts). */
-export const COMMANDS = ['settings', 'newProject', 'addRecording', 'sync', 'overview', 'points', 'agenda', 'record', 'sidebar', 'intro', 'palette',
+export const COMMANDS = ['settings', 'newProject', 'switchProject', 'addRecording', 'sync', 'overview', 'points', 'agenda', 'record', 'sidebar', 'intro', 'palette', 'shortcuts',
   // about the protocol in the window
-  'saveDocx', 'savePdf', 'saveMd', 'copyText', 'find', 'inspector', 'newPoint', 'nextCheck', 'rename', 'rewrite', 'send',
+  'saveDocx', 'savePdf', 'saveMd', 'copyText', 'reveal', 'find', 'inspector', 'newPoint', 'nextCheck', 'rename', 'rewrite', 'send',
   'editPoint', 'removePoint', 'nameSpeakers', 'attend', 'play', 'listen', 'back', 'forward', 'confirmation'] as const
 export type Command = (typeof COMMANDS)[number]
 /** What the menu can do with the meeting in the window. `protocol`: it has one; `free`: that can be corrected;
@@ -256,9 +262,10 @@ export type DocState = { protocol: boolean; free: boolean; sendable: boolean; in
   sound: boolean; unnamed: boolean; absent: boolean; sent: boolean }
 export const NO_DOC: DocState = { protocol: false, free: false, sendable: false, inspector: true, point: false, own: false, said: false, sound: false, unnamed: false, absent: false, sent: false }
 /** `ready`: past the first run. `held`: a recording or a job is in the window. `sidebar`: it is shown. `meeting`: one is
- * open. `typing`: the keys go to a field or a button, or to another window. */
+ * open. `typing`: the keys go to a field or a button, or to another window. `view`: the one in the window, when it is
+ * one the Visa menu lists. */
 export type MenuState = { ready: boolean; held: boolean; project: boolean; series: boolean; connected: boolean; sidebar: boolean
-  meeting: boolean; typing: boolean } & DocState
+  meeting: boolean; typing: boolean; view: '' | 'overview' | 'points' | 'agenda' } & DocState
 
 export const CHANNELS = ['projects', 'meetings', 'agenda', 'meeting', 'audio', 'startSeries', 'pickRecording', 'process',
-  'writeProtocol', 'nameSpeaker', 'setTitle', 'changePoint', 'addPoint', 'removePoint', 'restorePoint', 'confirmCheck', 'attend', 'stommenState', 'stommenSignIn', 'stommenSync', 'stommenSignOut', 'stommenSend', 'stommenConfirmation', 'projectAdd', 'projectRename', 'projectDelete', 'personAdd', 'personRemove', 'protocolSave', 'protocolCopy', 'recordingStart', 'recordingChunk', 'recordingStop', 'recordingDiscard', 'settings', 'settingsSet', 'setUp', 'models', 'modelsDownload', 'modelsCancel', 'computer', 'folderShow', 'folderChoose', 'menuState', 'recordOpen', 'recordStatus', 'recordDone', 'recordClose', 'recordShow', 'settingsOpen', 'changed', 'shortcutListen', 'settingsFit'] as const
+  'writeProtocol', 'nameSpeaker', 'setTitle', 'changePoint', 'addPoint', 'removePoint', 'restorePoint', 'confirmCheck', 'attend', 'stommenState', 'stommenSignIn', 'stommenSync', 'stommenSignOut', 'stommenSend', 'stommenConfirmation', 'projectAdd', 'projectRename', 'projectDelete', 'personAdd', 'personRemove', 'protocolSave', 'protocolCopy', 'recordingStart', 'recordingChunk', 'recordingStop', 'recordingDiscard', 'settings', 'settingsSet', 'setUp', 'models', 'modelsDownload', 'modelsCancel', 'computer', 'folderShow', 'folderChoose', 'menuState', 'recordOpen', 'recordStatus', 'recordDone', 'recordClose', 'recordShow', 'recordCommand', 'recordFit', 'meetingShow', 'settingsOpen', 'changed', 'shortcutListen', 'settingsFit'] as const

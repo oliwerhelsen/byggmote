@@ -4,7 +4,7 @@ import { appendFile, copyFile, mkdir, readFile, rm, statfs, writeFile } from 'no
 import { homedir, totalmem } from 'node:os'
 import { basename, extname, join, resolve } from 'node:path'
 import { app, BrowserWindow, clipboard, dialog, ipcMain, session, shell } from 'electron'
-import type { Agenda, Api, Done, Job, MeetingDetail, MeetingRow, ModelEvent, ModelRow, NewPoint, PointFields, Progress, Project, SeriesRef } from '../shared/types'
+import { RECORD_COMMANDS, type Agenda, type Api, type Done, type Job, type MeetingDetail, type MeetingRow, type ModelEvent, type ModelRow, type NewPoint, type PointFields, type Progress, type Project, type SeriesRef } from '../shared/types'
 import { call, run, stopAll, stream } from './engine'
 import * as kept from './settings'
 import { toDocx, toPdf, type Sheet } from './export'
@@ -384,6 +384,16 @@ function handlers(tell: (p: Progress) => void, tellModels: (e: ModelEvent) => vo
     async recordShow() {
       rec.show()
     },
+    async recordCommand(command) {
+      if ((RECORD_COMMANDS as readonly string[]).includes(command)) rec.send(command)
+    },
+    async recordFit(height) {
+      rec.fit(height)
+    },
+    // Only a meeting the engine listed: the window cannot name another folder to open.
+    async meetingShow(dir) {
+      shell.showItemInFolder(known(dir))
+    },
 
     async settingsOpen(tab) {
       openSettings(/^[a-z]+$/.test(String(tab ?? '')) ? String(tab) : 'general')
@@ -480,7 +490,7 @@ function open(): BrowserWindow {
     minHeight: 600,
     show: false,
     title: 'Byggmöte',
-    backgroundColor: '#faf9fb',
+    backgroundColor: macLook ? '#faf9fb' : '#f3f3f5',
     // The Mac's window has no title bar of its own: the sidebar and the toolbar reach the top, with the three
     // buttons over the sidebar. Windows and Linux keep theirs, with the menu bar under it.
     ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 18, y: 19 } } : {}),

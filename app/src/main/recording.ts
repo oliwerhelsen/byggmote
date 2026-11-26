@@ -2,10 +2,10 @@
 // can have the agenda, a drawing or a spreadsheet on the screen. While it is open there is an icon beside the clock
 // with the recording's commands, and shortcuts that work in any program.
 import { join } from 'node:path'
-import { BrowserWindow, globalShortcut, Menu, nativeImage, Tray, type MenuItemConstructorOptions } from 'electron'
+import { app, BrowserWindow, globalShortcut, Menu, nativeImage, Tray, type MenuItemConstructorOptions } from 'electron'
 import { accelerators, normal, spell, standard, VALID, type Global } from '../shared/keys'
 import type { RecordCommand, RecordSpec, RecordStatus, Shortcuts } from '../shared/types'
-import { MAC_TEMPLATE_2X, TILE_32 } from './tray-icons'
+import { MAC_TEMPLATE_2X, OVERLAY_DOT, THUMB_NEXT, THUMB_PAUSE, THUMB_PLAY, THUMB_STOP, TILE_32 } from './tray-icons'
 
 const mac = process.platform === 'darwin'
 
@@ -128,14 +128,29 @@ const clock = (seconds: number): string => {
 
 const LABELS = { idle: 'Inte igång', recording: 'Spelar in', paused: 'Pausad', saving: 'Sparar inspelningen' } as const
 
-/** The recording's commands, for the icon beside the clock and for the application menu's Möte. */
-export function commands(): MenuItemConstructorOptions[] {
+/** The recording's commands, for the icon beside the clock and, in the order of the application menu (`inMenu`), for its Möte. */
+export function commands(inMenu = false): MenuItemConstructorOptions[] {
   const s = status
   const live = s?.phase === 'recording'
   const on = live || s?.phase === 'paused'
   // The shortcut is shown, not taken by the menu: it is registered for every program below.
   const item = (c: RecordCommand, label: string, enabled: boolean, accelerator = shortcut(c)): MenuItemConstructorOptions =>
     ({ label, enabled, accelerator, registerAccelerator: !shortcut(c), click: () => send(c) })
+  if (inMenu) return [
+    { type: 'separator' },
+    item('pause', s?.phase === 'paused' ? 'Fortsätt' : 'Pausa', Boolean(on)),
+    item('finish', 'Avsluta mötet', Boolean(on), 'CmdOrCtrl+Shift+R'),
+    item('cancel', 'Avbryt inspelningen…', Boolean(on)),
+    { type: 'separator' },
+    { label: 'Sätt märke', enabled: false }, // a heading: Electron's menus have none of their own
+    item('decision', 'Beslut', Boolean(live)),
+    item('todo', 'Att göra', Boolean(live)),
+    item('changeOrder', 'ÄTA', Boolean(live)),
+    item('question', 'Fråga', Boolean(live)),
+    item('next', s?.next ? `Nästa rubrik: ${s.next}` : 'Nästa rubrik', Boolean(on && s?.next)),
+    // Windows and Linux have no Fönster menu to find the small window in.
+    ...(mac ? [] : [{ type: 'separator' } as const, { label: 'Visa inspelningsfönstret', enabled: Boolean(s), click: show }])
+  ]
   return [
     item('pause', s?.phase === 'paused' ? 'Fortsätt' : 'Pausa', Boolean(on)),
     item('next', s?.next ? `Nästa rubrik: ${s.next}` : 'Nästa rubrik', Boolean(on && s?.next)),
@@ -149,6 +164,23 @@ export function commands(): MenuItemConstructorOptions[] {
     item('finish', 'Avsluta mötet', Boolean(on), 'CmdOrCtrl+Shift+R'),
     item('cancel', 'Avbryt inspelningen…', Boolean(on))
   ]
+}
+
+const png = (base64: string): Electron.NativeImage => nativeImage.createFromBuffer(Buffer.from(base64, 'base64'))
+
+/** The Dock's icon and the taskbar's button say that a meeting is being recorded, also with the small window behind
+ * another: a badge on the Mac; on Windows a dot over the button and, on its thumbnail, Pausa, Nästa rubrik and Avsluta. */
+function mark(): void {
+  const on = status?.phase === 'recording' || status?.phase === 'paused'
+  if (mac) app.dock?.setBadge(on ? '●' : '')
+  if (process.platform !== 'win32' || !win) return
+  win.setOverlayIcon(on ? png(OVERLAY_DOT) : null, on ? LABELS[status!.phase] : '')
+  const paused = status?.phase === 'paused'
+  win.setThumbarButtons(on ? [
+    { tooltip: paused ? 'Fortsätt' : 'Pausa', icon: png(paused ? THUMB_PLAY : THUMB_PAUSE), click: () => send('pause') },
+    { tooltip: status?.next ? `Nästa rubrik: ${status.next}` : 'Nästa rubrik', icon: png(THUMB_NEXT), flags: status?.next ? [] : ['disabled'], click: () => send('next') },
+    { tooltip: 'Avsluta mötet', icon: png(THUMB_STOP), click: () => send('finish') }
+  ] : [])
 }
 
 function draw(): void {
@@ -165,16 +197,19 @@ function draw(): void {
 export function open(spec: RecordSpec, preload: string, hidden: boolean): void {
   if (win) return show()
   win = new BrowserWindow({
-    width: 380,
-    height: spec.agenda ? 640 : 470,
-    minWidth: 340,
-    minHeight: 360,
+    // As wide as it is drawn, and as tall as what it shows (`fit`): the window says how tall that is.
+    width: WIDTH,
+    height: spec.agenda ? 520 : 400,
+    useContentSize: true,
+    resizable: false,
     show: false,
     alwaysOnTop: true,
     fullscreenable: false,
     maximizable: false,
     title: 'Byggmöte',
-    backgroundColor: '#ffffff',
+    backgroundColor: mac ? '#ffffff' : '#fbfbfc',
+    // The Mac's title bar is drawn in the window: the meeting over its project, with the three buttons beside them.
+    ...(mac ? { titleBarStyle: 'hidden' as const, trafficLightPosition: { x: 12, y: 15 } } : {}),
     autoHideMenuBar: true, // Windows and Linux: the small window has no menu bar of its own
     webPreferences: { preload, sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false }
   })
@@ -196,6 +231,7 @@ export function open(spec: RecordSpec, preload: string, hidden: boolean): void {
     win = null
     status = null
     drawn = ''
+    mark()
     tray?.destroy()
     tray = null
     take(false)
@@ -218,6 +254,14 @@ export function open(spec: RecordSpec, preload: string, hidden: boolean): void {
 
 let allow: () => void = () => {}
 
+const WIDTH = mac ? 360 : 366
+
+/** From the recording window: how tall what it shows is. The window is as tall, so nothing is empty and nothing scrolls. */
+export function fit(height: number): void {
+  const h = Math.round(Number(height))
+  if (win && h >= 100 && h <= 1200 && win.getContentSize()[1] !== h) win.setContentSize(WIDTH, h)
+}
+
 /** From the recording window: where it stands now. */
 export function heard(next: RecordStatus): void {
   if (!win) return
@@ -225,7 +269,9 @@ export function heard(next: RecordStatus): void {
   status = { title: String(next.title).slice(0, 200), phase: next.phase, seconds: Number(next.seconds) || 0, heading: next.heading ? String(next.heading).slice(0, 200) : null, next: next.next ? String(next.next).slice(0, 200) : null }
   draw()
   tell(status)
-  if ([status.phase, status.next].join('|') !== before) menu() // its labels follow the recording, not the clock
+  if ([status.phase, status.next].join('|') === before) return
+  menu() // its labels follow the recording, not the clock
+  mark()
 }
 
 /** From the recording window: it is done with, one way or the other. */

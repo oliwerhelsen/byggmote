@@ -172,6 +172,14 @@ test('nothing is recorded before everyone knows, and the meeting is recorded in 
   await expect(win.getByRole('heading', { name: 'Senaste möten' })).toBeVisible()
   expect(await enabled('record')).toBe(false)
   // its shortcuts work in any program while it is open (asked of the Mac only: a runner without a desktop has none to give)
+  // the recording's commands are in the palette while it goes on (with a microphone; without one it never began)
+  await menu('palette')
+  const ask = win.getByRole('combobox', { name: 'Sök kommando, möte eller punkt' })
+  await ask.fill('avbryt inspelningen')
+  const cancel = win.getByRole('option', { name: /Avbryt inspelningen/ })
+  await expect(cancel).toBeVisible()
+  await expect.poll(async () => (await rec.getByRole('button', { name: /Pausa/ }).count()) > 0 === ((await cancel.getAttribute('aria-disabled')) !== 'true')).toBe(true)
+  await ask.press('Escape')
   const taken = (): Promise<boolean> => app.evaluate(({ globalShortcut }) => globalShortcut.isRegistered('Control+Alt+N'))
   if (process.platform === 'darwin') expect(await taken()).toBe(true)
   await closeRecording(rec)
@@ -358,6 +366,62 @@ test('the application menu opens the views, and greys out what cannot run', asyn
   await expect(win.getByRole('button', { name: 'Öppna i protokollet' })).toBeVisible()
 })
 
+// The whole menu as it is meant to be, in order, with its separators: a label moved, lost or added shows here.
+test('the application menu is the drawn one, in its order', async () => {
+  const mac = process.platform === 'darwin'
+  await toOverview()
+  await expect.poll(() => app.evaluate(({ Menu }) => Menu.getApplicationMenu()!.getMenuItemById('overview')!.checked)).toBe(true)
+  const built = await app.evaluate(({ Menu }) => {
+    const walk = (items: Electron.MenuItem[]): unknown[] => items.map((i) => (i.type === 'separator' ? '---' : i.submenu ? [i.label, walk(i.submenu.items)] : i.label))
+    return walk(Menu.getApplicationMenu()!.items)
+  })
+  const reveal = mac ? 'Visa i Finder' : process.platform === 'win32' ? 'Visa i Utforskaren' : 'Visa i mappen'
+  const amp = (label: string, at: number): string => (mac ? label : `${label.slice(0, at)}&${label.slice(at)}`)
+  expect(built).toEqual([
+    ...(mac ? [['Byggmöte', ['Om Byggmöte', '---', 'Inställningar…', '---', 'Tjänster', '---', 'Göm Byggmöte', 'Göm övriga', 'Visa alla', '---', 'Avsluta Byggmöte']]] : []),
+    [amp('Arkiv', 0), ['Nytt projekt…', 'Byt projekt…', 'Lägg till en inspelning…', '---', ['Spara som', ['Word…', 'PDF…', 'Markdown…']], 'Kopiera texten', reveal, '---',
+      'Hämta från Stommen', '---', ...(mac ? [] : ['Inställningar…', '---']), 'Stäng fönstret', ...(mac ? [] : ['Avsluta'])]],
+    [amp('Redigera', 0), ['Ångra', 'Gör om', '---', 'Klipp ut', 'Kopiera', 'Klistra in', 'Markera allt', '---', 'Sök i utskriften']],
+    [amp('Visa', 0), ['Översikt', 'Öppna punkter', 'Dagordning', '---', 'Dölj sidopanelen', 'Visa utskriften', '---', 'Kommandopalett…', '---', mac ? 'Starta helskärmsläge' : 'Helskärm',
+      '---', 'Läs in fönstret igen', 'Utvecklarverktyg']], // the last two only in a checkout, which is where the tests run
+    [amp('Möte', 0), ['Spela in möte…', '---', 'Pausa', 'Avsluta mötet', 'Avbryt inspelningen…', '---', 'Sätt märke', 'Beslut', 'Att göra', 'ÄTA', 'Fråga', 'Nästa rubrik',
+      ...(mac ? [] : ['---', 'Visa inspelningsfönstret']), '---', 'Byt namn på mötet…']],
+    [amp('Protokoll', 0), ['Ny punkt', 'Ändra punkt', 'Ta bort punkt', '---', 'Nästa att kontrollera', 'Sätt namn på talare…', 'Lägg till som närvarande…', '---',
+      'Spela upp', 'Lyssna från punkten', 'Hoppa 10 s bakåt', 'Hoppa 10 s framåt', '---', 'Skriv om protokollet…', '---', 'Skicka till Stommen…', 'Se efter om det är justerat']],
+    ...(mac ? [['Fönster', ['Minimera', 'Zooma', '---', 'Inspelning', '---', 'Lägg alla överst']]] : []),
+    [amp('Hjälp', 0), ['Kortkommandon', 'Visa introduktionen', ...(mac ? [] : ['---', 'Om Byggmöte'])]]
+  ])
+  // the labels that follow the window: the sidebar's, the view's tick, and what the search is of
+  const label = (id: string): Promise<string> => app.evaluate(({ Menu }, item) => Menu.getApplicationMenu()!.getMenuItemById(item)!.label, id)
+  await menu('sidebar')
+  await expect.poll(() => label('sidebar')).toBe('Visa sidopanelen')
+  await menu('sidebar')
+  await expect.poll(() => label('sidebar')).toBe('Dölj sidopanelen')
+  expect(await enabled('reveal')).toBe(false) // no meeting is open
+  await menu('points')
+  await expect.poll(() => label('find')).toBe('Sök bland punkterna')
+  await menu('find')
+  await expect(win.getByPlaceholder('Sök bland punkterna')).toBeFocused()
+})
+
+test('the window is named after what it shows, and a meeting\'s folder is shown from the menu', async () => {
+  await expect.poll(() => win.title()).toBe('Översikt – Kv. Eken kontorshus – Byggmöte')
+  await menu('agenda')
+  await expect.poll(() => win.title()).toBe('Dagordning inför byggmöte 5 – Kv. Eken kontorshus – Byggmöte')
+  await win.getByRole('navigation', { name: 'Huvudmeny' }).getByRole('button', { name: /Byggmöte 4/ }).click()
+  await expect.poll(() => win.title()).toBe('Byggmöte 4 – Kv. Eken kontorshus – Byggmöte')
+  // Visa i Finder, or Utforskaren: the folder the engine listed for the meeting, and no other
+  await app.evaluate(({ shell }) => {
+    const seen: string[] = []
+    ;(globalThis as unknown as { shown: string[] }).shown = seen
+    shell.showItemInFolder = (path: string) => void seen.push(path)
+  })
+  await expect.poll(() => enabled('reveal')).toBe(true)
+  await menu('reveal')
+  await expect.poll(() => app.evaluate(() => (globalThis as unknown as { shown: string[] }).shown.join())).toMatch(/Byggmöte 4$/)
+  expect(await win.evaluate(() => (globalThis as unknown as { api: { meetingShow: (dir: string) => Promise<void> } }).api.meetingShow('/etc').then(() => 'shown', () => 'refused'))).toBe('refused')
+})
+
 test('the sidebar lists the meetings of the project, opens one, and can be put away', async () => {
   const side = win.getByRole('navigation', { name: 'Huvudmeny' })
   await expect(side.getByText('2 möten')).toBeVisible()
@@ -435,6 +499,23 @@ test('the palette runs a command and opens a meeting or a point from a few lette
   await ask.fill('byggmöte 4')
   await ask.press('Enter')
   await expect(win.getByRole('heading', { name: 'Protokoll, byggmöte 4' })).toBeVisible()
+  // what cannot run now is there, greyed, with why, and Enter does not run it
+  await menu('palette')
+  await ask.fill('sätt märke beslut')
+  const off = win.getByRole('listbox', { name: 'Träffar' }).getByRole('option', { name: /Sätt märke: Beslut/ })
+  await expect(off).toHaveAttribute('aria-disabled', 'true')
+  await expect(off).toContainText('Bara under inspelning')
+  await ask.press('Enter')
+  await expect(ask).toBeVisible()
+  await ask.press('Escape')
+  // Kortkommandon lists what has keys, Byt projekt the other projects
+  await menu('shortcuts')
+  await expect(win.getByRole('listbox', { name: 'Träffar' }).getByRole('option', { name: /Kommandopalett|Översikt/ }).first()).toBeVisible()
+  await expect(win.getByRole('listbox', { name: 'Träffar' }).getByRole('option', { name: 'Visa introduktionen' })).toHaveCount(0)
+  await ask.press('Escape')
+  await menu('switchProject')
+  await expect(win.getByText('Det finns inget annat projekt.')).toBeVisible()
+  await ask.press('Escape')
   await menu('palette')
   await ask.fill('finns inte alls')
   await expect(win.getByText('Inget stämmer med det du skrev.')).toBeVisible()

@@ -122,18 +122,28 @@ person signs in there; a project from Stommen is Stommen's, and its people and R
 
 The window keeps to the computer's conventions. Its commands are in the application menu (`app/src/main/menu.ts`: the
 Mac's menu bar, the window's own menu bar on Windows and Linux), each with a shortcut, and a choice there reaches the
-window as a `Command`; what cannot run now is greyed out. On the Mac the window has no title bar of its own, and the
-sidebar and the toolbar reach its top. The sidebar is the project's library: its overview (the next meeting, what is
+window as a `Command`; what cannot run now is greyed out, and `app/tests/app.spec.ts` compares the built menu with
+the one meant, label by label. On the Mac the window has no title bar of its own: the sidebar and the toolbar reach its
+top, the toolbar names the view and ends with Spela in, and the sidebar's foot says where the app stands with Stommen,
+with a gear to Inställningar and a lock for the promise that sound and text stay on the computer. On Windows and
+Linux the window's title names the view ("Byggmöte 4 – Kv. Eken kontorshus – Byggmöte"), a command bar under the menu
+bar begins with Spela in and has the view's commands, the view is a lighter layer beside the navigation pane, and a
+status bar at the foot has the view's figures, Stommen, the gear and the promise. A view puts its commands, its title
+and its status text in the shell's places (`lib/tools.ts`). The sidebar is the project's library: its overview (the next meeting, what is
 open, the meetings, who is in it), the open points as a list of their own, each mötesserie's agenda, and the meetings.
 Text, controls and rows have the Mac's measures or Windows' (`data-platform` in `app.css`); `BYGGMOTE_PLATFORM=win32`
 shows Windows' on a Mac. Inställningar is a window of its own (⌘, / Ctrl+,), drawn as the computer draws one (`views/Settings.svelte`,
 `lib/Row.svelte`, `settings.css`): on the Mac a compact window named after its pane, with the panes as a toolbar of
 icons and each pane a form, and what the app is made of under Om Byggmöte in the app menu (`views/About.svelte`); on
 Windows and Linux the pages down the left side, Om Byggmöte among them, and each page a list of rows with switches.
-The connection to Stommen is one of its panes; a change is kept as it is made, and the other windows read it again. The palette (⌘K / Ctrl+K) runs a command or opens a meeting, an open point
-or another project from a few letters. Nytt möte asks with or without the agenda and that everyone knows, names the
+The connection to Stommen is one of its panes; a change is kept as it is made, and the other windows read it again. The palette (⌘K / Ctrl+K) runs a command or opens a meeting, an open point,
+a view or another project from a few letters; a command that cannot run now is listed greyed with why, the
+recording's commands are among them, Kortkommandon (⌘/) opens it on everything that has keys and Byt projekt (⇧⌘O) on
+the projects. Nytt möte asks with or without the agenda and that everyone knows, names the
 microphone and shows that it hears (it listens only while the dialog is open); from an agenda the agenda is chosen. A meeting is recorded in a small window of its own that stays over other programs
-(`app/src/main/recording.ts`, `views/RecordWindow.svelte`), with an icon beside the clock that has its commands, and
+(`app/src/main/recording.ts`, `views/RecordWindow.svelte`) and is as tall as what it shows, small while paused,
+with an icon beside the clock that has its commands, a badge on the Dock's icon (on Windows a dot over the taskbar's
+button and Pausa, Nästa rubrik and Avsluta on its thumbnail, not yet tried on a Windows computer), and
 shortcuts that work in any program (⌃⌥N for the next heading, ⌃⌥1 to 4 for a mark, ⌃⌥P to pause; Alt+Shift with the
 same keys on Windows and Linux). Those keys are the person's to change under Inspelning in Inställningar
 (`app/src/shared/keys.ts`, `choose` in `recording.ts`): a click on a command, then the new keys, kept in

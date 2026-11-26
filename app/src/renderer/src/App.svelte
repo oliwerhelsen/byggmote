@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { NO_DOC, type Agenda as Headings, type Command, type DocState, type Job, type MeetingRow, type Progress, type Project, type RecordStatus, type SeriesRef, type Settings as Kept, type StommenState } from '../../shared/types'
+  import { NO_DOC, type Agenda as Headings, type Command, type DocState, type Job, type MeetingRow, type Progress, type Project, type RecordCommand, type RecordStatus, type SeriesRef, type Settings as Kept, type StommenState } from '../../shared/types'
   import Icon from './lib/Icon.svelte'
-  import { clock, failure, minutes, shortDate, standing } from './lib/format'
+  import { accelerators, spell } from '../../shared/keys'
+  import { brief, clock, count, failure, KINDS, overdue, shortDate, standing } from './lib/format'
   import type { About, View } from './lib/view'
   import Agenda from './views/Agenda.svelte'
   import OpenPoints from './views/OpenPoints.svelte'
@@ -12,14 +13,6 @@
   import Onboarding from './views/Onboarding.svelte'
   import Palette, { type Entry } from './lib/Palette.svelte'
   import Working, { STEPS, type Run } from './views/Working.svelte'
-
-  const TITLES: Record<View['name'], string> = {
-    points: 'Öppna punkter',
-    agenda: 'Dagordning',
-    working: 'Mötet bearbetas',
-    protocol: 'Protokoll',
-    overview: 'Översikt'
-  }
 
   // The select's last option opens a dialog where a project is named and made.
   const NEW = '__new'
@@ -225,6 +218,31 @@
     else if (project?.series.length) recorder?.show(project.series[0])
   }
 
+  // What Windows' status bar says of the view (a protocol says its own, Protocol.svelte), and the window's title:
+  // on Windows that is where the view is named, on the Mac it is what the Fönster menu and Mission Control call it.
+  const said = $derived.by((): string[] => {
+    const only = view.name === 'agenda' ? view.series.id : null // an agenda is one mötesserie's
+    const points = (agendas ?? []).flatMap((a) => (only && a.series !== only ? [] : a.headings.flatMap((h) => h.open)))
+    const late = points.filter((x) => overdue(x.due)).length
+    const left = [count(points.length, 'öppen punkt', 'öppna punkter'), ...(late ? [late === 1 ? '1 förfallen' : `${late} förfallna`] : [])]
+    if (!project || view.name === 'protocol') return []
+    if (view.name === 'overview') return [count(rows.length, 'möte', 'möten'), left[0]]
+    if (view.name === 'points') return left
+    if (view.name === 'agenda') {
+      const a = agendas?.find((x) => x.series === only)
+      return a ? [count(a.headings.length, 'rubrik', 'rubriker'), ...left] : []
+    }
+    const run = runs.find((r) => r.id === shown)
+    if (!run) return []
+    return [run.problem ? `${run.job.title} gick inte att skriva ut` : run === runs.find((r) => !r.problem) ? `${run.job.title} skrivs ut · steg ${run.at + 1} av ${STEPS.length}` : `${run.job.title} väntar på sin tur`]
+  })
+  $effect(() => {
+    const dir = view.name === 'protocol' ? view.dir : ''
+    const what = view.name === 'overview' ? 'Översikt' : view.name === 'points' ? 'Öppna punkter' : view.name === 'agenda' ? `Dagordning inför ${view.series.name.toLowerCase()} ${view.series.next}`
+      : view.name === 'working' ? view.job.title : (rows.find((r) => r.dir === dir)?.title ?? (meeting.title || 'Protokoll'))
+    document.title = settings?.setUp && project ? `${what} – ${project.name} – Byggmöte` : 'Byggmöte'
+  })
+
   const PROTOCOL: Command[] = ['saveDocx', 'savePdf', 'saveMd', 'copyText', 'find', 'inspector', 'newPoint', 'nextCheck', 'rename', 'rewrite', 'send',
     'editPoint', 'removePoint', 'nameSpeakers', 'attend', 'play', 'listen', 'back', 'forward', 'confirmation']
 
@@ -232,10 +250,15 @@
   function command(c: Command): void {
     if (c === 'sidebar') return showSidebar(!sidebar)
     if (!settings?.setUp) return
+    // The open points have a search of their own, which is theirs (OpenPoints.svelte): the key finds it there.
+    if (c === 'find' && view.name === 'points') return document.querySelector<HTMLInputElement>('#tools input[type=search]')?.focus()
+    if (c === 'reveal') return view.name === 'protocol' ? void window.api.meetingShow(view.dir) : undefined
     if (PROTOCOL.includes(c)) return view.name === 'protocol' ? protocol?.command(c) : undefined
     const first = project?.series[0]
     if (c === 'settings') void window.api.settingsOpen()
     else if (c === 'palette') palette?.show()
+    else if (c === 'shortcuts') palette?.show('Kommandon')
+    else if (c === 'switchProject') palette?.show('Projekt')
     else if (c === 'newProject') openNew()
     else if (c === 'sync') void connect()
     else if (c === 'intro') void window.api.setUp(false).then((s) => (settings = s))
@@ -249,41 +272,69 @@
   }
   $effect(() => window.api.onCommand(command))
 
-  // The palette lists what the window can do now, the project's meetings and open points, and the other projects.
-  let palette = $state<{ show: () => void }>()
+  // The palette lists what the app can do, greyed with the reason when it cannot now, then the project's open
+  // points and meetings, the views and the other projects.
+  let palette = $state<{ show: (only?: string) => void }>()
   const mac = window.api.platform === 'darwin'
   const k = (onMac: string, elsewhere: string): string => (mac ? onMac : elsewhere)
   const entries = $derived.by((): Entry[] => {
-    const cmd = (label: string, c: Command, keys?: string): Entry => ({ group: 'Kommandon', label, keys, run: () => command(c) })
-    const list: Entry[] = []
-    if (project) {
-      list.push(cmd('Översikt', 'overview', k('⌘1', 'Ctrl+1')), cmd('Öppna punkter', 'points', k('⌘2', 'Ctrl+2')))
-      if (project.series.length) list.push(cmd('Dagordning', 'agenda', k('⌘3', 'Ctrl+3')), cmd(live ? 'Visa inspelningsfönstret' : 'Spela in möte…', 'record', k('⌘R', 'Ctrl+R')), cmd('Lägg till en inspelning…', 'addRecording', k('⌘O', 'Ctrl+O')))
-    }
-    if (view.name === 'protocol') {
-      list.push(cmd('Sök i utskriften', 'find', k('⌘F', 'Ctrl+F')), cmd(doc.inspector ? 'Dölj inspektören' : 'Visa inspektören', 'inspector', k('⌥⌘I', 'Ctrl+I')))
-      if (doc.protocol) list.push(cmd('Nästa att kontrollera', 'nextCheck', k('⌘J', 'Ctrl+J')), cmd('Spara som Word…', 'saveDocx', k('⇧⌘S', 'Ctrl+Skift+S')), cmd('Spara som PDF…', 'savePdf'), cmd('Spara som Markdown…', 'saveMd'),
-        cmd('Kopiera texten', 'copyText', k('⇧⌘C', 'Ctrl+Skift+C')), cmd('Byt namn på mötet…', 'rename'))
-      if (doc.free) list.push(cmd('Ny punkt', 'newPoint', k('⌘N', 'Ctrl+N')), cmd('Skriv om protokollet…', 'rewrite'))
-      if (doc.sendable) list.push(cmd('Skicka till Stommen…', 'send', k('⌘⏎', 'Ctrl+Enter')))
-      if (doc.unnamed) list.push(cmd('Sätt namn på talare…', 'nameSpeakers'))
-      if (doc.absent) list.push(cmd('Lägg till som närvarande…', 'attend'))
-      if (doc.sent) list.push(cmd('Se efter om det är justerat', 'confirmation'))
-    }
-    list.push(cmd('Nytt projekt…', 'newProject', k('⇧⌘N', 'Ctrl+Skift+N')), cmd('Inställningar…', 'settings', k('⌘,', 'Ctrl+,')), cmd(sidebar ? 'Dölj sidopanelen' : 'Visa sidopanelen', 'sidebar', k('⌃⌘S', 'Ctrl+B')))
-    if (stommen?.connected) list.push(cmd('Hämta från Stommen', 'sync', k('⇧⌘U', 'F5')))
-    for (const r of rows) list.push({ group: 'Möten', label: r.title, detail: `${shortDate(r.recorded_at)} · ${standing(r).text}`, run: () => go({ name: 'protocol', dir: r.dir }) })
+    const inDoc = view.name === 'protocol'
+    const cmd = (label: string, c: Command, keys?: string, off?: string | false): Entry => ({ group: 'Kommandon', label, keys, off: off || undefined, run: () => command(c) })
+    // What is done to a protocol: only with one in the window, and then only when it can be (`can`, with why not).
+    const about = (label: string, c: Command, keys: string | undefined, can: boolean, why: string): Entry => cmd(label, c, keys, !inDoc ? 'Bara i ett protokoll' : !can && why)
+    const taped = live?.phase === 'recording' || live?.phase === 'paused'
+    const recKeys = accelerators(settings?.shortcuts ?? {}, mac)
+    const rec = (label: string, c: RecordCommand, keys: string | undefined, off?: string | false): Entry =>
+      ({ group: 'Kommandon', label, keys, off: !taped ? 'Bara under inspelning' : off || undefined, run: () => void window.api.recordCommand(c) })
+    const marked = (c: 'decision' | 'todo' | 'changeOrder' | 'question'): Entry => rec(`Sätt märke: ${KINDS[c]}`, c, spell(recKeys[c], mac), live?.phase === 'paused' && 'Inspelningen är pausad')
+    const noSeries = !project?.series.length && 'Projektet har ingen mötesserie'
+    const fixed = 'Protokollet går inte att ändra'
+    const list: Entry[] = [
+      cmd(live ? 'Visa inspelningsfönstret' : 'Spela in möte…', 'record', k('⌘R', 'Ctrl+R'), !project ? 'Inget projekt' : noSeries),
+      rec(live?.phase === 'paused' ? 'Fortsätt' : 'Pausa', 'pause', spell(recKeys.pause, mac)),
+      rec(live?.next ? `Nästa rubrik: ${live.next}` : 'Nästa rubrik', 'next', spell(recKeys.next, mac), !live?.next && 'Mötet har ingen rubrik kvar'),
+      marked('decision'), marked('todo'), marked('changeOrder'), marked('question'),
+      rec('Avsluta mötet', 'finish', k('⇧⌘R', 'Ctrl+Skift+R')),
+      rec('Avbryt inspelningen…', 'cancel', undefined),
+      cmd('Lägg till en inspelning…', 'addRecording', k('⌘O', 'Ctrl+O'), !project ? 'Inget projekt' : noSeries),
+      about('Ny punkt', 'newPoint', k('⌘N', 'Ctrl+N'), doc.free, fixed),
+      about('Nästa att kontrollera', 'nextCheck', k('⌘J', 'Ctrl+J'), doc.protocol, 'Mötet har inget protokoll'),
+      about('Sätt namn på talare…', 'nameSpeakers', undefined, doc.unnamed, 'Alla talare har namn'),
+      about('Lägg till som närvarande…', 'attend', undefined, doc.absent, 'Ingen att lägga till'),
+      about('Sök i utskriften', 'find', k('⌘F', 'Ctrl+F'), true, ''),
+      about(doc.inspector ? 'Dölj utskriften' : 'Visa utskriften', 'inspector', k('⌥⌘I', 'Ctrl+I'), true, ''),
+      about('Spara som Word…', 'saveDocx', k('⇧⌘S', 'Ctrl+Skift+S'), doc.protocol, 'Mötet har inget protokoll'),
+      about('Spara som PDF…', 'savePdf', undefined, doc.protocol, 'Mötet har inget protokoll'),
+      about('Spara som Markdown…', 'saveMd', undefined, doc.protocol, 'Mötet har inget protokoll'),
+      about('Kopiera texten', 'copyText', k('⇧⌘C', 'Ctrl+Skift+C'), doc.protocol, 'Mötet har inget protokoll'),
+      about(k('Visa i Finder', window.api.platform === 'win32' ? 'Visa i Utforskaren' : 'Visa i mappen'), 'reveal', undefined, true, ''),
+      about('Byt namn på mötet…', 'rename', undefined, doc.protocol, 'Mötet har inget protokoll'),
+      about('Skriv om protokollet…', 'rewrite', undefined, doc.free, fixed),
+      about('Skicka till Stommen…', 'send', k('⌘⏎', 'Ctrl+Enter'), doc.sendable, 'Går inte att skicka nu'),
+      about('Se efter om det är justerat', 'confirmation', undefined, doc.sent, 'Inte skickat till Stommen'),
+      cmd('Hämta från Stommen', 'sync', k('⇧⌘U', 'F5'), !stommen?.connected && 'Stommen är inte kopplat'),
+      cmd('Nytt projekt…', 'newProject', k('⇧⌘N', 'Ctrl+Skift+N')),
+      cmd(sidebar ? 'Dölj sidopanelen' : 'Visa sidopanelen', 'sidebar', k('⌃⌘S', 'Ctrl+B')),
+      cmd('Inställningar…', 'settings', k('⌘,', 'Ctrl+,')),
+      cmd('Visa introduktionen', 'intro')
+    ]
+    list.sort((a, b) => Number(Boolean(a.off)) - Number(Boolean(b.off))) // what can run now comes first
+    const points = `Öppna punkter i ${project?.name ?? ''}`
     for (const a of agendas ?? []) for (const h of a.headings) for (const pt of h.open) {
       const from = rows.find((r) => r.series === a.series && r.no === Number(pt.no.split('.')[0]))
-      list.push({ group: 'Öppna punkter', label: `${pt.no} ${pt.text}`, detail: [pt.role, pt.due].filter(Boolean).join(' · '), run: () => go(from ? { name: 'protocol', dir: from.dir } : { name: 'points' }) })
+      list.push({ group: points, label: `${pt.no} ${pt.text}`, detail: [from?.title, KINDS[pt.kind]].filter(Boolean).join(' · '), run: () => go(from ? { name: 'protocol', dir: from.dir } : { name: 'points' }) })
     }
-    for (const x of projects) if (x.id !== project?.id) list.push({ group: 'Projekt', label: x.name, run: () => choose(x.id) })
+    for (const r of rows) list.push({ group: 'Möten', label: r.title, detail: `${shortDate(r.recorded_at)} · ${standing(r).text}`, run: () => go({ name: 'protocol', dir: r.dir }) })
+    const to = (label: string, c: Command, n: number, off?: string | false): Entry => ({ group: 'Gå till', label, keys: k(`⌘${n}`, `Ctrl+${n}`), off: off || undefined, run: () => command(c) })
+    if (project) list.push(to('Översikt', 'overview', 1), to('Öppna punkter', 'points', 2), to('Dagordning', 'agenda', 3, noSeries))
+    for (const x of projects) if (x.id !== project?.id) list.push({ group: 'Projekt', label: x.name, detail: x.stommen ? 'Från Stommen' : undefined, run: () => choose(x.id) })
     return list
   })
   $effect(() => {
     void window.api.menuState({
       ready: loaded && Boolean(settings?.setUp), held: false, project: Boolean(project), series: Boolean(project?.series.length),
       connected: Boolean(stommen?.connected), sidebar, meeting: view.name === 'protocol', typing,
+      view: view.name === 'overview' || view.name === 'points' || view.name === 'agenda' ? view.name : '',
       ...(view.name === 'protocol' ? doc : { ...NO_DOC, inspector: doc.inspector })
     })
   })
@@ -293,26 +344,53 @@
   <div class="strip drag"></div>
   <Onboarding {settings} {stommen} changed={(s) => (settings = s)} stommenChanged={(s) => (stommen = s)} refresh={load} done={() => (view = { name: 'overview' })} />
 {:else}
+{#snippet rec()}
+  {#if live}
+    <button class="btn rec" onclick={() => window.api.recordShow()}>{live.phase === 'paused' ? 'Pausad' : 'Spelar in'} {clock(live.seconds)}</button>
+  {:else if project?.series.length}
+    <button class="btn rec" onclick={record}>Spela in</button>
+  {/if}
+{/snippet}
+{#snippet toggle()}
+  <button class="tool" aria-label={sidebar ? 'Dölj sidopanelen' : 'Visa sidopanelen'} title={sidebar ? 'Dölj sidopanelen' : 'Visa sidopanelen'} aria-pressed={sidebar} onclick={() => showSidebar(!sidebar)}>
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx={mac ? 2.5 : 1.5} /><path d="M6 2.5v11" /></svg>
+  </button>
+{/snippet}
+<!-- Where the app stands with Stommen, the way to Inställningar, and the promise: the Mac's sidebar foot, Windows' status bar. -->
+{#snippet standingWith()}
+  <span class="with"><span class="dot" class:on={stommen?.connected}></span>{stommen?.connected ? `Stommen: ${stommen.user}` : 'Stommen är inte kopplat'}</span>
+{/snippet}
+{#snippet gear()}
+  <button class="quiet" aria-label="Inställningar" title="Inställningar" onclick={() => window.api.settingsOpen()}>
+    <Icon name="gear" size={13} />
+  </button>
+{/snippet}
+{#snippet lock()}
+  <svg width="12" height="13" viewBox="0 0 12 13" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><rect x="2" y="5.5" width="8" height="6" rx="1.5" /><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" /></svg>
+{/snippet}
+
 <div class="shell">
   {#if sidebar}
   <aside>
     <!-- On the Mac the window's three buttons sit here, and the strip moves the window. -->
-    <div class="side-top drag"></div>
+    {#if mac}<div class="side-top drag"><span class="grow"></span>{@render toggle()}</div>{/if}
 
     {#if projects.length}
-      <label class="sr-only" for="project">Projekt</label>
-      <select id="project" class="field" value={project?.id}
-        onchange={(e) => {
-          if (e.currentTarget.value === NEW) {
-            e.currentTarget.value = project?.id ?? ''
-            openNew()
-          } else choose(e.currentTarget.value)
-        }}>
-        {#each projects as p (p.id)}
-          <option value={p.id}>{p.name}</option>
-        {/each}
-        <option value={NEW}>Nytt projekt…</option>
-      </select>
+      <div class="pick">
+        <label class="sr-only" for="project">Projekt</label>
+        <select id="project" class="popup" value={project?.id}
+          onchange={(e) => {
+            if (e.currentTarget.value === NEW) {
+              e.currentTarget.value = project?.id ?? ''
+              openNew()
+            } else choose(e.currentTarget.value)
+          }}>
+          {#each projects as p (p.id)}
+            <option value={p.id}>{p.name}</option>
+          {/each}
+          <option value={NEW}>Nytt projekt…</option>
+        </select>
+      </div>
     {/if}
 
     <nav aria-label="Huvudmeny">
@@ -320,16 +398,16 @@
         <p class="side-head">Projektet</p>
         <button class="item" class:current={view.name === 'overview'} aria-current={view.name === 'overview' ? 'page' : undefined}
           onclick={() => go({ name: 'overview' })}>
-          <Icon name="home" size={16} /> Översikt
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 7.5 8 2.5l5.5 5v6h-11z" /></svg> Översikt
         </button>
         <button class="item" class:current={view.name === 'points'} aria-current={view.name === 'points' ? 'page' : undefined}
           onclick={() => go({ name: 'points' })}>
-          <Icon name="clock" size={16} /> Öppna punkter {#if open}<span class="n">{open}</span>{/if}
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="5.5" /><path d="M8 5v3l2 1.5" /></svg> Öppna punkter {#if open}<span class="n">{open}</span>{/if}
         </button>
         {#each project?.series ?? [] as s (s.id)}
           {@const here = view.name === 'agenda' && view.series.id === s.id}
           <button class="item" class:current={here} aria-current={here ? 'page' : undefined} onclick={() => go({ name: 'agenda', series: s })}>
-            <Icon name="list" size={16} /> <span class="clip">Dagordning inför {s.name.toLowerCase()} {s.next}</span>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M5.5 4h8M5.5 8h8M5.5 12h8M2.5 4h.5M2.5 8h.5M2.5 12h.5" /></svg> <span class="clip">Dagordning inför {s.name.toLowerCase()} {s.next}</span>
           </button>
         {/each}
 
@@ -360,7 +438,7 @@
               <button class="meeting" class:current={here} aria-current={here ? 'page' : undefined}
                 onclick={() => go({ name: 'protocol', dir: r.dir })}>
                 <span class="l1"><span class="name">{r.title}</span><span class="when">{shortDate(r.recorded_at)}</span></span>
-                <span class="l2">{standing(r).text} · {minutes(r.duration)}</span>
+                <span class="l2">{standing(r).text} · {brief(r.duration)}</span>
               </button>
             {/each}
           {/each}
@@ -374,52 +452,51 @@
       {/if}
     </nav>
 
-    <div class="foot">
-      <p class="status">
-        <span class="dot" class:on={stommen?.connected}></span>
-        {#if stommen?.connected}
-          Kopplad till Stommen som {stommen.user}.
-        {:else}
-          Stommen är inte kopplat än. Projekt och personer ligger på den här datorn.
-        {/if}
-      </p>
-      <p class="status"><Icon name="lock" size={13} /> Ljud och utskrift stannar på den här datorn</p>
-      <button class="item" onclick={() => window.api.settingsOpen()}>
-        <Icon name="gear" size={16} /> Inställningar
-      </button>
-    </div>
+    {#if mac}
+      <div class="foot">
+        {@render standingWith()}
+        <span class="grow"></span>
+        {@render gear()}
+        <span class="promise" role="img" aria-label="Ljud och utskrift stannar på den här datorn" title="Ljud och utskrift stannar på den här datorn">{@render lock()}</span>
+      </div>
+    {/if}
   </aside>
   {/if}
 
-  <div class="content">
-    <header class="drag" class:alone={!sidebar} class:document={view.name === 'protocol'}>
-      <button class="tool" aria-label={sidebar ? 'Dölj sidopanelen' : 'Visa sidopanelen'} aria-pressed={sidebar} onclick={() => showSidebar(!sidebar)}>
-        <Icon name="sidebar" size={17} />
-      </button>
+  <!-- The Mac's toolbar: what the window shows, what is done in the view, and Spela in last. Windows' command bar,
+       under its title and menu bars: Spela in first, then the view's commands; the window's title names the view. -->
+  <header class="drag" class:alone={!sidebar}>
+    {#if !sidebar}{@render toggle()}{/if}
+    {#if !mac}{@render rec()}<span class="sep"></span>{/if}
+    {#if mac && view.name === 'protocol' && project}
       <div class="titles">
-        {#if view.name === 'protocol' && meeting.title}
-          <p class="title">{meeting.title}{#if meeting.edited}<span class="edited">Redigerat</span>{/if}</p>
-          <p class="sub">{project?.name}</p>
-        {:else}
-          <p class="title">{TITLES[view.name]}</p>
-          {#if project}<p class="sub">{project.name}</p>{/if}
-        {/if}
+        <p class="title">{meeting.title || 'Protokoll'}{#if meeting.edited}<span class="edited">Redigerat</span>{/if}</p>
+        <p class="sub">{project.name}</p>
       </div>
-      <!-- A view with a title of its own puts it here, and the window's is put away. -->
-      <div id="title"></div>
-      {#if view.name === 'protocol' && meeting.standing}
-        <span class="standing" class:done={meeting.standing === 'done'}><span></span>{meeting.standing === 'done' ? 'Justerat' : 'Utkast'}</span>
-      {/if}
-      <span class="grow"></span>
-      <!-- A view puts what is done in it here (Protocol.svelte). -->
-      <div id="tools"></div>
-      {#if live}
-        <button class="btn rec" onclick={() => window.api.recordShow()}>{live.phase === 'paused' ? 'Pausad' : 'Spelar in'} {clock(live.seconds)}</button>
-      {:else if project?.series.length && view.name !== 'protocol'}
-        <button class="btn rec" onclick={record}>Spela in</button>
-      {/if}
-    </header>
+    {/if}
+    <!-- A view with a title of its own puts it here. -->
+    <div id="title"></div>
+    {#if mac && view.name === 'protocol' && meeting.standing}
+      <span class="standing" class:done={meeting.standing === 'done'}><span></span>{meeting.standing === 'done' ? 'Justerat' : 'Utkast'}</span>
+    {/if}
+    {#if mac}<span class="grow"></span>{/if}
+    <!-- A view puts what is done in it here (lib/tools.ts). -->
+    <div id="tools"></div>
+    {#if mac}{@render rec()}{/if}
+  </header>
 
+  {#if !mac}
+    <footer class="statusbar">
+      <!-- A view that says more of itself than the shell knows puts it here (lib/tools.ts). -->
+      <div id="status">{#each said as x (x)}<span>{x}</span>{/each}</div>
+      {@render standingWith()}
+      <span class="grow"></span>
+      {@render gear()}
+      <span class="promise">{@render lock()} Ljud och utskrift stannar på den här datorn</span>
+    </footer>
+  {/if}
+
+  <div class="content">
     <main>
       {#if !loaded}
         <div class="page"><p class="muted">Läser in projekten.</p></div>
@@ -481,26 +558,37 @@
   dialog::backdrop { background: rgb(0 0 0 / 0.35); }
   dialog h2 { margin-bottom: 16px; }
   .narrow { max-width: 680px; }
-  .shell { display: flex; height: 100%; }
+  /* The Mac: the sidebar from top to foot, the toolbar over the view. Windows: the command bar from edge to edge
+     under the title and menu bars, the pane and the view as a lighter layer on it, the status bar at the foot. */
+  .shell { --rule: #e4e3e9; --soft: #efeef3; display: grid; height: 100%; grid-template: 'bar bar' 48px 'side main' minmax(0, 1fr) 'status status' 26px / auto minmax(0, 1fr); background: var(--pane); }
+  :global(:root[data-platform='mac']) .shell { grid-template: 'side bar' 52px 'side main' minmax(0, 1fr) / auto minmax(0, 1fr); }
   .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .grow { flex: 1 1 auto; }
 
-  /* The sidebar: the project's library on the pane colour, in the rows of a source list. */
-  aside { flex: 0 0 264px; display: flex; flex-direction: column; min-height: 0; padding: 8px; background: var(--pane); border-right: 1px solid var(--line); }
-  .side-top { flex: none; height: 0; }
-  :global(:root[data-platform='mac']) .side-top { height: 40px; }
-  select { width: 100%; font-weight: 600; margin-bottom: 4px; }
-  nav { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 1px; }
-  .side-head { display: flex; align-items: center; justify-content: space-between; height: 24px; margin-top: 8px; padding: 0 8px; font-size: var(--ui-small); font-weight: 600; color: var(--ink-500); }
+  /* The sidebar: the project's library on the pane colour. Windows draws it as a navigation pane, the Mac as a source list. */
+  aside { grid-area: side; width: 270px; display: flex; flex-direction: column; min-height: 0; padding: 4px; background: var(--pane); }
+  :global(:root[data-platform='mac']) aside { width: 264px; padding: 0; border-right: 1px solid var(--rule); }
+  .side-top { flex: none; display: flex; align-items: center; height: 52px; padding: 0 14px; }
+  .pick { flex: none; padding: 4px 4px 6px; }
+  :global(:root[data-platform='mac']) .pick { padding: 0 12px 4px; }
+  .pick select { width: 100%; font-weight: 600; }
+  /* The project's pop-up has the two arrows on Windows too, as it is drawn there. */
+  .pick select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='12' viewBox='0 0 10 12' fill='none' stroke='%236b6a77' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 4.5 5 1.5l3 3M2 7.5l3 3 3-3'/%3E%3C/svg%3E"); }
+  nav { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  :global(:root[data-platform='mac']) nav { padding: 0 8px; }
+  .side-head { display: flex; align-items: center; justify-content: space-between; flex: none; height: 24px; margin-top: 10px; padding: 0 12px; font-size: var(--ui-small); font-weight: 600; color: var(--ink-500); }
+  :global(:root[data-platform='mac']) .side-head { padding: 0 8px; }
+  .pick + nav > .side-head:first-child { margin-top: 4px; }
   .side-head .count { font-weight: 400; }
-  .item { display: flex; align-items: center; gap: 8px; flex: none; height: var(--row-h); padding: 0 8px; border: 0; border-radius: var(--ctl-r); background: transparent; text-align: left; white-space: nowrap; }
+  .item { position: relative; display: flex; align-items: center; gap: 12px; flex: none; height: var(--row-h); padding: 0 12px; border: 0; border-radius: var(--ctl-r); background: transparent; text-align: left; white-space: nowrap; }
+  :global(:root[data-platform='mac']) .item { gap: 7px; padding: 0 8px; }
   .item :global(svg) { flex: none; color: var(--coral-700); }
   .item .n { margin-left: auto; font-size: var(--ui-small); color: var(--ink-500); }
-  .item.current .n { color: inherit; }
   .item .clip { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-  .item:hover:not(:disabled):not(.current) { background: rgb(0 0 0 / 0.045); }
-  .library { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; margin: 0 -8px; padding: 0 8px; }
-  .meeting { display: flex; flex-direction: column; gap: 1px; flex: none; padding: 6px 8px; border: 0; border-radius: var(--ctl-r); background: transparent; text-align: left; }
-  .meeting:hover:not(:disabled):not(.current) { background: rgb(0 0 0 / 0.045); }
+  .item:hover:not(:disabled):not(.current), .meeting:hover:not(:disabled):not(.current) { background: rgb(0 0 0 / 0.04); }
+  .library { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
+  :global(:root[data-platform='mac']) .library { margin: 0 -8px; padding: 0 8px 8px; }
+  .meeting { display: flex; flex-direction: column; gap: 2px; flex: none; padding: 8px 12px; border: 0; border-bottom: 1px solid var(--soft); border-radius: 0; background: transparent; text-align: left; }
   .meeting .l1 { display: flex; align-items: baseline; gap: 8px; font-weight: 600; white-space: nowrap; }
   .meeting .name { overflow: hidden; text-overflow: ellipsis; }
   .meeting .when { margin-left: auto; font-weight: 400; font-size: var(--ui-small); color: var(--ink-500); }
@@ -509,43 +597,59 @@
   :global(:root[data-platform='mac']) .meeting.current .bar { background: rgb(255 255 255 / 0.35); }
   :global(:root[data-platform='mac']) .meeting.current .bar span { background: #fff; }
   .meeting .l2 { font-size: var(--ui-small); color: var(--ink-500); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  /* The chosen row: the Mac's solid accent, Windows' tint with the accent bar at its edge. */
-  .item.current, .meeting.current { background: rgb(201 58 66 / 0.1); box-shadow: inset 3px 0 0 var(--coral-700); }
+  /* The chosen row. Windows: a grey row with the accent pill at its edge, a meeting tinted with the accent bar. The Mac: solid accent. */
+  .item.current { background: rgb(0 0 0 / 0.055); }
+  .item.current::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 2px; background: var(--coral-700); }
+  .meeting.current { background: rgb(201 58 66 / 0.12); box-shadow: inset 3px 0 0 var(--coral-700); border-radius: 4px; }
   :global(:root[data-platform='mac']) .item.current, :global(:root[data-platform='mac']) .meeting.current { background: var(--coral-700); box-shadow: none; color: #fff; }
-  :global(:root[data-platform='mac']) .item.current :global(svg) { color: #fff; }
+  :global(:root[data-platform='mac']) .item.current { font-weight: 600; }
+  :global(:root[data-platform='mac']) .item.current::before { content: none; }
+  :global(:root[data-platform='mac']) .meeting.current { border-radius: var(--ctl-r); border-bottom-color: transparent; }
+  :global(:root[data-platform='mac']) .item.current :global(svg), :global(:root[data-platform='mac']) .item.current .n { color: #fff; }
   :global(:root[data-platform='mac']) .meeting.current .when, :global(:root[data-platform='mac']) .meeting.current .l2 { color: rgb(255 255 255 / 0.85); }
-  .foot { flex: none; display: flex; flex-direction: column; gap: 4px; margin: 0 -8px; padding: 8px 8px 0; border-top: 1px solid var(--line); }
-  .status { display: flex; align-items: baseline; gap: 6px; padding: 0 8px; font-size: var(--ui-small); color: var(--ink-500); }
-  .status :global(svg) { flex: none; align-self: center; }
-  .dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-300); }
+  .foot { flex: none; display: flex; align-items: center; gap: 6px; padding: 8px 14px 10px; border-top: 1px solid var(--rule); font-size: var(--ui-small); color: var(--ink-500); white-space: nowrap; }
+  .with { display: inline-flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .promise { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+  .dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-400); }
   .dot.on { background: var(--ok); }
+  .quiet { display: inline-grid; place-items: center; flex: none; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: inherit; -webkit-app-region: no-drag; }
+  .quiet:hover { background: rgb(0 0 0 / 0.07); color: var(--ink-900); }
 
-  /* The toolbar: what the window shows, and the one thing that is always at hand. */
-  .content { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; background: var(--canvas); }
-  header { flex: none; display: flex; align-items: center; gap: 8px; height: var(--bar-h); padding: 0 12px; background: var(--surface); border-bottom: 1px solid var(--line); }
+  /* The bar over the view. */
+  header { grid-area: bar; display: flex; align-items: center; gap: 4px; min-width: 0; padding: 0 10px; background: var(--win-bg); border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+  :global(:root[data-platform='mac']) header { gap: 8px; padding: 0 14px; background: #fbfafc; border-top: 0; }
   /* Without the sidebar, the Mac's three buttons are over the toolbar. */
   :global(:root[data-platform='mac']) header.alone { padding-left: 84px; }
-  .tool { display: inline-grid; place-items: center; flex: none; width: 32px; height: 28px; border: 0; border-radius: var(--ctl-r); background: transparent; color: var(--ink-700); }
-  .tool:hover { background: rgb(0 0 0 / 0.06); }
+  .tool { display: inline-grid; place-items: center; flex: none; width: 36px; height: 36px; border: 0; border-radius: var(--ctl-r); background: transparent; color: var(--ink-700); }
+  :global(:root[data-platform='mac']) .tool { width: 32px; height: 28px; }
+  .tool:hover { background: rgb(0 0 0 / 0.07); }
+  .sep { flex: none; width: 1px; height: 24px; margin: 0 4px; background: var(--rule); }
+  .sep:has(+ #title + #tools:empty), .sep:first-child { display: none; }
   .titles { min-width: 0; }
   .titles:has(+ #title:not(:empty)) { display: none; }
   #title { display: flex; align-items: center; gap: 8px; min-width: 0; }
-  .title { font-weight: 700; font-size: calc(var(--ui) + 1px); line-height: 1.2; white-space: nowrap; }
+  .title { font-weight: 700; font-size: 15px; line-height: 1.2; white-space: nowrap; }
   .sub { font-size: var(--ui-small); color: var(--ink-500); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rec { flex: none; background: var(--coral-700); border-color: var(--coral-800); color: #fff; font-weight: 600; }
   .rec::before { content: ''; width: 9px; height: 9px; border-radius: 50%; background: #fff; }
-  .rec { background: var(--coral-700); border-color: var(--coral-800); color: #fff; font-weight: 600; }
-  #tools { display: flex; align-items: center; min-width: 0; }
-  /* A protocol is a document: the Mac's toolbar has its title, whether it is corrected and where it stands; on
-     Windows those are in the window's title bar, and the bar is the document's commands from edge to edge. */
-  :global(:root[data-platform='mac']) .document .title { font-size: 15px; }
+  .rec:hover:not(:disabled) { background: var(--coral-800); border-color: var(--coral-800); color: #fff; }
+  :global(:root[data-platform='mac']) .rec { margin-left: 4px; }
+  #tools { display: flex; align-items: center; flex: 1 1 auto; min-width: 0; }
+  :global(:root[data-platform='mac']) #tools { flex: none; }
   .edited { margin-left: 7px; font-size: 12px; font-weight: 400; color: var(--ink-500); }
   .standing { display: inline-flex; align-items: center; gap: 5px; flex: none; height: 18px; margin-left: 6px; padding: 0 7px; border-radius: 9px; background: var(--warn-bg); font-size: var(--ui-small); font-weight: 500; white-space: nowrap; }
   .standing span { width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
   .standing.done { background: var(--ok-bg); }
   .standing.done span { background: var(--ok); }
-  :global(:root[data-platform='win']) .document :is(.titles, .standing, .grow) { display: none; }
-  :global(:root[data-platform='win']) .document #tools { flex: 1 1 auto; }
+
+  /* The view: on Windows a lighter layer on the pane, rounded where it meets the bar and the sidebar. */
+  .content { grid-area: main; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--win-bg); border: 1px solid var(--rule); border-right: 0; border-bottom: 0; border-top-left-radius: 8px; overflow: hidden; }
+  :global(:root[data-platform='mac']) .content { border: 0; border-radius: 0; background: var(--canvas); }
   main { flex: 1 1 auto; min-height: 0; overflow: auto; }
+
+  .statusbar { grid-area: status; display: flex; align-items: center; gap: 16px; min-width: 0; padding: 0 12px; border-top: 1px solid var(--rule); background: var(--pane); font-size: 12px; color: var(--ink-500); white-space: nowrap; overflow: hidden; }
+  #status { display: flex; align-items: center; gap: 16px; min-width: 0; }
+  #status:empty { display: none; }
 
   .strip { position: fixed; inset: 0 0 auto 0; height: 0; z-index: 1; }
   :global(:root[data-platform='mac']) .strip { height: 40px; }

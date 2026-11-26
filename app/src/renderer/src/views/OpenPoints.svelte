@@ -169,6 +169,9 @@
   .seg button { height: calc(var(--ctl-h) - 4px); padding: 0 12px; border: 0; border-radius: var(--ctl-r); background: transparent; white-space: nowrap; }
   .seg button[aria-pressed='true'] { background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / 0.16); font-weight: 600; }
   .sep { width: 1px; height: 20px; margin: 0 4px; background: var(--line); }
+  /* Windows' command bar: the choice at its start, the search at its end. */
+  :global(:root[data-platform='win']) .tools { flex: 1 1 auto; }
+  :global(:root[data-platform='win']) .sep { flex: 1 1 auto; height: 0; }
   /* The search field: white with an edge on Windows, a grey well on the Mac. */
   .search { display: flex; align-items: center; gap: 6px; width: 260px; height: var(--ctl-h); padding: 0 9px; border: 1px solid #dcdbe2; border-bottom-color: #8e8d99; border-radius: var(--ctl-r); background: #fff; color: var(--ink-500); }
   :global(:root[data-platform='mac']) .search { width: 180px; border-color: transparent; background: rgb(0 0 0 / 0.055); }

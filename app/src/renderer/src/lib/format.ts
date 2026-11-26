@@ -25,6 +25,12 @@ export function minutes(seconds: number): string {
   return m === 1 ? '1 minut' : `${m} minuter`
 }
 
+/** `52 min`, `1 tim 4 min`: a meeting's length in a narrow list. */
+export function brief(seconds: number): string {
+  const m = Math.max(1, Math.round(seconds / 60))
+  return m < 60 ? `${m} min` : m % 60 ? `${Math.floor(m / 60)} tim ${m % 60} min` : `${m / 60} tim`
+}
+
 const DAY = new Intl.DateTimeFormat('sv-SE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
 /** `Torsdag 19 november 2026` from the engine's timestamp. */
