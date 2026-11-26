@@ -23,7 +23,7 @@ async function launch(): Promise<void> {
   const none = { BYGGMOTE_MODELS: join(config, 'no-models'), HF_HUB_CACHE: join(config, 'no-models'), HF_HUB_OFFLINE: '1' }
   app = await electron.launch({ args, cwd: here, env: { ...process.env, ...none, BYGGMOTE_CONFIG: config, BYGGMOTE_HIDDEN: '1', BYGGMOTE_USER_DATA: userData, BYGGMOTE_SETUP: '1' } })
   win = await app.firstWindow()
-  await expect(win.getByRole('heading', { name: 'Möten', exact: true })).toBeVisible()
+  await expect(win.getByRole('heading', { name: 'Senaste möten' })).toBeVisible()
 }
 
 /** Inställningar on Inspelning, where the shortcuts are. */

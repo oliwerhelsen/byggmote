@@ -15,9 +15,10 @@
      behind the sidebar. The colours and the display font are Stommen's; the rest is the computer's own. */
   --ui: 14px; --ui-small: 12px; --ctl-h: 32px; --ctl-r: 4px; --row-h: 36px; --bar-h: 48px; --pane: #f3f3f5; --edge: #cfced6;
   --font-ui: 'Segoe UI Variable Text', 'Segoe UI', var(--font-body);
+  --win-bg: #fbfbfc; --line-soft: #efeef3;
 }
 :root[data-platform='mac'] {
-  --ui: 13px; --ui-small: 11px; --ctl-h: 28px; --ctl-r: 6px; --row-h: 28px; --bar-h: 52px; --pane: #f3f2f6;
+  --ui: 13px; --ui-small: 11px; --ctl-h: 28px; --ctl-r: 6px; --row-h: 28px; --bar-h: 52px; --pane: #f3f2f6; --win-bg: #fff;
   --font-ui: -apple-system, BlinkMacSystemFont, var(--font-body);
 }
 
@@ -94,3 +95,12 @@ textarea.field { display: block; width: 100%; padding: 6px 9px; resize: vertical
 .table th:last-child { border-right: 0; }
 .table td { height: var(--row-h); padding: 4px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; vertical-align: middle; }
 .table td.wrap { white-space: normal; min-width: 220px; }
+/* The Mac stripes a list and draws no lines between its rows. */
+:root[data-platform='mac'] .table td { border-bottom-color: transparent; }
+:root[data-platform='mac'] .table tbody tr:nth-child(even) td { background: #f7f6f9; }
+
+/* A view's own title, in the toolbar on the Mac (lib/tools.ts). On Windows the view draws it itself. */
+.bar-title { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.bar-title h1 { font: 700 15px/1.2 var(--font-ui); letter-spacing: 0; white-space: nowrap; }
+.bar-title p { font-size: var(--ui-small); color: var(--ink-500); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

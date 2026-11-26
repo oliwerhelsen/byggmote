@@ -131,7 +131,8 @@ shows Windows' on a Mac. Inställningar is a window of its own (⌘, / Ctrl+,), 
 icons and each pane a form, and what the app is made of under Om Byggmöte in the app menu (`views/About.svelte`); on
 Windows and Linux the pages down the left side, Om Byggmöte among them, and each page a list of rows with switches.
 The connection to Stommen is one of its panes; a change is kept as it is made, and the other windows read it again. The palette (⌘K / Ctrl+K) runs a command or opens a meeting, an open point
-or another project from a few letters. A meeting is recorded in a small window of its own that stays over other programs
+or another project from a few letters. Nytt möte asks with or without the agenda and that everyone knows, names the
+microphone and shows that it hears (it listens only while the dialog is open); from an agenda the agenda is chosen. A meeting is recorded in a small window of its own that stays over other programs
 (`app/src/main/recording.ts`, `views/RecordWindow.svelte`), with an icon beside the clock that has its commands, and
 shortcuts that work in any program (⌃⌥N for the next heading, ⌃⌥1 to 4 for a mark, ⌃⌥P to pause; Alt+Shift with the
 same keys on Windows and Linux). Those keys are the person's to change under Inspelning in Inställningar

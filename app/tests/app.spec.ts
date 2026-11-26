@@ -45,13 +45,13 @@ const toOverview = (): Promise<void> => win.getByRole('navigation', { name: 'Huv
 test.beforeEach(async () => {
   if (await win.getByRole('button', { name: 'Till översikten' }).count()) await win.getByRole('button', { name: 'Till översikten' }).click()
   else await toOverview()
-  await expect(win.getByRole('heading', { name: 'Möten', exact: true })).toBeVisible()
+  await expect(win.getByRole('heading', { name: 'Senaste möten' })).toBeVisible()
 })
 
 test('the meetings of a project, the next one and what is still open', async () => {
   await expect(win.getByRole('heading', { name: 'Nästa möte' })).toBeVisible()
   await expect(win.getByText('En öppen punkt följer med från tidigare möten. En har passerat sitt datum.')).toBeVisible()
-  const rows = win.getByRole('region', { name: 'Möten', exact: true }).locator('tbody tr')
+  const rows = win.getByRole('region', { name: 'Senaste möten' }).locator('tbody tr')
   await expect(rows).toHaveCount(2)
   await expect(rows.nth(0)).toContainText('Byggmöte 4')
   await expect(rows.nth(0)).toContainText('Utkast, 1 att kontrollera')
@@ -65,9 +65,30 @@ test('the agenda has the open point under its heading', async () => {
   await win.getByRole('button', { name: 'Se dagordningen' }).click()
   await expect(win.getByRole('heading', { name: 'Dagordning, byggmöte 5' })).toBeVisible()
   const economy = win.locator('.headings > li').filter({ has: win.getByRole('heading', { name: 'Ekonomi' }) })
-  await expect(economy).toContainText('3.4.1')
-  await expect(economy).toContainText('Att göra, Platschef')
+  await expect(economy).toContainText('1 öppen punkt')
+  await expect(economy.locator('.point')).toHaveText(/3\.4\.1\s*Att göra\s*Platschefen lämnar underlag.*Platschef\s*Förfallen 2026-11-12/)
   await expect(win.locator('.headings > li')).toHaveCount(11)
+  // the points under a heading can be put away, and what follows along is counted beside the list
+  await economy.getByRole('button', { name: 'Dölj punkterna under Ekonomi' }).click()
+  await expect(economy.locator('.point')).toHaveCount(0)
+  await economy.getByRole('button', { name: 'Visa punkterna under Ekonomi' }).click()
+  const about = win.getByRole('complementary', { name: 'Om dagordningen' })
+  await expect(about).toContainText('1 öppen punkt')
+  await expect(about).toContainText('En har passerat sitt datum.')
+  await expect(about).toContainText('Från byggmöte 31')
+  // from an agenda the meeting is recorded with it: the dialog does not ask
+  await win.getByRole('button', { name: 'Spela in', exact: true }).click()
+  const dialog = win.getByRole('dialog', { name: 'Nytt möte' })
+  await expect(dialog).toContainText('Byggmöte 5 · Kv. Eken kontorshus')
+  await expect(dialog.getByText('Mikrofon:')).toBeVisible()
+  await expect(dialog.getByRole('radio')).toHaveCount(0)
+  await dialog.getByRole('button', { name: 'Avbryt' }).click()
+  // opened again at once, from elsewhere, it asks
+  await menu('overview')
+  await menu('record')
+  await expect(dialog.getByRole('radio')).toHaveCount(2)
+  await dialog.getByRole('button', { name: 'Avbryt' }).click()
+  await expect(dialog).toBeHidden()
 })
 
 test('a protocol: who was there, the points with their checks, and the transcript', async () => {
@@ -116,6 +137,7 @@ async function closeRecording(rec: Page): Promise<void> {
 test('nothing is recorded before everyone knows, and the meeting is recorded in a window of its own', async () => {
   await win.getByRole('button', { name: 'Spela in möte' }).click()
   const start = win.getByRole('button', { name: 'Börja spela in' })
+  await expect(win.getByRole('radio', { name: /Med dagordning/ })).toBeChecked()
   await expect(start).toBeDisabled()
   await win.getByRole('checkbox', { name: 'Alla i rummet vet att mötet spelas in' }).check()
   await expect(start).toBeEnabled()
@@ -126,7 +148,7 @@ test('nothing is recorded before everyone knows, and the meeting is recorded in 
   // the main window is free, shows the recording, and does not offer a second one
   const side = win.getByRole('navigation', { name: 'Huvudmeny' })
   await expect(side.getByText('Spelas in', { exact: true })).toBeVisible()
-  await expect(win.getByRole('heading', { name: 'Möten', exact: true })).toBeVisible()
+  await expect(win.getByRole('heading', { name: 'Senaste möten' })).toBeVisible()
   expect(await enabled('record')).toBe(false)
   // its shortcuts work in any program while it is open (asked of the Mac only: a runner without a desktop has none to give)
   const taken = (): Promise<boolean> => app.evaluate(({ globalShortcut }) => globalShortcut.isRegistered('Control+Alt+N'))
@@ -310,6 +332,12 @@ test('the open points of the project are a list of their own, and one opens in i
   await side.getByRole('button', { name: /Öppna punkter/ }).click()
   const rows = win.locator('tbody tr')
   await expect(rows.filter({ hasText: '3.4.1' })).toContainText('Byggmöte 3')
+  // beside the list: what the latest meeting said of the point, and where it was first said
+  const chosen = win.getByRole('complementary', { name: 'Vald punkt' })
+  await expect(chosen.getByRole('heading', { name: 'På byggmöte 4' })).toBeVisible()
+  await expect(chosen.getByRole('heading', { name: 'I inspelningen' })).toBeVisible()
+  await expect(chosen).toContainText('21:05')
+  await expect(chosen).toContainText('Jonas Bergström')
   await win.getByPlaceholder('Sök bland punkterna').fill('finns inte')
   await expect(win.getByText('Ingen punkt stämmer med urvalet.')).toBeVisible()
   await win.getByPlaceholder('Sök bland punkterna').fill('')
@@ -352,7 +380,7 @@ test('a recording is written out behind the window, and one that fails says so u
   const side = win.getByRole('navigation', { name: 'Huvudmeny' })
   await expect(side.getByText('Skrivs ut', { exact: true })).toBeVisible()
   await toOverview() // the window is free meanwhile
-  await expect(win.getByRole('heading', { name: 'Möten', exact: true })).toBeVisible()
+  await expect(win.getByRole('heading', { name: 'Senaste möten' })).toBeVisible()
   await expect(side.getByText('Gick inte att skriva ut')).toBeVisible({ timeout: 45_000 })
   await side.getByRole('button', { name: /Byggmöte 5/ }).click()
   await expect(win.getByText('Det gick inte att skriva ut inspelningen.')).toBeVisible()
