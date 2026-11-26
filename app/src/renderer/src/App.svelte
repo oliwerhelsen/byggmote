@@ -133,6 +133,12 @@
           disabled={held} onclick={() => go({ name: 'meetings' })}>
           <Icon name="list" /> Möten
         </button>
+      {:else if loaded && !problem}
+        <!-- Without a project the menu is otherwise empty, and this is the way back from Inställningar. -->
+        <button class="item" class:current={!elsewhere} aria-current={!elsewhere ? 'page' : undefined}
+          onclick={() => go({ name: 'overview' })}>
+          <Icon name="plus" /> Nytt projekt
+        </button>
       {/if}
       <div class="account">
         <p class="small muted">
