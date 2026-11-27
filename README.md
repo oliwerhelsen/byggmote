@@ -92,8 +92,10 @@ system, in `app/dist/`). The bundle script pins every build it fetches by its ch
 Without signing, a company laptop will often refuse the file, and a person's own computer warns. Neither is done yet.
 The workflow signs as soon as the secrets are in the repo:
 
-- **Mac: not signed or notarised** (ad hoc only, which Apple silicon needs to start it). The Mac then says the app
-  cannot be opened, and only right-click, Öppna gets past it. Missing: membership of the Apple Developer Program (99 USD
+- **Mac: not signed or notarised** (ad hoc only, which Apple silicon needs to start it). The Mac then says Apple could
+  not verify the app, with only Flytta till papperskorgen and Klar. Since macOS 15 right-click, Öppna no longer gets
+  past it: after that first try, Systeminställningar, Integritet och säkerhet, Öppna ändå (under Säkerhet) and the
+  person's password open it, once. Missing: membership of the Apple Developer Program (99 USD
   a year, for the company), a Developer ID Application certificate from it, and the secrets `MAC_CSC_LINK` (the
   certificate as base64 `.p12`), `MAC_CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID`.
   electron-builder then signs and notarises.
